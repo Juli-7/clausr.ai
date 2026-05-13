@@ -1,4 +1,4 @@
-# Clausr — AI Compliance Inspector
+# clausr.ai
 
 AI-powered regulatory compliance assessment with **5-layer citation enforcement** and **chunk-level source traceability**. Upload vehicle specs and source documents; the agent checks every value against regulation text with citations inline.
 
