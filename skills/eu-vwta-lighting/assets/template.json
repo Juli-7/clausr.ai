@@ -1,0 +1,77 @@
+{
+  "name": "Imported Template",
+  "sections": [
+    {
+      "id": "fields",
+      "title": "Report Fields",
+      "type": "fields",
+      "fields": [
+        {
+          "id": "vehicle-make-model",
+          "label": "Vehicle Make Model",
+          "type": "text"
+        },
+        {
+          "id": "light-source",
+          "label": "Light Source",
+          "type": "text"
+        },
+        {
+          "id": "mounting-height",
+          "label": "Mounting Height",
+          "type": "text"
+        },
+        {
+          "id": "beam-pattern",
+          "label": "Beam Pattern",
+          "type": "text"
+        },
+        {
+          "id": "luminous-flux",
+          "label": "Luminous Flux",
+          "type": "text"
+        },
+        {
+          "id": "colour-temp",
+          "label": "Colour Temp",
+          "type": "text"
+        },
+        {
+          "id": "cutoff-sharpness",
+          "label": "Cutoff Sharpness",
+          "type": "text"
+        },
+        {
+          "id": "levelling-deviation",
+          "label": "Levelling Deviation",
+          "type": "text"
+        },
+        {
+          "id": "verdict",
+          "label": "Verdict",
+          "type": "text"
+        },
+        {
+          "id": "certifier-name",
+          "label": "Certifier Name",
+          "type": "text"
+        },
+        {
+          "id": "certification-date",
+          "label": "Certification Date",
+          "type": "text"
+        }
+      ]
+    },
+    {
+      "id": "assessment",
+      "title": "Assessment",
+      "type": "markdown"
+    },
+    {
+      "id": "verdict",
+      "title": "Verdict",
+      "type": "verdict"
+    }
+  ]
+}
