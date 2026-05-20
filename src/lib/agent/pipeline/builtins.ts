@@ -1,6 +1,6 @@
 import { loadReferencesForConditions } from "@/lib/agent/regulation/skill-source";
 import { getConversationHistory, getRecentMemories } from "@/lib/agent/memory/repository";
-import { getSkill } from "@/lib/agent/skill/registry";
+import { loadSkill } from "@/lib/agent/skill/loader";
 import type { ComplianceCheckInput } from "@/lib/agent/schemas";
 import type {
   PipelineContext,
@@ -32,45 +32,34 @@ async function loadReferences(ctx: PipelineContext): Promise<StepResult> {
 
     const refTexts = loadReferencesForConditions(ctx.skill.name, conditions);
     logPipeline(`  [BUILTIN] loaded ${refTexts.length} reference texts`);
-    ctx.loadedReferences = refTexts.map((rt) => {
+    ctx.palette.loadReferences(refTexts.map((rt) => {
       const headerMatch = rt.match(/^--- ([\w-]+\.md) ---\n/);
       return {
         filename: headerMatch?.[1] ?? "unknown.md",
         content: rt,
       };
-    });
-
-    const skill = getSkill(ctx.skill.name);
-	    const loadedFilenames = new Set(ctx.loadedReferences.map(r => r.filename));
-	    const relevantClauses = (skill.clauseIndex ?? []).filter(c => {
-	      const refFilename = `un-r${c.regulation.slice(1)}.md`;
-	      return loadedFilenames.has(refFilename);
-	    });
-
-	    ctx.citationPalette = buildCitationPaletteFromIndex(relevantClauses);
-    logPipeline(`  [BUILTIN] citationPalette=${ctx.citationPalette.length} entries: ${ctx.citationPalette.map(e => `${e.regulation}§${e.clause}[${e.id}]`).join(", ")}`);
-
-    // Build source palette from uploaded files
-    ctx.sourcePalette = ctx.uploadedFiles.map((f, i) => ({
-      id: i + 1,
-      fileId: f.fileId,
-      filename: f.filename,
-      extractedText: f.extractedText,
-      keyExcerpt: f.extractedText.slice(0, 200),
-      chunks: f.chunks,
-      dataUrl: f.dataUrl,
-      pageNumber: f.pageCount,
     }));
 
-    const memories = getRecentMemories(ctx.skill.name);
-    logPipeline(`  [BUILTIN] sourcePalette=${ctx.sourcePalette.length} entries memories=${memories.length}`);
+    const skill = loadSkill(ctx.skill.name);
+    const loadedFilenames = new Set(ctx.palette.getReferences().map(r => r.filename));
+    const relevantClauses = (skill.clauseIndex ?? []).filter(c => {
+      const refFilename = `un-r${c.regulation.slice(1)}.md`;
+      return loadedFilenames.has(refFilename);
+    });
 
-    ctx.stepOutputs["2"] = {
-      references: ctx.loadedReferences.map((r) => r.filename),
-      citationCount: ctx.citationPalette.length,
-      sourceCount: ctx.sourcePalette.length,
+    const palette = buildCitationPaletteFromIndex(relevantClauses);
+    ctx.palette.loadCitationPalette(palette);
+    logPipeline(`  [BUILTIN] citationPalette=${palette.length} entries: ${palette.map(e => `${e.regulation}§${e.clause}[${e.id}]`).join(", ")}`);
+
+    const memories = getRecentMemories(ctx.skill.name);
+    logPipeline(`  [BUILTIN] sourcePalette entries memories=${memories.length}`);
+
+    ctx.steps.setRaw("2", {
+      references: ctx.palette.getReferences().map((r) => r.filename),
+      citationCount: palette.length,
+      sourceCount: ctx.files.getFiles().length,
       memoryCount: memories.length,
-    };
+    });
 
     return { success: true };
   } catch (err) {
@@ -143,21 +132,7 @@ export function executeComplianceCheck(input: ComplianceCheckInput): { results: 
 function extractConditions(ctx: PipelineContext): string[] {
   const conditions: string[] = [];
 
-  // From vehicle data
-  if (ctx.vehicleData) {
-    const vd = ctx.vehicleData;
-    if (vd.lightSource && vd.lightSource !== "unknown")
-      conditions.push("lighting", vd.lightSource.toLowerCase());
-    if (vd.beamPattern && vd.beamPattern !== "unknown")
-      conditions.push("beam");
-    if (vd.colorTemp && vd.colorTemp !== "unknown")
-      conditions.push("colour");
-    if (vd.cutoffSharpness && vd.cutoffSharpness !== "unknown")
-      conditions.push("cutoff");
-  }
-
-  // From uploaded file text (fallback when vehicleData not yet populated)
-  for (const file of ctx.uploadedFiles) {
+  for (const file of ctx.files.getFiles()) {
     const lower = file.extractedText.toLowerCase();
     const filePatterns = [
       { words: ["led", "headlamp", "low beam", "high beam", "lighting", "xenon"], kw: "lighting" },
@@ -171,7 +146,6 @@ function extractConditions(ctx: PipelineContext): string[] {
     }
   }
 
-  // From user message
   try {
     const history = getConversationHistory(ctx.sessionId);
     const lastMsg =
@@ -188,7 +162,7 @@ function extractConditions(ctx: PipelineContext): string[] {
       if (words.some((w) => lower.includes(w))) conditions.push(kw);
     }
   } catch {
-    // ignore — no history available
+    // ignore
   }
 
   return conditions;

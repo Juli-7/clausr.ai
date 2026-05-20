@@ -190,7 +190,7 @@ export function getResponsesForSession(sessionId: string): {
   toolCalls?: { step: number; toolName: string; summary: string; status: string }[];
   reasoningSteps?: { stepNumber: number; title: string; body: string; subStep?: number }[];
   claims?: { statement: string; citationRef: string; sourceRef?: number; chunkRef?: string }[];
-  confidence?: { score: number; ocrConfidence: number; dataCompleteness: number; llmMultiplier: number; llmReasoning: string; needsExpert: boolean };
+  confidence?: { score: number; ocrConfidence: number; dataCompleteness?: number; llmMultiplier: number; llmReasoning: string; needsExpert: boolean };
   createdAt: number;
 }[] {
   const db = getDb();

@@ -12,20 +12,20 @@ export interface ValidationError {
   message: string;
 }
 
-/**
- * Post-validate the pipeline output after all steps complete.
- * Checks cross-cutting concerns that span multiple steps.
- */
 export function postValidate(ctx: PipelineContext): ValidationError[] {
   const errors: ValidationError[] = [];
+  const checks = ctx.checks;
+  const palette = ctx.palette;
+  const sourcePalette = ctx.files.getSourcePalette();
+  const citations = [...checks.getCitations()];
+  const sourceCitations = [...checks.getSourceCitations()];
+  const claims = checks.getClaims();
 
-  // ── Layer 4+5: Claims-based validation (structural) ──
-  if (ctx.claims && ctx.claims.length > 0) {
-    const citationRefs = new Set(ctx.compiledCitations.map(c => c.ref));
-    const sourceRefs = new Set(ctx.compiledSourceCitations.map(c => c.ref));
+  if (claims.length > 0) {
+    const citationRefs = new Set(citations.map(c => c.ref));
+    const sourceRefs = new Set(sourceCitations.map(c => c.ref));
 
-    for (const claim of ctx.claims) {
-      // citationRef may be comma-separated: "R48.6.2, S1" — deprecated; use dedicated sourceRef/chunkRef
+    for (const claim of claims) {
       const parts = claim.citationRef.split(/[,\s]+/).filter(Boolean);
       if (parts.length > 1) {
         console.warn(`[DEPRECATED] citationRef "${claim.citationRef}" uses comma-separated format — move S-refs to sourceRef/chunkRef`);
@@ -33,9 +33,9 @@ export function postValidate(ctx: PipelineContext): ValidationError[] {
       for (const part of parts) {
         if (part.startsWith("R")) {
           if (!citationRefs.has(part)) {
-            const entry = ctx.citationPalette.find(e => e.id === part);
+            const entry = palette.getCitationPalette().find(e => e.id === part);
             if (entry) {
-              ctx.compiledCitations.push({
+              citations.push({
                 ref: entry.id, regulation: entry.regulation, clause: entry.clause,
               });
               citationRefs.add(entry.id);
@@ -49,9 +49,9 @@ export function postValidate(ctx: PipelineContext): ValidationError[] {
         } else if (part.startsWith("S")) {
           const num = parseInt(part.slice(1), 10);
           if (!isNaN(num) && !sourceRefs.has(num)) {
-            const entry = ctx.sourcePalette.find(e => e.id === num);
+            const entry = sourcePalette.find(e => e.id === num);
             if (entry) {
-              ctx.compiledSourceCitations.push({
+              sourceCitations.push({
                 ref: entry.id, fileId: entry.fileId, filename: entry.filename,
                 fileUrl: entry.dataUrl, extractedText: entry.extractedText,
                 keyExcerpt: entry.keyExcerpt, pageNumber: entry.pageNumber,
@@ -66,11 +66,10 @@ export function postValidate(ctx: PipelineContext): ValidationError[] {
           }
         }
       }
-      // Also check the dedicated sourceRef field
       if (claim.sourceRef && !sourceRefs.has(claim.sourceRef)) {
-        const entry = ctx.sourcePalette.find(e => e.id === claim.sourceRef);
+        const entry = sourcePalette.find(e => e.id === claim.sourceRef);
         if (entry) {
-          ctx.compiledSourceCitations.push({
+          sourceCitations.push({
             ref: entry.id, fileId: entry.fileId, filename: entry.filename,
             fileUrl: entry.dataUrl, extractedText: entry.extractedText,
             keyExcerpt: entry.keyExcerpt, pageNumber: entry.pageNumber,
@@ -86,23 +85,19 @@ export function postValidate(ctx: PipelineContext): ValidationError[] {
     }
   }
 
-  // ── ChunkRef validation (Phase 4) ──
   const chunkErrors = validateClaimChunks(ctx);
   errors.push(...chunkErrors);
 
-  if (!ctx.reportSections) return errors;
+  const sections = ctx.report.getSections();
+  if (!sections) return errors;
 
-  // Flatten all text content from report sections
-  const allContent = Object.values(ctx.reportSections)
+  const allContent = Object.values(sections)
     .map((s) => (typeof s === "string" ? s : Object.values(s).join(" ")))
     .join(" ");
 
-  // 1. Extract all [R48.5.11] markers → cross-reference with compiledCitations
-  const regulationMarkers = [...allContent.matchAll(/\[(R\d+\.\d+(?:\.\d+)*)\]/g)].map((m) =>
-    m[1]
-  );
+  const regulationMarkers = [...allContent.matchAll(/\[(R\d+\.\d+(?:\.\d+)*)\]/g)].map((m) => m[1]);
   const uniqueRegulationMarkers = [...new Set(regulationMarkers)];
-  const citationRefs = new Set(ctx.compiledCitations.map((c) => c.ref));
+  const citationRefs = new Set(citations.map((c) => c.ref));
 
   for (const marker of uniqueRegulationMarkers) {
     if (!citationRefs.has(marker)) {
@@ -113,12 +108,9 @@ export function postValidate(ctx: PipelineContext): ValidationError[] {
     }
   }
 
-  // 2. Extract all [SN] markers → cross-reference with compiledSourceCitations
-  const sourceMarkers = [...allContent.matchAll(/\[S(\d+)\]/g)].map((m) =>
-    parseInt(m[1], 10)
-  );
+  const sourceMarkers = [...allContent.matchAll(/\[S(\d+)\]/g)].map((m) => parseInt(m[1], 10));
   const uniqueSourceMarkers = [...new Set(sourceMarkers)];
-  const sourceRefs = new Set(ctx.compiledSourceCitations.map((c) => c.ref));
+  const sourceRefs = new Set(sourceCitations.map((c) => c.ref));
 
   for (const marker of uniqueSourceMarkers) {
     if (!sourceRefs.has(marker)) {
@@ -129,10 +121,9 @@ export function postValidate(ctx: PipelineContext): ValidationError[] {
     }
   }
 
-  // 3. Verify template completeness
   if (ctx.skill.template) {
     for (const section of ctx.skill.template.sections) {
-      const sectionValue = ctx.reportSections[section.id];
+      const sectionValue = sections[section.id];
       if (sectionValue === undefined || sectionValue === null) {
         errors.push({
           type: "template-incomplete",
@@ -142,16 +133,13 @@ export function postValidate(ctx: PipelineContext): ValidationError[] {
     }
   }
 
-  // 4. Verify verdict consistency
-  if (ctx.verdict) {
-    const reportVerdict = ctx.reportSections["verdict"];
-    if (
-      typeof reportVerdict === "string" &&
-      reportVerdict !== ctx.verdict
-    ) {
+  const verdict = ctx.report.getVerdict();
+  if (verdict) {
+    const reportVerdict = sections["verdict"];
+    if (typeof reportVerdict === "string" && reportVerdict !== verdict) {
       errors.push({
         type: "verdict-inconsistent",
-        message: `Report says "${reportVerdict}" but computed verdict is "${ctx.verdict}"`,
+        message: `Report says "${reportVerdict}" but computed verdict is "${verdict}"`,
       });
     }
   }
@@ -159,16 +147,13 @@ export function postValidate(ctx: PipelineContext): ValidationError[] {
   return errors;
 }
 
-/**
- * Validate chunkRefs on claims only — used for retry decisions.
- * Checks format, existence, and cross-checks chunk text against claim statement.
- * Returns errors without mutating context.
- */
 export function validateClaimChunks(ctx: PipelineContext): ValidationError[] {
   const errors: ValidationError[] = [];
-  if (!ctx.claims || ctx.claims.length === 0) return errors;
+  const claims = ctx.checks.getClaims();
+  if (claims.length === 0) return errors;
+  const sourcePalette = ctx.files.getSourcePalette();
 
-  for (const claim of ctx.claims) {
+  for (const claim of claims) {
     if (!claim.chunkRef) continue;
     const match = claim.chunkRef.match(/^S(\d+)\.(.+)$/);
     if (!match) {
@@ -180,7 +165,7 @@ export function validateClaimChunks(ctx: PipelineContext): ValidationError[] {
     }
     const fileRef = parseInt(match[1], 10);
     const chunkId = match[2];
-    const sourceEntry = ctx.sourcePalette.find(e => e.id === fileRef);
+    const sourceEntry = sourcePalette.find(e => e.id === fileRef);
     if (!sourceEntry) {
       errors.push({
         type: "chunk-missing",
@@ -203,8 +188,6 @@ export function validateClaimChunks(ctx: PipelineContext): ValidationError[] {
     const chunkLower = chunk.text.toLowerCase();
     const matchCount = claimWords.filter(w => chunkLower.includes(w)).length;
     const chunkWordCount = chunkLower.replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(w => w.length > 2).length;
-    // Skip fuzzy match when claim is much longer than chunk — extra context (VIN, regulation refs, values)
-    // naturally appears in the claim but not in the source chunk
     const skipValidation = claimWords.length > 15 && claimWords.length > chunkWordCount * 3;
     if (!skipValidation && claimWords.length >= 3 && matchCount < Math.ceil(claimWords.length * 0.25)) {
       errors.push({

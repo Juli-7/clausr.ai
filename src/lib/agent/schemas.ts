@@ -76,7 +76,7 @@ export const ToolCallRecordSchema = z.object({
 export const ConfidenceSchema = z.object({
   score: z.number().min(0).max(100),
   ocrConfidence: z.number().min(0).max(100),
-  dataCompleteness: z.number().min(0).max(100),
+  dataCompleteness: z.number().min(0).max(100).optional(),
   llmMultiplier: z.number().min(0.5).max(1),
   llmReasoning: z.string(),
   needsExpert: z.boolean(),

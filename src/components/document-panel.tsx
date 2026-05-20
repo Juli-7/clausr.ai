@@ -798,10 +798,11 @@ function confidenceLabel(score: number): string {
   return "Expert needed";
 }
 
-function ConfidenceBadge({ confidence }: { confidence: { score: number; ocrConfidence: number; dataCompleteness: number; llmMultiplier: number; llmReasoning: string; needsExpert: boolean } }) {
+function ConfidenceBadge({ confidence }: { confidence: { score: number; ocrConfidence: number; dataCompleteness?: number; llmMultiplier: number; llmReasoning: string; needsExpert: boolean } }) {
   const color = confidenceColor(confidence.score);
+  const dataCompleteness = confidence.dataCompleteness ?? 100;
   return (
-    <div className="relative inline-flex items-center gap-2 group" title={`OCR: ${confidence.ocrConfidence}% · Data: ${confidence.dataCompleteness}% · LLM: ×${confidence.llmMultiplier}\n${confidence.llmReasoning}`}>
+    <div className="relative inline-flex items-center gap-2 group" title={`OCR: ${confidence.ocrConfidence}% · Data: ${dataCompleteness}% · LLM: ×${confidence.llmMultiplier}\n${confidence.llmReasoning}`}>
       <span className="text-[10px] font-semibold px-2 py-0.5 rounded" style={{ color, background: `${color}18` }}>
         {confidenceLabel(confidence.score)}
       </span>
@@ -818,7 +819,7 @@ function ConfidenceBadge({ confidence }: { confidence: { score: number; ocrConfi
         <div className="p-3 rounded-lg shadow-lg text-xs" style={{ background: "var(--color-bg-dark)", border: "1px solid var(--color-border-default)", whiteSpace: "nowrap" }}>
           <div style={{ color: "var(--color-text-header)", fontWeight: 600, marginBottom: 6 }}>Confidence Breakdown</div>
           <div style={{ color: "var(--color-text-body)" }}>OCR quality: <span style={{ fontWeight: 500 }}>{confidence.ocrConfidence}%</span></div>
-          <div style={{ color: "var(--color-text-body)" }}>Data completeness: <span style={{ fontWeight: 500 }}>{confidence.dataCompleteness}%</span></div>
+          <div style={{ color: "var(--color-text-body)" }}>Data completeness: <span style={{ fontWeight: 500 }}>{dataCompleteness}%</span></div>
           <div style={{ color: "var(--color-text-body)" }}>LLM assessment: <span style={{ fontWeight: 500 }}>×{confidence.llmMultiplier}</span></div>
           <div style={{ color: "var(--color-text-muted)", marginTop: 4, maxWidth: 220, whiteSpace: "normal" }}>{confidence.llmReasoning}</div>
         </div>

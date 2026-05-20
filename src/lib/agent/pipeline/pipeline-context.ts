@@ -1,6 +1,11 @@
 import type { Citation, SourceCitation, Verdict, Claim } from "@/lib/agent/schemas";
 import type { ReportTemplate } from "@/lib/agent/template-types";
 import type { TextChunk } from "@/lib/agent/extractors";
+import { CheckStore } from "./slices/check-store";
+import { StepMemory } from "./slices/step-memory";
+import { FileRegistry } from "./slices/file-registry";
+import { PaletteStore } from "./slices/palette-store";
+import { ReportAssembler } from "./slices/report-assembler";
 
 // ── Types ──
 
@@ -20,18 +25,6 @@ export interface SourcePaletteEntry {
   chunks?: TextChunk[];
   dataUrl?: string;
   pageNumber?: number;
-}
-
-export interface VehicleData {
-  make: string;
-  model: string;
-  lightSource: string;
-  mountingHeight: string;
-  beamPattern: string;
-  luminousFlux: string;
-  colorTemp: string;
-  cutoffSharpness: string;
-  levelingDeviation: string;
 }
 
 export interface CheckResult {
@@ -60,20 +53,24 @@ export interface PipelineContext {
     template: ReportTemplate | null;
   };
   sessionId: string;
-  /** Correlation ID for log tracing across a single pipeline run */
   correlationId: string;
-  /** Whether to fill template structure (default true when template exists) */
   useTemplate: boolean;
 
-  /** Generic step outputs keyed by step number or label (e.g. "toolCalls") */
+  /** Decomposed context slices */
+  checks: CheckStore;
+  steps: StepMemory;
+  files: FileRegistry;
+  palette: PaletteStore;
+  report: ReportAssembler;
+
+  /** @deprecated — use ctx.checks / ctx.steps / ctx.files / ctx.palette / ctx.report instead */
   stepOutputs: Record<string, unknown>;
 
-  vehicleData: VehicleData | null;
+  skillData: Record<string, unknown>;
   loadedReferences: { filename: string; content: string }[];
   citationPalette: CitationPaletteEntry[];
   sourcePalette: SourcePaletteEntry[];
   checkResults: CheckResult[];
-  /** Structured claim→citation mappings extracted from LLM output (Layer 5) */
   claims: Claim[];
   compiledCitations: Citation[];
   compiledSourceCitations: SourceCitation[];
@@ -114,8 +111,13 @@ export function createPipelineContext(
     sessionId,
     correlationId,
     useTemplate: useTemplate ?? (template !== null),
+    checks: new CheckStore(),
+    steps: new StepMemory(),
+    files: new FileRegistry(),
+    palette: new PaletteStore(),
+    report: new ReportAssembler(),
     stepOutputs: {},
-    vehicleData: null,
+    skillData: {},
     loadedReferences: [],
     citationPalette: [],
     sourcePalette: [],
@@ -134,13 +136,13 @@ export function createPipelineContext(
 
 export function serializeContext(ctx: PipelineContext): string {
   return JSON.stringify({
-    vehicleData: ctx.vehicleData,
-    citationPalette: ctx.citationPalette,
-    sourcePalette: ctx.sourcePalette,
-    checkResults: ctx.checkResults,
-    compiledCitations: ctx.compiledCitations,
-    compiledSourceCitations: ctx.compiledSourceCitations,
-    uploadedFiles: ctx.uploadedFiles.map((f) => ({
+    skillData: ctx.skillData,
+    citationPalette: [...ctx.palette.getCitationPalette()],
+    sourcePalette: ctx.files.getSourcePalette(),
+    checkResults: [...ctx.checks.getResults()],
+    compiledCitations: [...ctx.checks.getCitations()],
+    compiledSourceCitations: [...ctx.checks.getSourceCitations()],
+    uploadedFiles: ctx.files.getFiles().map((f) => ({
       fileId: f.fileId,
       filename: f.filename,
       dataUrl: f.dataUrl,
@@ -159,7 +161,7 @@ export function deserializeContext(
   return {
     skill,
     sessionId,
-    vehicleData: data.vehicleData ?? null,
+    skillData: data.skillData ?? {},
     citationPalette: data.citationPalette ?? [],
     sourcePalette: data.sourcePalette ?? [],
     checkResults: data.checkResults ?? [],
