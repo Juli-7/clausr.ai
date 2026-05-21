@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import matter from "gray-matter";
 import { loadReference } from "@/lib/agent/skill/loader";
+import { getRegulationApi } from "./regulation-api";
 
 interface LoadingRule {
   condition: string;
@@ -62,14 +63,15 @@ function loadReferenceRules(skillId: string): LoadingRule[] | null {
 
 /**
  * Look up the clause text for a regulation reference.
- * Reads from the skill's references/ directory.
+ * Sync version: reads from skill's references/ directory.
+ * For API-backed lookup, use getClauseTextAsync().
  */
 export function getClauseText(
   skillId: string,
   regulation: string,
   clause: string
 ): string | null {
-  const refFile = regulationToFile(regulation);
+  const refFile = regulationToFileFallback(regulation);
   if (!refFile) return null;
 
   try {
@@ -78,6 +80,24 @@ export function getClauseText(
   } catch {
     return null;
   }
+}
+
+/**
+ * Async version of getClauseText — preferred for new code.
+ */
+export async function getClauseTextAsync(
+  regulation: string,
+  clause: string
+): Promise<string | null> {
+  const api = getRegulationApi();
+  const resolved = api.resolveCode(regulation);
+  if (!resolved) return null;
+
+  const result = await api.getClause({ regulationCode: resolved, clauseNumber: clause });
+  if (result.success && result.data) {
+    return result.data.text;
+  }
+  return null;
 }
 
 /**
@@ -94,13 +114,8 @@ export function loadReferencesForConditions(
   const rules = loadReferenceRules(skillId);
 
   for (const cond of conditions) {
-    const refFile = rules ? matchRuleDynamic(cond, rules) : matchRuleHardcoded(cond);
+    const refFile = rules ? matchRuleDynamic(cond, rules) : matchRuleFallback(cond);
     if (refFile) needed.add(refFile);
-    // Supplement: also try hardcoded matching for conditions the dynamic rules may not cover
-    if (rules) {
-      const hardcodedRef = matchRuleHardcoded(cond);
-      if (hardcodedRef) needed.add(hardcodedRef);
-    }
   }
 
   // Always load common-pitfalls
@@ -120,7 +135,7 @@ export function loadReferencesForConditions(
 
 /**
  * Load reference texts by regulation IDs (new format — derived from ## Checks table).
- * Maps regulation IDs like "R48", "R112" to filenames like "un-r48.md", "un-r112.md".
+ * Sync version: uses file-based fallback only. For API-backed loading, use the async variant.
  */
 export function loadReferencesForRegulationIds(
   skillId: string,
@@ -130,7 +145,7 @@ export function loadReferencesForRegulationIds(
   const needed = new Set<string>();
 
   for (const regId of regulationIds) {
-    const refFile = regulationToFile(regId);
+    const refFile = regulationToFileFallback(regId);
     if (refFile) needed.add(refFile);
   }
 
@@ -149,7 +164,52 @@ export function loadReferencesForRegulationIds(
   return loaded;
 }
 
-export function regulationToFile(regulation: string): string | null {
+/**
+ * Async version of loadReferencesForRegulationIds — preferred for new code.
+ */
+export async function loadReferencesForRegulationIdsAsync(
+  skillId: string,
+  regulationIds: string[]
+): Promise<string[]> {
+  const loaded: string[] = [];
+  const neededFiles = new Set<string>();
+
+  const api = getRegulationApi();
+
+  for (const regId of regulationIds) {
+    const resolved = api.resolveCode(regId);
+    if (!resolved) continue;
+
+    const result = await api.getRegulation({ code: resolved });
+    if (result.success && result.data) {
+      const reg = result.data;
+      const clauseTexts = reg.clauses.map((c) => `§${c.number} ${c.title}\n${c.text}`).join("\n\n");
+      loaded.push(`--- ${reg.code} (${reg.title}) ---\n${clauseTexts}`);
+    } else {
+      // Fall back to file-based lookup
+      const refFile = regulationToFileFallback(regId);
+      if (refFile) neededFiles.add(refFile);
+    }
+  }
+
+  // Always load common-pitfalls
+  neededFiles.add("common-pitfalls.md");
+
+  for (const ref of neededFiles) {
+    try {
+      const text = loadReference(skillId, ref);
+      loaded.push(`--- ${ref} ---\n${text}`);
+    } catch {
+      // skip
+    }
+  }
+
+  return loaded;
+}
+
+// ── Fallback helpers (for when API doesn't have the regulation) ──
+
+function regulationToFileFallback(regulation: string): string | null {
   const map: Record<string, string> = {
     "R48": "un-r48.md",
     "R112": "un-r112.md",
@@ -160,17 +220,12 @@ export function regulationToFile(regulation: string): string | null {
   return map[regulation.toUpperCase()] ?? null;
 }
 
-/**
- * Match a condition against dynamically-parsed §6 rules.
- */
 function matchRuleDynamic(condition: string, rules: LoadingRule[]): string | null {
   const lower = condition.toLowerCase();
   for (const rule of rules) {
-    // Check if the condition keyword (from rule) appears in the input condition
-    // e.g. rule "any lighting check" contains "lighting", which matches condition "lighting"
     const ruleKeywords = rule.condition
       .split(/[\s,]+/)
-      .filter((w) => w.length > 2); // words longer than 2 chars
+      .filter((w) => w.length > 2);
     if (ruleKeywords.some((kw) => lower.includes(kw))) {
       return rule.refFile;
     }
@@ -178,10 +233,7 @@ function matchRuleDynamic(condition: string, rules: LoadingRule[]): string | nul
   return null;
 }
 
-/**
- * Fallsback hardcoded §6 rules when dynamic parsing fails.
- */
-function matchRuleHardcoded(condition: string): string | null {
+function matchRuleFallback(condition: string): string | null {
   const lower = condition.toLowerCase();
 
   if (lower.includes("lighting") || lower.includes("headlamp") || lower.includes("led")) {
