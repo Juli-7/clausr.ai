@@ -1,10 +1,9 @@
 import type { Claim, Citation, SourceCitation } from "@/lib/agent/schemas";
-import type { CitationPaletteEntry, SourcePaletteEntry, CheckResult } from "@/lib/agent/pipeline/pipeline-context";
+import type { CitationPaletteEntry, SourcePaletteEntry } from "@/lib/agent/pipeline/pipeline-context";
 
 export interface ValidationError {
   type:
     | "citation-mismatch"
-    | "verdict-inconsistent"
     | "source-mismatch"
     | "chunk-mismatch"
     | "chunk-missing"
@@ -17,7 +16,6 @@ export interface ValidationError {
  * Operates on plain data — no PipelineContext dependency.
  */
 export function validate({
-  verdict,
   claims,
   citations,
   sourceCitations,
@@ -25,7 +23,6 @@ export function validate({
   sourcePalette,
   reportContent,
 }: {
-  verdict: string;
   claims: readonly Claim[];
   citations: readonly Citation[];
   sourceCitations: readonly SourceCitation[];
@@ -95,14 +92,6 @@ export function validate({
         message: `[S${marker}] appears in content but not in compiledSourceCitations`,
       });
     }
-  }
-
-  const verdictInContent = reportContent.match(/\b(PASS|FAIL)\b/)?.[1];
-  if (verdictInContent && verdictInContent !== verdict) {
-    errors.push({
-      type: "verdict-inconsistent",
-      message: `Report says "${verdictInContent}" but computed verdict is "${verdict}"`,
-    });
   }
 
   return errors;

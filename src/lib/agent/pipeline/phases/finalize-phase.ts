@@ -19,11 +19,9 @@ export async function finalizePhase(
 ): Promise<FinalizePhaseResult> {
   logPipeline("→ EVAL: running evaluation layer");
 
-  // Build step titles map
   const stepTitles: Record<number, string> = {};
   for (const s of steps) stepTitles[s.number] = s.title;
 
-  // Gather pipeline raw output as plain data
   const result = evaluate({
     checkResults: ctx.checks.getResults(),
     citationPalette: ctx.palette.getCitationPalette(),
@@ -38,24 +36,33 @@ export async function finalizePhase(
     citations: [...ctx.checks.getCitations()],
     sourceCitations: [...ctx.checks.getSourceCitations()],
     checks: ctx.skill.checks,
-    reportSections: ctx.report.getSections(),
     toolCalls: ctx.steps.getRaw("toolCalls"),
   });
 
-  logPipeline(`  ✓ verdict=${result.verdict} confidence=${result.confidence.score.toFixed(1)}% errors=${result.validationErrors.length}`);
+  logPipeline(`  ✓ confidence=${result.confidence.score.toFixed(1)}% errors=${result.validationErrors.length}`);
 
   const round = getResponseCount(sessionId) + 1;
 
+  // Verdict: simple — FAIL if any check failed (required by schema, not rendered)
+  const verdict = ctx.checks.getResults().length > 0 && ctx.checks.getResults().some((c) => c.verdict === "FAIL") ? "FAIL" : "PASS";
+
+  // Clause texts for citation popovers (trivial map, not evaluation concern)
+  const clauseTexts: Record<string, string> = {};
+  for (const entry of ctx.palette.getCitationPalette()) {
+    const key = `${entry.regulation}.${entry.clause}`;
+    if (!clauseTexts[key]) clauseTexts[key] = entry.text;
+  }
+
   const responseData: Record<string, unknown> = {
-    content: formatContent(result.sections, steps),
+    content: formatContent(result.findings),
     reasoning: result.reason,
     citations: result.citations,
     sourceCitations: result.sourceCitations.length > 0 ? result.sourceCitations : undefined,
     round,
     sessionId,
-    verdict: result.verdict,
-    sections: result.sections,
-    clauseTexts: Object.keys(result.clauseTexts).length > 0 ? result.clauseTexts : undefined,
+    verdict,
+    sections: { findings: result.findings },
+    clauseTexts: Object.keys(clauseTexts).length > 0 ? clauseTexts : undefined,
   };
 
   const toolCalls = ctx.steps.getRaw("toolCalls");
@@ -75,7 +82,7 @@ export async function finalizePhase(
     responseData.validationErrors = result.validationErrors;
   }
 
-  logPipeline(`final response: content=${(responseData.content as string).length}chars citations=${(result.citations as any[])?.length} verdict=${result.verdict}`);
+  logPipeline(`final response: content=${(responseData.content as string).length}chars citations=${result.citations.length} verdict=${verdict}`);
 
   const agentResponse = AgentResponseSchema.parse(responseData);
   addAssistantResponse(sessionId, agentResponse);
@@ -89,24 +96,10 @@ export async function finalizePhase(
   };
 }
 
-function formatContent(
-  sections: Record<string, Record<string, string> | string>,
-  steps: ExecutableStep[]
-): string {
-  if (Object.keys(sections).length > 0) {
-    const parts: string[] = [];
-    for (const [sectionId, value] of Object.entries(sections)) {
-      if (typeof value === "string") {
-        parts.push(`## ${sectionId}\n${value}`);
-      } else if (typeof value === "object" && value !== null) {
-        const tableRows = Object.entries(value)
-          .map(([k, v]) => `| ${k} | ${v} |`)
-          .join("\n");
-        parts.push(`## ${sectionId}\n| Field | Value |\n| --- | --- |\n${tableRows}`);
-      }
-    }
-    return parts.join("\n\n");
-  }
-
-  return "Assessment not available.";
+function formatContent(findings: Record<string, string>): string {
+  const rows = Object.entries(findings)
+    .map(([k, v]) => `| ${k} | ${v} |`)
+    .join("\n");
+  if (!rows) return "Assessment not available.";
+  return `## Findings\n| Field | Value |\n| --- | --- |\n${rows}`;
 }

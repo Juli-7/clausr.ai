@@ -40,7 +40,7 @@ export const SourceCitationSchema = z.object({
 export const VerdictSchema = z.enum(["PASS", "FAIL"]);
 
 export const ValidationErrorSchema = z.object({
-  type: z.enum(["citation-mismatch", "template-incomplete", "verdict-inconsistent", "source-mismatch", "chunk-mismatch", "chunk-missing", "step-missing"]),
+  type: z.enum(["citation-mismatch", "template-incomplete", "source-mismatch", "chunk-mismatch", "chunk-missing", "step-missing"]),
   message: z.string(),
 });
 

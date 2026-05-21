@@ -362,13 +362,8 @@ function DocumentCard({
           <span className="text-sm font-bold" style={{ color: "var(--color-text-header)" }}>
             {skillName ? `${skillName} Compliance Report` : "Compliance Report"}
           </span>
-          <span
-            className="text-[10px] font-semibold px-2 py-0.5 rounded"
-            style={{
-              color: response.verdict === "FAIL" ? "var(--color-danger)" : "var(--color-success)",
-              background: response.verdict === "FAIL" ? "#f8514918" : "#3fb95018",
-            }}
-          >
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded"
+            style={{ background: "var(--color-accent-blue-bg)", color: "var(--color-accent-blue)" }}>
             Round {response.round}/5
           </span>
         </div>
@@ -445,37 +440,12 @@ function DocumentCard({
               </div>
             )}
 
-            {/* Summary — from response.sections.summary */}
-            {response.sections.summary && typeof response.sections.summary === "string" && (
-              <div style={{ marginBottom: 20 }}>
-                <div
-                  className="inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded mb-3"
-                  style={{ color: "var(--color-text-muted)", background: "var(--color-border-default)" }}
-                >
-                  Summary
-                </div>
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  rehypePlugins={[rehypeRaw]}
-                  components={markdownComponents}
-                >
-                  {applyHighlights(enhanceCitations(response.sections.summary, response.citations, sourceCitations), pendingComments)}
-                </ReactMarkdown>
-                <div style={{ height: 1, background: "var(--color-border-default)", marginTop: 16 }} />
+            {/* Confidence badge only */}
+            {response.confidence && (
+              <div className="flex justify-end mt-4">
+                <ConfidenceBadge confidence={response.confidence} />
               </div>
             )}
-
-            {/* Verdict + Confidence */}
-            <div className="p-4 rounded-lg mt-2" style={{ border: "1px solid var(--color-border-default)", background: "var(--color-bg-card)" }}>
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase" style={{ color: response.verdict === "FAIL" ? "var(--color-danger)" : "var(--color-success)" }}>
-                  {response.verdict === "FAIL" ? "✗ FAIL" : "✓ PASS"}
-                </span>
-                {response.confidence ? (
-                  <ConfidenceBadge confidence={response.confidence} />
-                ) : null}
-              </div>
-            </div>
           </>
         ) : (
           /* No sections — render raw markdown content */
@@ -650,26 +620,6 @@ function DocumentCard({
           skillName={skillName}
         />
       </div>
-
-      {/* Verdict box — fallback when no sections */}
-      {response.verdict && !response.sections && (
-        <div
-          className="mx-6 mb-5 p-4 rounded-lg"
-          style={{
-            border: `1px solid ${response.verdict === "FAIL" ? "var(--color-danger)" : "var(--color-success)"}`,
-            background: response.verdict === "FAIL" ? "#f8514911" : "#3fb95011",
-          }}
-        >
-          <span
-            className="text-xs font-bold uppercase"
-            style={{
-              color: response.verdict === "FAIL" ? "var(--color-danger)" : "var(--color-success)",
-            }}
-          >
-            {response.verdict === "FAIL" ? "✗ FAIL" : "✓ PASS"}
-          </span>
-        </div>
-      )}
     </div>
   );
 }
