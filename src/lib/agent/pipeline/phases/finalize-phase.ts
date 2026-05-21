@@ -109,14 +109,20 @@ function formatContent(
     return parts.join("\n\n");
   }
 
-  const llmSteps = steps.filter(
+  const fieldSteps = steps.filter(
     (s) => s.type === "llm" || s.type === "llm+tool"
   );
-  const lastLlm = llmSteps[llmSteps.length - 1];
-  if (lastLlm) {
-    const output = ctx.steps.read(lastLlm.number);
-    if (typeof output === "string") return output;
-    if (output) return JSON.stringify(output, null, 2);
+  if (fieldSteps.length > 0) {
+    const combined = fieldSteps
+      .map((s) => {
+        const output = ctx.steps.read(s.number);
+        if (output === undefined || output === null) return null;
+        const body = typeof output === "string" ? output : JSON.stringify(output, null, 2);
+        return `## ${s.title}\n${body}`;
+      })
+      .filter(Boolean)
+      .join("\n\n");
+    if (combined) return combined;
   }
 
   return "Assessment not available.";
