@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     dbg("Validation PASSED");
 
     const { message, skillName, sessionId, files } = parsed.data;
-    dbg("skillName: " + String(skillName) + " | message: " + message.slice(0, 80) + " | files: " + (files ? files.map(f => f.name + " (" + f.type + ", dataUrl:" + (f.dataUrl ? f.dataUrl.slice(0, 30) + "..." : "MISSING") + ")" ).join("; ") : "none"));
+    dbg("skillName: " + String(skillName ?? "(auto)") + " | message: " + message.slice(0, 80) + " | files: " + (files ? files.map(f => f.name + " (" + f.type + ", dataUrl:" + (f.dataUrl ? f.dataUrl.slice(0, 30) + "..." : "MISSING") + ")" ).join("; ") : "none"));
 
     // ── SSE streaming response ──
     const stream = new ReadableStream({

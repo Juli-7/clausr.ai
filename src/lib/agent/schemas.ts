@@ -116,7 +116,7 @@ export const ChatRequestFileSchema = z.object({
 
 export const ChatRequestSchema = z.object({
   message: z.string().min(1, "Message is required"),
-  skillName: z.string(),
+  skillName: z.string().optional(),
   sessionId: z.string().min(1, "Session ID is required"),
   files: z.array(ChatRequestFileSchema).optional(),
 });

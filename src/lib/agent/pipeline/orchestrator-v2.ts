@@ -4,6 +4,8 @@ import { PipelineError, formatPipelineError } from "./errors";
 import { logPipeline, truncate } from "./logger";
 import { initPhase } from "./phases/init-phase";
 import { inputPhase } from "./phases/input-phase";
+import { skillGenPhase } from "./phases/skill-gen-phase";
+import { identifyRevisionTarget } from "./phases/revision-phase";
 import { parseStepsPhase } from "./phases/execute-phase";
 import { enforceChecks } from "./phases/enforce-checks";
 import { reportPhase } from "./phases/report-phase";
@@ -12,7 +14,7 @@ import type { PipelineEvent } from "./phases/types";
 
 export async function* orchestratePipeline(
   message: string,
-  skillName: string,
+  skillName: string | undefined,
   sessionId: string,
   files?: {
     name: string;
@@ -24,10 +26,12 @@ export async function* orchestratePipeline(
   // ── Phase 1: Init ──
   let ctx;
   let correlationId: string;
+  let isAutoSkill: boolean;
   try {
     const initResult = await initPhase(skillName, sessionId, message);
     ctx = initResult.ctx;
     correlationId = initResult.correlationId;
+    isAutoSkill = initResult.isAutoSkill;
   } catch (err) {
     yield { type: "error", error: formatPipelineError(err), code: err instanceof PipelineError ? err.code : "SKILL_NOT_FOUND" };
     return;
@@ -36,6 +40,22 @@ export async function* orchestratePipeline(
   // ── Phase 2: Input ──
   yield { type: "status", phase: "processing-files" };
   await inputPhase(ctx, { files, sessionId });
+
+  // ── Phase 2.5: Skill Generation (auto-mode only) ──
+  if (isAutoSkill) {
+    yield { type: "status", phase: "generating-skill" };
+    try {
+      await skillGenPhase(ctx, message);
+    } catch (err) {
+      yield {
+        type: "error",
+        error: formatPipelineError(err, correlationId),
+        code: err instanceof PipelineError ? err.code : "SKILL_GENERATION_FAILED",
+        correlationId,
+      };
+      return;
+    }
+  }
 
   // ── Phase 3: Parse steps ──
   let steps;
@@ -54,10 +74,32 @@ export async function* orchestratePipeline(
   yield { type: "status", phase: `executing-${steps.length}-steps` };
   const turnNumber = getResponseCount(sessionId) + 1;
 
-  // ── Phase 3 (cont): Step execution loop ──
+  // ── Phase 3a: Revision identification (follow-up turns only) ──
+  let revisionTarget = -1;
+  if (ctx.previousTurns.length > 0) {
+    try {
+      revisionTarget = await identifyRevisionTarget(ctx, message);
+      if (revisionTarget > 0) {
+        yield { type: "status", phase: `revising-step-${revisionTarget}` };
+      }
+    } catch {
+      revisionTarget = -1;
+    }
+  }
+
+  // ── Phase 3b: Step execution loop ──
   for (const step of steps) {
+    const existingOutput = ctx.steps.read(step.number);
+
+    // Skip steps that already have output and are NOT the revision target
+    if (existingOutput !== undefined && step.number !== revisionTarget) {
+      logPipeline(`→ STEP ${step.number}: using previous output (revision target=${revisionTarget})`);
+      yield { type: "status", phase: `step-${step.number}`, stepTitle: step.title + " (reused)" };
+      continue;
+    }
+
     yield { type: "status", phase: `step-${step.number}`, stepTitle: step.title };
-    logPipeline(`→ STEP ${step.number}: "${step.title}" (type=${step.type})`);
+    logPipeline(`→ STEP ${step.number}: "${step.title}" (type=${step.type})${step.number === revisionTarget ? " [REVISION]" : ""}`);
 
     const result = await executeStep(step, ctx, 1);
 
@@ -121,7 +163,7 @@ export async function* orchestratePipeline(
 
   const maxStepNum = steps.length > 0 ? Math.max(...steps.map(s => s.number)) : 0;
 
-  // ── Phase 3b: Enforce checks ──
+  // ── Phase 3c: Enforce checks ──
   enforceChecks(ctx);
 
   // ── Phase 4: Report ──
