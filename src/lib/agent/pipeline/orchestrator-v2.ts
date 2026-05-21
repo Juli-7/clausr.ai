@@ -12,10 +12,12 @@ import {
   getResponseCount,
   saveFileContents,
   saveFileChunks,
+  getFileChunks,
   saveContextSnapshot,
 } from "@/lib/agent/memory/repository";
 import { pruneOldSessions } from "@/lib/agent/memory/cleanup";
 import { extractFileContent } from "@/lib/agent/extractors";
+import type { TextChunk } from "@/lib/agent/extractors";
 import { AgentResponseSchema, ClaimSchema } from "@/lib/agent/schemas";
 import { buildClauseTextsFromPalette } from "./clause-texts";
 import { logPipeline, truncate } from "./logger";
@@ -122,12 +124,48 @@ export async function* orchestratePipeline(
       .join("\n\n");
     saveFileContents(sessionId, combinedContent);
 
-    const chunksData = ctx.files.getFiles().map(f => ({
+    const fileData = ctx.files.getFiles().map(f => ({
       fileId: f.fileId,
       filename: f.filename,
+      extractedText: f.extractedText,
       chunks: f.chunks ?? [],
+      dataUrl: f.dataUrl,
+      pageCount: f.pageCount,
+      ocrConfidence: f.ocrConfidence,
+      extractorUsed: f.extractorUsed,
     }));
-    saveFileChunks(sessionId, JSON.stringify(chunksData));
+    saveFileChunks(sessionId, JSON.stringify(fileData));
+  } else {
+    const savedFileDataJson = getFileChunks(sessionId);
+    if (savedFileDataJson && savedFileDataJson !== "[]") {
+      try {
+        const savedFiles: {
+          fileId: string;
+          filename: string;
+          extractedText: string;
+          chunks: TextChunk[];
+          dataUrl?: string;
+          pageCount?: number;
+          ocrConfidence?: number;
+          extractorUsed?: string;
+        }[] = JSON.parse(savedFileDataJson);
+        for (const saved of savedFiles) {
+          ctx.files.addFile({
+            fileId: saved.fileId,
+            filename: saved.filename,
+            extractedText: saved.extractedText,
+            chunks: saved.chunks,
+            dataUrl: saved.dataUrl,
+            pageCount: saved.pageCount,
+            ocrConfidence: saved.ocrConfidence,
+            extractorUsed: saved.extractorUsed,
+          });
+        }
+        logPipeline(`restored ${savedFiles.length} file(s) from saved chunks (follow-up turn)`);
+      } catch (err) {
+        logPipeline(`failed to restore saved chunks: ${err}`);
+      }
+    }
   }
 
   let steps;

@@ -50,17 +50,10 @@ export class FileRegistry {
     const fileBlocks = this.files.map((f, i) => {
       const sourceRef = `S${i + 1}`;
       if (f.chunks && f.chunks.length > 0) {
-        const maxChunks = 30;
-        const shown = f.chunks.slice(0, maxChunks);
-        const chunkLines = shown.map((c) => `[${sourceRef}.${c.id}] ${c.text}`);
-        if (f.chunks.length > maxChunks) {
-          chunkLines.push(
-            `[${f.chunks.length - maxChunks} more paragraphs — use ${sourceRef}.c1 through ${sourceRef}.c${maxChunks} for what's shown]`
-          );
-        }
+        const chunkLines = f.chunks.map((c) => `[${sourceRef}.${c.id}] ${c.text}`);
         return `[File ${i + 1}: ${f.filename}]\n${chunkLines.join("\n")}`;
       }
-      return `[File ${i + 1}: ${f.filename}]\n${f.extractedText.slice(0, 3000)}`;
+      return `[File ${i + 1}: ${f.filename}]\n${f.extractedText}`;
     });
 
     return `Uploaded Files:\n${fileBlocks.join("\n\n")}`;
