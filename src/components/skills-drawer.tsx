@@ -8,7 +8,7 @@ interface SkillData {
   description: string;
   triggers: string[];
   skillmd: string;
-  references: { name: string; path: string; clauses: string }[];
+  regulationIds: string[];
   scripts: { name: string; path: string; desc: string; params: string }[];
   template: {
     name: string;
@@ -53,12 +53,7 @@ export function SkillsDrawer({
   const detail = selected;
 
   function deriveStandards(skill: SkillData): string[] {
-    return skill.references
-      .map((r) => {
-        const match = r.name.match(/un-r(\d+)\.md/i);
-        return match ? `R${match[1]}` : null;
-      })
-      .filter((s): s is string => s !== null);
+    return skill.regulationIds;
   }
 
   async function handleTemplateUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -306,12 +301,12 @@ export function SkillsDrawer({
                       </div>
                     </Section>
 
-                    {/* References */}
-                    <Section title="Reference Documents (L3 — loaded on demand per §6)">
+                    {/* Regulation IDs */}
+                    <Section title="Regulations (from ## Checks)">
                       <div className="flex gap-1.5 flex-wrap">
-                        {detail.references.map((r) => (
+                        {detail.regulationIds.map((id) => (
                           <div
-                            key={r.name}
+                            key={id}
                             className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs"
                             style={{
                               background: "var(--color-bg-card)",
@@ -319,11 +314,8 @@ export function SkillsDrawer({
                               color: "var(--color-text-body)",
                             }}
                           >
-                            <span style={{ fontSize: 14 }}>📄</span>
-                            <span style={{ fontWeight: 500 }}>{r.name}</span>
-                            <span className="text-[11px]" style={{ color: "var(--color-text-muted)" }}>
-                              {r.clauses}
-                            </span>
+                            <span style={{ fontSize: 14 }}>📘</span>
+                            <span style={{ fontWeight: 500 }}>{id}</span>
                           </div>
                         ))}
                       </div>
