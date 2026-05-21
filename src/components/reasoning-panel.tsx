@@ -187,9 +187,8 @@ export function ReasoningPanel({ turns, loading, stepStatus, sentFiles }: Reason
 }
 
 function formatStepPhase(phase: string): string {
-  // Auto phases don't surface in the reasoning panel
-  if (phase === "compiling-report" || phase === "computing-verdict") {
-    return "Finalizing assessment...";
+  if (phase === "evaluating") {
+    return "Evaluating results...";
   }
   if (phase.startsWith("step-")) {
     return `Executing step ${phase.slice(5)}...`;

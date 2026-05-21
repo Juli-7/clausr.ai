@@ -7,7 +7,6 @@ import { inputPhase } from "./phases/input-phase";
 import { skillGenPhase } from "./phases/skill-gen-phase";
 import { identifyRevisionTarget } from "./phases/revision-phase";
 import { enforceChecks } from "./phases/enforce-checks";
-import { reportPhase } from "./phases/report-phase";
 import { finalizePhase } from "./phases/finalize-phase";
 import type { PipelineEvent } from "./phases/types";
 
@@ -148,19 +147,11 @@ export async function* orchestratePipeline(
     }
   }
 
-  const maxStepNum = steps.length > 0 ? Math.max(...steps.map(s => s.number)) : 0;
-
-  // ── Phase 3c: Enforce checks ──
+  // ── Phase 3c: Enforce checks (fill gaps before evaluation) ──
   enforceChecks(ctx);
 
-  // ── Phase 4: Report ──
-  yield { type: "status", phase: "compiling-report" };
-  await reportPhase(ctx, steps, maxStepNum);
-
-  // ── Phase 5: Finalize ──
-  yield { type: "status", phase: "computing-verdict" };
-  yield { type: "status", phase: "computing-confidence" };
-  yield { type: "status", phase: "validating" };
+  // ── Phase 4: Evaluate ──
+  yield { type: "status", phase: "evaluating" };
   const result = await finalizePhase(ctx, steps, sessionId);
 
   if (result.validationErrors.length > 0) {

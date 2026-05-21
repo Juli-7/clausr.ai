@@ -267,8 +267,8 @@ export function ChatView() {
             const statusEvent = event as { type: "status"; phase: string; stepTitle?: string };
             const phase = statusEvent.phase;
             setStepStatus(phase);
-            // Auto phases (compiling-report, computing-verdict) don't create reasoning steps
-            if (phase === "compiling-report" || phase === "computing-verdict") {
+            // Evaluation phases and auto-phases don't create reasoning steps
+            if (phase === "evaluating" || phase === "compiling-report" || phase === "computing-verdict") {
               // Signal only — document panel shows the loading indicator
             } else if (phase.startsWith("step-")) {
               const stepNum = parseInt(phase.slice(5), 10);
