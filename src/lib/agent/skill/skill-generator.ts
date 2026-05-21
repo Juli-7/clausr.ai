@@ -17,7 +17,7 @@ description: "What this assessment evaluates"
 triggers: []
 ---
 
-## §1 Checks (Domain Schema)
+## Checks
 
 A markdown table with columns: Field | Type | Constraint | Clause | Depends On | Notes
 
@@ -35,26 +35,19 @@ Rules:
 - Depends On: another field name if conditional, or empty
 - Notes: extra guidance for the LLM
 
-## §2 Execution Flow
+## Red Lines
 
-A markdown table with columns: # | Step | Executor
+Hard constraints the LLM must never violate. Use ❌ bullet format.
 
 Examples:
-| # | Step | Executor |
-| 1 | Analyze uploaded documents and identify relevant regulations | llm |
-| 2 | Extract test data values from the documents | llm |
-| 3 | Load regulation references for cited clauses | builtin:load-references |
-| 4 | Run numerical compliance checks using extracted values | llm+tool |
+- ❌ Do not issue PASS where data is insufficient
+- ❌ Do not skip auto-leveling check for LED — legally required
+- ❌ Do not make numerical pass/fail without calling the compliance-check tool
 
-Rules:
-- Executor options: llm, llm+tool, builtin:load-references
-- Step titles should be concise (max 10 words) but descriptive
-- Typically 2-4 steps total
-- Step 1 should analyze documents, Step 2 should extract data, Step 3 should load refs, Step 4 should run checks
+## Lessons Learnt
 
-## §3 Expected Output
+(System-maintained area, initially empty.)
 
-A brief description of what the final report should contain (1-2 sentences).
 
 Now generate the SKILL.md for the user's request below.`;
 

@@ -4,32 +4,21 @@ description: Braking system type approval for passenger vehicles and light comme
 triggers: ["braking", "R13", "brake", "ABS"]
 ---
 
-# UN R13 Braking Compliance
+## Checks
+| Field | Type | Constraint | Clause | Depends On | Notes |
+|-------|------|------------|--------|------------|-------|
+| vehicle_category | enum(m1|m2|n1|n2) | | | | M1=passenger, N1=light commercial |
+| service_brake_efficiency | number(0-100) | >= 50 | R13.5.2 | | Percentage |
+| secondary_brake_efficiency | number(0-100) | >= 22 | R13.5.3 | | Independent of service brake |
+| abs_present | enum(required|present|absent) | | R13.5.6 | vehicle_category | Required for M1, optional for some N1 |
+| parking_brake_efficiency | number(0-100) | >= 16 | R13.5.4 | | Must hold on 18% gradient |
+| brake_fade_test | enum(pass|fail|not_tested) | | R13.5.7 | | Hot brake performance |
 
-## 1. Role Definition
-Senior certification expert specializing in braking systems per UN R13.
+## Red Lines
+- ❌ Do not issue PASS where data is insufficient
+- ❌ Do not skip secondary brake check
+- ❌ Do not make numerical pass/fail without calling the compliance-check tool
+- ❌ Do not reference clauses from memory — load from Regulation API
 
-## 2. Execution Flow
-
-| # | Step | Executor |
-|---|------|----------|
-| 1 | Identify vehicle category and mass | llm |
-| 2 | Load R13 references | builtin:load-references |
-| 3 | Run brake efficiency calculation | llm+tool |
-| 4 | Check ABS / secondary brake requirements | llm |
-
-## 3. Key Decision Points
-- Service brake performance per R13 §5.2
-- Secondary brake requirements per R13 §5.3
-- ABS requirements for passenger vehicles
-
-## 4. Red Lines
-- Do not issue PASS where data is insufficient
-- Do not skip secondary brake check
-- Numerical checks MUST go through the compliance-check tool
-
-## 6. Reference Loading Rules
-| Condition | Must Load |
-|-----------|-----------|
-| Any braking check | references/un-r13.md |
-| Any task | references/common-pitfalls.md |
+## Lessons Learnt
+(System-maintained area, initially empty.)

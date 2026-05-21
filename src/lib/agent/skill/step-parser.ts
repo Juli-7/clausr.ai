@@ -14,14 +14,34 @@ export interface ParsedStep {
  * Parse SKILL.md §2 Execution Flow into executable steps.
  *
  * Recognizes a markdown table with columns: # | Step | Executor
- * The Executor column explicitly sets the step type.
+ * If no Execution Flow section is present, returns sensible defaults:
+ *   1. builtin:load-references
+ *   2. llm+tool (extract and validate all checks)
  */
 export function parseSteps(skillmd: string): ParsedStep[] {
   const sectionMatch = skillmd.match(
     /##\s*2\.\s*Execution Flow\s*\n([\s\S]*?)(?=\n##\s|\n*$)/
   );
+
   if (!sectionMatch) {
-    throw new SkillLoadError("SKILL_PARSE_FAILED", "SKILL.md missing §2 Execution Flow", "unknown");
+    // Default execution flow: load refs, then extract + validate
+    return [
+      {
+        number: 1,
+        title: "Load regulation references from checks",
+        type: "builtin:load-references",
+        instructions: "Load all regulation references cited in the ## Checks table clauses",
+      },
+      {
+        number: 2,
+        title: "Extract values and run compliance checks",
+        type: "llm+tool",
+        instructions:
+          "Analyze the uploaded documents, extract values for every field in the ## Checks table, " +
+          "run the compliance-check tool for numerical constraints, and produce structured results " +
+          "with citations to the loaded regulation clauses.",
+      },
+    ];
   }
 
   const section = sectionMatch[1];
