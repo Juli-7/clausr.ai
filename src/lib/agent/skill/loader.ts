@@ -3,6 +3,8 @@ import path from "path";
 import matter from "gray-matter";
 import { SkillLoadError } from "@/lib/agent/pipeline/errors";
 import type { ReportTemplate } from "@/lib/agent/template-types";
+import { parseChecks, extractRegulationIds } from "@/lib/agent/skill/check-parser";
+import type { ParsedCheck } from "@/lib/agent/skill/check-parser";
 
 const SKILLS_DIR = path.join(process.cwd(), "skills");
 
@@ -27,6 +29,10 @@ export interface SkillLoader {
   template: ReportTemplate | null;
   /** Pre-parsed clause index from reference files (built at load time) */
   clauseIndex: ClauseEntry[];
+  /** Parsed checks from ## Checks table (new format), empty if not present */
+  checks: ParsedCheck[];
+  /** Regulation IDs derived from checks' clause column */
+  regulationIds: string[];
 }
 
 /**
@@ -109,6 +115,10 @@ export function loadSkill(skillId: string): SkillLoader {
     }
   }
 
+  // Parse ## Checks table (new format, empty if not present)
+  const checks = parseChecks(parsed.content);
+  const regulationIds = extractRegulationIds(checks);
+
   return {
     name,
     description,
@@ -118,6 +128,8 @@ export function loadSkill(skillId: string): SkillLoader {
     scripts,
     template,
     clauseIndex,
+    checks,
+    regulationIds,
   };
 }
 

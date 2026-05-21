@@ -1,5 +1,5 @@
-import { loadReferencesForConditions } from "@/lib/agent/regulation/skill-source";
-import { getConversationHistory, getRecentMemories } from "@/lib/agent/memory/repository";
+import { loadReferencesForConditions, loadReferencesForRegulationIds } from "@/lib/agent/regulation/skill-source";
+import { getConversationHistory } from "@/lib/agent/memory/repository";
 import { loadSkill } from "@/lib/agent/skill/loader";
 import type { ComplianceCheckInput } from "@/lib/agent/schemas";
 import type {
@@ -27,10 +27,28 @@ export async function executeBuiltin(
 
 async function loadReferences(ctx: PipelineContext): Promise<StepResult> {
   try {
-    const conditions = extractConditions(ctx);
-    logPipeline(`  [BUILTIN] load-references conditions=[${conditions.join(", ")}]`);
+    let refTexts: string[];
 
-    const refTexts = loadReferencesForConditions(ctx.skill.name, conditions);
+    if (ctx.skill.checks.length > 0) {
+      // New format: derive regulation IDs from ## Checks table
+      const regulationIds = Array.from(new Set(
+        ctx.skill.checks
+          .filter((c) => c.clause)
+          .map((c) => {
+            const match = c.clause!.match(/R(\d+)/);
+            return match ? `R${match[1]}` : null;
+          })
+          .filter((id): id is string => id !== null)
+      )).sort();
+      logPipeline(`  [BUILTIN] load-references from checks: ${regulationIds.join(", ")}`);
+      refTexts = loadReferencesForRegulationIds(ctx.skill.name, regulationIds);
+    } else {
+      // Old format: scan files/messages for keywords
+      const conditions = extractConditions(ctx);
+      logPipeline(`  [BUILTIN] load-references conditions=[${conditions.join(", ")}]`);
+      refTexts = loadReferencesForConditions(ctx.skill.name, conditions);
+    }
+
     logPipeline(`  [BUILTIN] loaded ${refTexts.length} reference texts`);
     ctx.palette.loadReferences(refTexts.map((rt) => {
       const headerMatch = rt.match(/^--- ([\w-]+\.md) ---\n/);
@@ -51,14 +69,10 @@ async function loadReferences(ctx: PipelineContext): Promise<StepResult> {
     ctx.palette.loadCitationPalette(palette);
     logPipeline(`  [BUILTIN] citationPalette=${palette.length} entries: ${palette.map(e => `${e.regulation}§${e.clause}[${e.id}]`).join(", ")}`);
 
-    const memories = getRecentMemories(ctx.skill.name);
-    logPipeline(`  [BUILTIN] sourcePalette entries memories=${memories.length}`);
-
     ctx.steps.setRaw("2", {
       references: ctx.palette.getReferences().map((r) => r.filename),
       citationCount: palette.length,
       sourceCount: ctx.files.getFiles().length,
-      memoryCount: memories.length,
     });
 
     return { success: true };

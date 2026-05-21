@@ -5,6 +5,7 @@ import { runScript } from "@/lib/agent/skill/script-runner";
 import { ComplianceCheckSchema, type ComplianceCheckInput } from "@/lib/agent/schemas";
 import { executeComplianceCheck } from "@/lib/agent/pipeline/builtins";
 import type { ParsedStep } from "@/lib/agent/skill/step-parser";
+import type { ParsedCheck } from "@/lib/agent/skill/check-parser";
 import type { PipelineContext } from "../pipeline-context";
 import type { StepResult } from "../step-executor";
 import type { ToolCallRecord } from "@/lib/agent/types";
@@ -335,6 +336,32 @@ function findCitationRef(ctx: PipelineContext, result: Record<string, unknown>):
   return `${regulation}.0`;
 }
 
+function buildDomainSchemaGuide(checks: ParsedCheck[]): string {
+  const parts: string[] = [];
+  parts.push("");
+  parts.push("# Expected Data Schema");
+  parts.push("Output your response as a JSON object matching this schema.");
+  parts.push("Extract every listed field from the uploaded files. Do not skip fields.");
+  parts.push("");
+  for (const check of checks) {
+    let line = `- \`${check.field}\` (${check.type.kind}`;
+    if (check.type.kind === "enum") {
+      line += `: ${check.type.values.join("|")}`;
+    }
+    line += ")";
+    if (check.constraint) line += ` — ${check.constraint}`;
+    if (check.clause) line += ` — ${check.clause}`;
+    if (check.dependsOn) line += ` — conditional on ${check.dependsOn}`;
+    if (check.notes) line += ` — ${check.notes}`;
+    parts.push(line);
+  }
+  parts.push("");
+  parts.push("Every factual value MUST end with citation markers like [R48.5.11] or [S1].");
+  parts.push("For numerical checks, use the compliance-check tool to validate. Include the tool result.");
+  parts.push("For conditional checks, evaluate the condition first before including the result.");
+  return parts.join("\n");
+}
+
 function buildTemplateOutputGuide(template: NonNullable<PipelineContext["skill"]["template"]>): string {
   const sectionsSkeleton: Record<string, unknown> = {};
   for (const s of template.sections) {
@@ -405,7 +432,10 @@ function buildContextSummary(ctx: PipelineContext): string {
     parts.push(`Check Results:\n${summary}`);
   }
 
-  if (ctx.skill.template && ctx.useTemplate && ctx.checks.getResults().length > 0) {
+  if (ctx.skill.checks.length > 0) {
+    const guide = buildDomainSchemaGuide(ctx.skill.checks);
+    if (guide) parts.push(guide);
+  } else if (ctx.skill.template && ctx.useTemplate && ctx.checks.getResults().length > 0) {
     const guide = buildTemplateOutputGuide(ctx.skill.template);
     if (guide) parts.push(guide);
   }

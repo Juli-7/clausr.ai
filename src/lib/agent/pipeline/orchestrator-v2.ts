@@ -87,7 +87,8 @@ export async function* orchestratePipeline(
     skill.template,
     sessionId,
     correlationId,
-    useTemplate
+    useTemplate,
+    skill.checks
   );
 
   if (files && files.length > 0) {

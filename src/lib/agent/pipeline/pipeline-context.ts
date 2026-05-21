@@ -1,6 +1,7 @@
 import type { Citation, SourceCitation, Verdict, Claim } from "@/lib/agent/schemas";
 import type { ReportTemplate } from "@/lib/agent/template-types";
 import type { TextChunk } from "@/lib/agent/extractors";
+import type { ParsedCheck } from "@/lib/agent/skill/check-parser";
 import { CheckStore } from "./slices/check-store";
 import { StepMemory } from "./slices/step-memory";
 import { FileRegistry } from "./slices/file-registry";
@@ -51,6 +52,7 @@ export interface PipelineContext {
     name: string;
     skillmd: string;
     template: ReportTemplate | null;
+    checks: ParsedCheck[];
   };
   sessionId: string;
   correlationId: string;
@@ -104,10 +106,11 @@ export function createPipelineContext(
   template: ReportTemplate | null,
   sessionId: string,
   correlationId: string,
-  useTemplate?: boolean
+  useTemplate?: boolean,
+  checks?: ParsedCheck[]
 ): PipelineContext {
   return {
-    skill: { name: skillName, skillmd, template },
+    skill: { name: skillName, skillmd, template, checks: checks ?? [] },
     sessionId,
     correlationId,
     useTemplate: useTemplate ?? (template !== null),

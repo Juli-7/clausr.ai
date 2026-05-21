@@ -80,6 +80,10 @@ async function fillTemplateDocx(
 
 /**
  * Build a flat map from {placeholder-name} → value, scanning all template sections.
+ *
+ * Primary: matches by section/field ID (old format).
+ * Fallback: flattens sections to dot-path keys and matches by convention.
+ * e.g. {vehicle.make} → sections["vehicle"]["make"]
  */
 function buildPlaceholderMap(
   response: AgentResponse,
@@ -112,7 +116,31 @@ function buildPlaceholderMap(
     }
   }
 
+  // Convention-based fallback: if no replacements found via ID matching,
+  // try flattening response.sections to dot-path keys.
+  // e.g. {vehicle.make} → sections["vehicle"]["make"]
+  if (Object.keys(map).length === 0 && response.sections) {
+    const flat = flattenObject(response.sections);
+    for (const [key, value] of Object.entries(flat)) {
+      const placeholder = `{${key}}`;
+      map[placeholder] = String(value);
+    }
+  }
+
   return map;
+}
+
+function flattenObject(obj: Record<string, unknown>, prefix = ""): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const fullKey = prefix ? `${prefix}.${key}` : key;
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+      Object.assign(result, flattenObject(value as Record<string, unknown>, fullKey));
+    } else if (value !== undefined && value !== null) {
+      result[fullKey] = String(value);
+    }
+  }
+  return result;
 }
 
 /**

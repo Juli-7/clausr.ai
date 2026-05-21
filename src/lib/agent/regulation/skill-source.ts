@@ -119,6 +119,48 @@ export function loadReferencesForConditions(
 }
 
 /**
+ * Load reference texts by regulation IDs (new format — derived from ## Checks table).
+ * Maps regulation IDs like "R48", "R112" to filenames like "un-r48.md", "un-r112.md".
+ */
+export function loadReferencesForRegulationIds(
+  skillId: string,
+  regulationIds: string[]
+): string[] {
+  const loaded: string[] = [];
+  const needed = new Set<string>();
+
+  for (const regId of regulationIds) {
+    const refFile = regulationToFile(regId);
+    if (refFile) needed.add(refFile);
+  }
+
+  // Always load common-pitfalls
+  needed.add("common-pitfalls.md");
+
+  for (const ref of needed) {
+    try {
+      const text = loadReference(skillId, ref);
+      loaded.push(`--- ${ref} ---\n${text}`);
+    } catch {
+      // Reference not found — skip silently
+    }
+  }
+
+  return loaded;
+}
+
+export function regulationToFile(regulation: string): string | null {
+  const map: Record<string, string> = {
+    "R48": "un-r48.md",
+    "R112": "un-r112.md",
+    "R83": "un-r83.md",
+    "R154": "un-r154.md",
+    "R13": "un-r13.md",
+  };
+  return map[regulation.toUpperCase()] ?? null;
+}
+
+/**
  * Match a condition against dynamically-parsed §6 rules.
  */
 function matchRuleDynamic(condition: string, rules: LoadingRule[]): string | null {
@@ -159,17 +201,6 @@ function matchRuleHardcoded(condition: string): string | null {
   }
 
   return null;
-}
-
-function regulationToFile(regulation: string): string | null {
-  const map: Record<string, string> = {
-    "R48": "un-r48.md",
-    "R112": "un-r112.md",
-    "R83": "un-r83.md",
-    "R154": "un-r154.md",
-    "R13": "un-r13.md",
-  };
-  return map[regulation.toUpperCase()] ?? null;
 }
 
 function extractClauseText(markdown: string, clause: string): string | null {
