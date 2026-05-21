@@ -25,6 +25,7 @@
     "mammoth": "^1.12.0",
     "next": "16.2.6",
     "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "5.4.296",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-markdown": "^10.1.0",
@@ -47,4 +48,5 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.5"
-  }}
+  }
+}

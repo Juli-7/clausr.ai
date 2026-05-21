@@ -1,4 +1,6 @@
+import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { PDFParse } from "pdf-parse";
+import { extractImageText } from "./ocr";
 import type { TextChunk, WordBox } from "./index";
 
 export interface PdfResult {
@@ -11,93 +13,219 @@ export interface PdfResult {
 
 interface PdfTextItem {
   str: string;
-  transform?: number[];
-  width?: number;
-  height?: number;
+  transform: number[];
+  width: number;
+  height: number;
 }
 
-function extractWordBox(item: PdfTextItem): WordBox | null {
+function itemToWordBox(item: PdfTextItem): WordBox | null {
   if (!item.transform || item.transform.length < 6) return null;
-  const tx = item.transform[4];
-  const ty = item.transform[5];
-  const w = item.width ?? 0;
-  const h = item.height ?? 12;
-  if (tx === undefined || ty === undefined) return null;
-  return { x: tx, y: ty, width: w, height: h };
+  const x = item.transform[4];
+  const y = item.transform[5];
+  if (x == null || y == null) return null;
+  return { x, y, width: item.width ?? 0, height: item.height ?? 12 };
 }
 
 function groupItemsIntoLines(items: PdfTextItem[]): PdfTextItem[][] {
-  const withBoxes = items
-    .map((item) => ({ item, box: extractWordBox(item) }))
-    .filter((x) => x.box !== null)
-    .sort((a, b) => a.box!.y - b.box!.y || a.box!.x - b.box!.x);
+  const withPos = items
+    .filter((i) => (i.str ?? "").trim().length > 0)
+    .map((i) => ({ item: i, box: itemToWordBox(i) }))
+    .filter((x): x is { item: PdfTextItem; box: WordBox } => x.box !== null)
+    .sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x);
 
-  if (withBoxes.length === 0) {
-    const lines: PdfTextItem[][] = [];
-    let currentLine: PdfTextItem[] = [];
-    for (const item of items) {
-      const text = item.str?.trim() ?? "";
-      if (!text) continue;
-      currentLine.push(item);
-      if (text.endsWith(".") || text.endsWith(":)") || currentLine.length >= 5) {
-        lines.push(currentLine);
-        currentLine = [];
-      }
-    }
-    if (currentLine.length > 0) lines.push(currentLine);
-    return lines;
-  }
+  if (withPos.length === 0) return [];
 
-  const lines: PdfTextItem[][] = [[withBoxes[0].item]];
-  for (let i = 1; i < withBoxes.length; i++) {
-    const current = withBoxes[i];
-    const lastBox = withBoxes[i - 1].box!;
-    const yGap = Math.abs(current.box!.y - lastBox.y);
-    if (yGap <= 8) {
-      lines[lines.length - 1].push(current.item);
+  const lines: PdfTextItem[][] = [[withPos[0].item]];
+  for (let i = 1; i < withPos.length; i++) {
+    const prevBox = withPos[i - 1].box;
+    const currBox = withPos[i].box;
+    if (Math.abs(currBox.y - prevBox.y) <= 8) {
+      lines[lines.length - 1].push(withPos[i].item);
     } else {
-      lines.push([current.item]);
+      lines.push([withPos[i].item]);
     }
   }
   return lines;
 }
 
-function mergeWordBoxes(wordBoxes: WordBox[]): WordBox {
+function mergeWordBoxes(boxes: WordBox[]): WordBox {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const wb of wordBoxes) {
-    if (wb.x < minX) minX = wb.x;
-    if (wb.y < minY) minY = wb.y;
-    if (wb.x + wb.width > maxX) maxX = wb.x + wb.width;
-    if (wb.y + wb.height > maxY) maxY = wb.y + wb.height;
+  for (const b of boxes) {
+    if (b.x < minX) minX = b.x;
+    if (b.y < minY) minY = b.y;
+    if (b.x + b.width > maxX) maxX = b.x + b.width;
+    if (b.y + b.height > maxY) maxY = b.y + b.height;
   }
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+function linesToChunks(lines: PdfTextItem[][], pageNumber: number): TextChunk[] {
+  const chunks: TextChunk[] = [];
+
+  for (const line of lines) {
+    const wordBoxes: WordBox[] = [];
+    const texts: string[] = [];
+
+    for (const item of line) {
+      const wb = itemToWordBox(item);
+      if (wb) {
+        wordBoxes.push(wb);
+        texts.push(item.str);
+      }
+    }
+
+    if (wordBoxes.length === 0) continue;
+
+    const bbox = mergeWordBoxes(wordBoxes);
+    const text = texts.join(" ");
+
+    const prev = chunks[chunks.length - 1];
+    const gapThreshold = bbox.height * 1.5;
+
+    if (prev && prev.pageNumber === pageNumber && prev.bbox) {
+      const prevBottom = prev.bbox.y + prev.bbox.height;
+      const gap = bbox.y - prevBottom;
+
+      if (gap >= 0 && gap <= gapThreshold) {
+        prev.text += "\n" + text;
+        prev.bbox = {
+          x: Math.min(prev.bbox.x, bbox.x),
+          y: prev.bbox.y,
+          width:
+            Math.max(prev.bbox.x + prev.bbox.width, bbox.x + bbox.width) -
+            Math.min(prev.bbox.x, bbox.x),
+          height: Math.max(prev.bbox.y + prev.bbox.height, bbox.y + bbox.height) - prev.bbox.y,
+        };
+        prev.wordBoxes?.push(...wordBoxes);
+        continue;
+      }
+    }
+
+    chunks.push({
+      id: `c${chunks.length + 1}`,
+      text,
+      bbox,
+      wordBoxes,
+      pageNumber,
+    });
+  }
+
+  return chunks.map((c, i) => ({ ...c, id: `c${i + 1}` }));
 }
 
 export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
   const base64 = dataUrl.split(",")[1] ?? dataUrl;
   const buffer = Buffer.from(base64, "base64");
+  const data = new Uint8Array(buffer);
 
-  const parser = new PDFParse({ data: new Uint8Array(buffer) });
+  // Path A: Positioned text extraction via pdfjs-dist
   try {
-    const textResult = await parser.getText();
-    const text = textResult.text ?? "";
-    const pageCount = textResult.total ?? 0;
+    const loadingTask = pdfjs.getDocument({ data });
+    const doc = await loadingTask.promise;
+    const pageCount = doc.numPages;
 
-    if (text.trim().length > 0) {
-      console.log(`[pdf-extract] pdf-parse OK: ${text.length} chars, ${pageCount} pages`);
+    const allChunks: TextChunk[] = [];
+    let totalChars = 0;
 
-      const lines = text.split("\n").filter((l) => l.trim().length > 0);
-      const chunks: TextChunk[] = lines.map((line, i) => ({
-        id: `c${i + 1}`,
-        text: line.trim(),
-      }));
+    for (let i = 1; i <= pageCount; i++) {
+      const page = await doc.getPage(i);
+      const textContent = await page.getTextContent();
+      const items = textContent.items as PdfTextItem[];
+      const lines = groupItemsIntoLines(items);
+      const pageChunks = linesToChunks(lines, i);
+      allChunks.push(...pageChunks);
 
-      return { text, pageCount, chunks, ocrConfidence: 100, extractorUsed: "pdf-parse" };
+      for (const item of items) {
+        totalChars += (item.str ?? "").length;
+      }
+
+      page.cleanup();
     }
 
-    console.warn(`[pdf-extract] pdf-parse returned empty text (${pageCount} pages) — PDF is likely image-based/scanned`);
-    return { text: `[This PDF contains no extractable text (${pageCount} pages). It may be an image-based/scanned document. For scanned PDFs, convert pages to images and upload them for OCR.]`, pageCount, chunks: [], ocrConfidence: 0, extractorUsed: "fallback" };
-  } finally {
+    doc.destroy();
+
+    if (totalChars > 50) {
+      const fullText = allChunks.map((c) => c.text).join("\n\n");
+      return {
+        text: fullText,
+        pageCount,
+        chunks: allChunks,
+        ocrConfidence: 100,
+        extractorUsed: "pdfjs-dist",
+      };
+    }
+
+    console.warn(`[pdf-extract] pdfjs-dist found only ${totalChars} chars — PDF is likely scanned`);
+  } catch (err) {
+    console.warn(`[pdf-extract] pdfjs-dist extraction failed:`, err);
+  }
+
+  // Path B: Scanned PDF — render pages via pdf-parse's getScreenshot, then OCR
+  try {
+    const parser = new PDFParse({ data });
+    const screenshots = await parser.getScreenshot({
+      imageDataUrl: true,
+      imageBuffer: false,
+    });
     await parser.destroy();
+
+    const pageCount = screenshots.total;
+    const allChunks: TextChunk[] = [];
+    let fullText = "";
+    let totalConfidence = 0;
+    let pageWithText = 0;
+    let chunkCounter = 0;
+
+    for (const screenshot of screenshots.pages) {
+      if (!screenshot.dataUrl) continue;
+
+      try {
+        const ocrResult = await extractImageText(screenshot.dataUrl);
+        if (ocrResult.text.trim().length > 0) {
+          fullText += (fullText ? "\n\n" : "") + ocrResult.text;
+          totalConfidence += ocrResult.ocrConfidence ?? 0;
+          pageWithText++;
+
+          for (const chunk of ocrResult.chunks) {
+            allChunks.push({
+              ...chunk,
+              id: `c${++chunkCounter}`,
+              pageNumber: screenshot.pageNumber,
+            });
+          }
+        }
+      } catch (ocrErr) {
+        console.warn(`[pdf-extract] OCR failed for page ${screenshot.pageNumber}:`, ocrErr);
+      }
+    }
+
+    const avgConfidence = pageWithText > 0 ? totalConfidence / pageWithText : 0;
+
+    if (fullText.length > 0) {
+      return {
+        text: fullText,
+        pageCount,
+        chunks: allChunks,
+        ocrConfidence: avgConfidence,
+        extractorUsed: "tesseract",
+      };
+    }
+
+    return {
+      text: `[This PDF contains no extractable text (${pageCount} pages). OCR processing returned no results.]`,
+      pageCount,
+      chunks: [],
+      ocrConfidence: 0,
+      extractorUsed: "fallback",
+    };
+  } catch (err) {
+    console.error(`[pdf-extract] OCR fallback failed:`, err);
+    return {
+      text: `[PDF processing failed: ${err instanceof Error ? err.message : "unknown error"}]`,
+      pageCount: 0,
+      chunks: [],
+      ocrConfidence: 0,
+      extractorUsed: "error",
+    };
   }
 }
