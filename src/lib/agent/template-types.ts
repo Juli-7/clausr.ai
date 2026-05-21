@@ -1,9 +1,10 @@
 /**
- * Template system for compliance report layout.
+ * Template system for compliance report .docx export.
  *
- * Templates define how the LLM's output is structured into a document.
- * Each skill has exactly one template (in skills/{name}/assets/template.json).
- * Q&A sessions use a built-in default markdown card layout.
+ * Templates define how the response fields are mapped to {placeholder} markers
+ * in the user's .docx layout file (stored at skills/{name}/assets/template.docx).
+ * The UI document panel has a fixed layout (not template-driven).
+ * Only the .docx export uses templates.
  */
 
 export interface ReportTemplate {

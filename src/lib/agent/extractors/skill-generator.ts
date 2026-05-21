@@ -104,7 +104,6 @@ export async function generateSkill(
     triggers: parsed.data?.triggers ?? [],
     skillmd,
     scripts: [],
-    template: null,
     checks,
     regulationIds,
   };

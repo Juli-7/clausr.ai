@@ -2,7 +2,6 @@ import fs from "fs";
 import path from "path";
 import matter from "gray-matter";
 import { SkillLoadError } from "@/lib/agent/pipeline/errors";
-import type { ReportTemplate } from "@/lib/agent/template-types";
 import { parseChecks, extractRegulationIds } from "@/lib/agent/skill/check-parser";
 import type { ParsedCheck } from "@/lib/agent/skill/check-parser";
 
@@ -17,9 +16,7 @@ export interface SkillLoader {
   skillmd: string;
   /** Scripts available via function calling */
   scripts: { name: string; path: string; desc: string; params: string }[];
-  /** Report template (loaded from assets/template.json, optional) */
-  template: ReportTemplate | null;
-  /** Parsed checks from ## Checks table (new format), empty if not present */
+  /** Parsed checks from ## Checks table, empty if not present */
   checks: ParsedCheck[];
   /** Regulation IDs derived from checks' clause column */
   regulationIds: string[];
@@ -27,7 +24,8 @@ export interface SkillLoader {
 
 /**
  * Load a skill folder and parse its SKILL.md frontmatter + body.
- * Returns L1 metadata, L2 SKILL.md content, and L3 reference/script listings.
+ * The knowledge layer is concerned ONLY with the skill definition
+ * (metadata, checks, scripts). Report templates live in the output layer.
  */
 export function loadSkill(skillId: string): SkillLoader {
   const skillDir = path.join(SKILLS_DIR, skillId);
@@ -60,20 +58,6 @@ export function loadSkill(skillId: string): SkillLoader {
     }
   }
 
-  // Load template (optional — skills without templates use default markdown layout)
-  const assetsDir = path.join(skillDir, "assets");
-  const templatePath = path.join(assetsDir, "template.json");
-  let template: ReportTemplate | null = null;
-  if (fs.existsSync(templatePath)) {
-    try {
-      const templateRaw = fs.readFileSync(templatePath, "utf-8");
-      template = JSON.parse(templateRaw) as ReportTemplate;
-    } catch (err) {
-      console.error(`[loader] Failed to parse template for skill "${skillId}":`, err);
-    }
-  }
-
-  // Parse ## Checks table (new format, empty if not present)
   const checks = parseChecks(parsed.content);
   const regulationIds = extractRegulationIds(checks);
 
@@ -83,7 +67,6 @@ export function loadSkill(skillId: string): SkillLoader {
     triggers,
     skillmd: parsed.content.trim(),
     scripts,
-    template,
     checks,
     regulationIds,
   };

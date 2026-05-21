@@ -10,10 +10,6 @@ interface SkillData {
   skillmd: string;
   regulationIds: string[];
   scripts: { name: string; path: string; desc: string; params: string }[];
-  template: {
-    name: string;
-    sections: { id: string; title: string; type: string; fields?: { id: string; label: string; type: string }[]; columns?: string[] }[];
-  } | null;
 }
 
 export function SkillsDrawer({
@@ -28,10 +24,6 @@ export function SkillsDrawer({
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<SkillData | null>(null);
   const [skills, setSkills] = useState<SkillData[]>([]);
-  const [templateUploading, setTemplateUploading] = useState(false);
-  const [parsedTemplate, setParsedTemplate] = useState<SkillData["template"] | null>(null);
-  const [pendingDocxDataUrl, setPendingDocxDataUrl] = useState<string | null>(null);
-  const templateInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -56,67 +48,8 @@ export function SkillsDrawer({
     return skill.regulationIds;
   }
 
-  async function handleTemplateUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !selected) return;
 
-    setTemplateUploading(true);
-    try {
-      // Read file as data URL
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
 
-      // Send to API for parsing
-      const res = await fetch(`/api/skills/${selected.name}/template`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ docxDataUrl: dataUrl }),
-      });
-      if (!res.ok) throw new Error("Failed to parse template");
-      const data = await res.json();
-      setParsedTemplate(data.parsedTemplate);
-      setPendingDocxDataUrl(dataUrl); // Keep for later save
-    } catch (err) {
-      console.error("[template] Upload failed:", err);
-      alert("Failed to parse template. Make sure the file is a valid .docx with {placeholder} markers.");
-    } finally {
-      setTemplateUploading(false);
-      e.target.value = "";
-    }
-  }
-
-  async function confirmTemplate() {
-    if (!parsedTemplate || !selected) return;
-    try {
-      const res = await fetch(`/api/skills/${selected.name}/template`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          template: parsedTemplate,
-          docxDataUrl: pendingDocxDataUrl, // Save original .docx too
-        }),
-      });
-      if (!res.ok) throw new Error("Failed to save template");
-      setParsedTemplate(null);
-      setPendingDocxDataUrl(null);
-      // Reload skill data to show updated template
-      const skillsRes = await fetch("/api/skills");
-      const data = await skillsRes.json();
-      setSkills(data);
-      setSelected(data.find((s: SkillData) => s.name === selected.name) ?? null);
-    } catch (err) {
-      console.error("[template] Save failed:", err);
-      alert("Failed to save template.");
-    }
-  }
-
-  function cancelTemplate() {
-    setParsedTemplate(null);
-  }
 
   return (
     <Sheet open={open} onOpenChange={(o: boolean) => !o && onClose()}>
@@ -347,104 +280,6 @@ export function SkillsDrawer({
                       )}
                     </Section>
 
-                    {/* Template */}
-                    <Section title="Report Template">
-                      {/* Parsed template preview (before confirmation) */}
-                      {parsedTemplate ? (
-                        <div className="mb-2 p-2 rounded" style={{ background: "var(--color-amber-bg)", border: "1px solid var(--color-amber-border)" }}>
-                          <div className="text-xs font-semibold mb-1" style={{ color: "var(--color-text-header)" }}>
-                            Parsed Template Preview
-                          </div>
-                          <div className="flex gap-1.5 flex-wrap mb-2">
-                            {parsedTemplate.sections?.map((s: { id: string; title: string; type: string; fields?: { id: string; label: string; type: string }[]; columns?: string[] }) => (
-                              <div key={s.id} className="text-[11px] px-2 py-0.5 rounded"
-                                style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border-default)", color: "var(--color-text-muted)" }}>
-                                {s.title} <span style={{ color: "var(--color-accent-blue)", fontSize: 10 }}>({s.type})</span>
-                                {s.type === "fields" && s.fields && s.fields.length > 0 && (
-                                  <div className="mt-1 flex flex-col gap-0.5" style={{ borderTop: "1px dashed var(--color-border-default)", paddingTop: 4 }}>
-                                    {s.fields.map((f) => (
-                                      <span key={f.id} style={{ display: "block", fontSize: 10, color: "var(--color-text-body)", paddingLeft: 4 }}>
-                                        <span style={{ color: "var(--color-amber)" }}>{"{"}</span>{f.id}<span style={{ color: "var(--color-amber)" }}>{"}"}</span>
-                                        <span style={{ color: "var(--color-text-muted)", marginLeft: 4 }}>— {f.label}</span>
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                          <div className="flex gap-2">
-                            <button onClick={confirmTemplate}
-                              className="text-[11px] px-2 py-1 rounded cursor-pointer bg-transparent border-none"
-                              style={{ background: "var(--color-success-bg)", color: "#fff" }}>
-                              Confirm & Save
-                            </button>
-                            <button onClick={cancelTemplate}
-                              className="text-[11px] px-2 py-1 rounded cursor-pointer bg-transparent"
-                              style={{ border: "1px solid var(--color-border-input)", color: "var(--color-text-body)" }}>
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {detail.template ? (
-                        <div className="flex flex-col gap-1">
-                          <div className="text-xs" style={{ color: "var(--color-text-body)", fontWeight: 500 }}>
-                            {detail.template.name}
-                          </div>
-                          <div className="flex gap-1.5 flex-wrap mt-1">
-                            {detail.template.sections.map((s) => (
-                              <div
-                                key={s.id}
-                                className="text-[11px] px-2 py-0.5 rounded"
-                                style={{
-                                  background: "var(--color-bg-card)",
-                                  border: "1px solid var(--color-border-default)",
-                                  color: "var(--color-text-muted)",
-                                }}
-                              >
-                                {s.title}
-                                <span className="ml-1" style={{ color: "var(--color-accent-blue)", fontSize: 10 }}>
-                                  ({s.type})
-                                </span>
-                                {s.type === "fields" && s.fields && s.fields.length > 0 && (
-                                  <div className="mt-1 flex flex-col gap-0.5" style={{ borderTop: "1px dashed var(--color-border-default)", paddingTop: 4 }}>
-                                    {s.fields.map((f) => (
-                                      <span key={f.id} style={{ display: "block", fontSize: 10, color: "var(--color-text-body)", paddingLeft: 4 }}>
-                                        <span style={{ color: "var(--color-amber)" }}>{"{"}</span>{f.id}<span style={{ color: "var(--color-amber)" }}>{"}"}</span>
-                                        <span style={{ color: "var(--color-text-muted)", marginLeft: 4 }}>— {f.label}</span>
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                          <button
-                            onClick={() => templateInputRef.current?.click()}
-                            className="mt-2 text-[11px] px-2.5 py-1 rounded cursor-pointer inline-flex items-center gap-1 bg-transparent"
-                            style={{ border: "1px dashed var(--color-border-input)", color: "var(--color-text-muted)", alignSelf: "flex-start" }}
-                          >
-                            Replace Template (.docx)
-                          </button>
-                        </div>
-                      ) : (
-                        <div>
-                          <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-                            No template configured — will use default markdown layout.
-                          </span>
-                          <button
-                            onClick={() => templateInputRef.current?.click()}
-                            disabled={templateUploading}
-                            className="mt-2 text-[11px] px-2.5 py-1 rounded cursor-pointer inline-flex items-center gap-1 bg-transparent"
-                            style={{ border: "1px dashed var(--color-border-input)", color: "var(--color-text-muted)", display: "block" }}
-                          >
-                            {templateUploading ? "⏳ Parsing..." : "Upload Template (.docx)"}
-                          </button>
-                        </div>
-                      )}
-                    </Section>
 
                     {/* SKILL.md */}
                     <Section title="SKILL.md (L2 — full execution methodology)">
@@ -463,14 +298,6 @@ export function SkillsDrawer({
                     </Section>
                   </div>
 
-                  {/* Hidden file input for template upload */}
-                  <input
-                    ref={templateInputRef}
-                    type="file"
-                    accept=".docx"
-                    onChange={handleTemplateUpload}
-                    style={{ display: "none" }}
-                  />
 
                   {/* Actions */}
                   <div

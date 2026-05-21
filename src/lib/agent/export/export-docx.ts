@@ -7,47 +7,28 @@ import {
   AlignmentType,
 } from "docx";
 import type { AgentResponse } from "@/lib/agent/types";
-import type { ReportTemplate } from "@/lib/agent/template-types";
 
-/**
- * Generate a .docx Blob from an AgentResponse.
- *
- * Primary path: fetch the skill's original template .docx and fill {placeholders}
- * with values from response.sections. This preserves the user's layout and formatting.
- *
- * Fallback: build a simple .docx from response.content using the docx library
- * (when no template is available or sections data is missing).
- */
 export async function generateDocx(
   response: AgentResponse,
-  template?: ReportTemplate | null,
   skillName?: string
 ): Promise<Blob> {
-  // ── Primary path: fill placeholders in the original template .docx ──
-  if (template && skillName && response.sections) {
+  if (skillName) {
     try {
-      const blob = await fillTemplateDocx(response, template, skillName);
+      const blob = await fillTemplateDocx(response, skillName);
       if (blob) return blob;
     } catch (err) {
       console.error("[export-docx] Template fill failed, falling back:", err);
     }
   }
-
-  // ── Fallback: build a simple .docx from markdown content ──
-  return buildFallbackDocx(response, template);
+  return buildFallbackDocx(response, skillName);
 }
 
-/**
- * Fetch the original template .docx, fill {placeholders} in the XML, re-zip.
- */
 async function fillTemplateDocx(
   response: AgentResponse,
-  template: ReportTemplate,
   skillName: string
 ): Promise<Blob | null> {
   const JSZip = (await import("jszip")).default;
 
-  // Fetch original template .docx
   const res = await fetch(`/api/skills/${encodeURIComponent(skillName)}/template`);
   if (!res.ok) return null;
 
@@ -56,99 +37,55 @@ async function fillTemplateDocx(
   if (!docEntry) return null;
 
   let docXml = await docEntry.async("text");
-
-  // Normalize consecutive runs to reunite split placeholders
   docXml = normalizeConsecutiveRuns(docXml);
 
-  // Build a flat map of all placeholders to their replacement values
-  const replacements = buildPlaceholderMap(response, template);
-
-  // Apply replacements
+  const replacements = buildPlaceholderMap(response);
   for (const [placeholder, value] of Object.entries(replacements)) {
     const escaped = escapeXml(value);
-    // Replace all occurrences (placeholders may appear multiple times)
     docXml = docXml.replaceAll(placeholder, escaped);
   }
 
-  // Update the zip
   zip.file("word/document.xml", docXml);
-
-  // Re-zip and return
   const outBlob = await zip.generateAsync({ type: "blob" });
   return outBlob;
 }
 
 /**
- * Build a flat map from {placeholder-name} → value, scanning all template sections.
+ * Build {placeholder} → value map from response.sections.
  *
- * Primary: matches by section/field ID (old format).
- * Fallback: flattens sections to dot-path keys and matches by convention.
- * e.g. {vehicle.make} → sections["vehicle"]["make"]
+ * Primary: keys match response.sections directly:
+ *   "{summary}"          → sections.summary
+ *   "{mounting_height}"  → sections.findings.mounting_height
+ *
+ * Also emits dot-path keys for compatibility:
+ *   "{findings.mounting_height}" → same value
  */
 function buildPlaceholderMap(
-  response: AgentResponse,
-  template: ReportTemplate
+  response: AgentResponse
 ): Record<string, string> {
   const map: Record<string, string> = {};
+  const sections = response.sections;
+  if (!sections) return map;
 
-  for (const section of template.sections) {
-    const sectionData = response.sections?.[section.id];
-
-    if (section.type === "fields" && section.fields && typeof sectionData === "object" && sectionData) {
-      for (const field of section.fields) {
-        const val = (sectionData as Record<string, string>)[field.id];
-        if (val !== undefined) {
-          map[`{${field.id}}`] = val;
-        }
+  for (const [sectionId, value] of Object.entries(sections)) {
+    if (typeof value === "string") {
+      map[`{${sectionId}}`] = stripMarkdown(value);
+    } else if (typeof value === "object" && value !== null) {
+      map[`{${sectionId}}`] = stripMarkdown(Object.values(value).join(" "));
+      for (const [key, val] of Object.entries(value)) {
+        map[`{${key}}`] = stripMarkdown(String(val));
+        map[`{${sectionId}.${key}}`] = stripMarkdown(String(val));
       }
-    }
-
-    if (section.type === "markdown" && typeof sectionData === "string") {
-      map[`{${section.id}}`] = stripMarkdown(sectionData);
-    }
-
-    if (section.type === "table" && typeof sectionData === "string") {
-      map[`{${section.id}}`] = stripMarkdown(sectionData);
-    }
-
-    if (section.type === "verdict") {
-      map[`{verdict}`] = response.verdict === "PASS" ? "PASS" : "FAIL";
     }
   }
 
-  // Convention-based fallback: if no replacements found via ID matching,
-  // try flattening response.sections to dot-path keys.
-  // e.g. {vehicle.make} → sections["vehicle"]["make"]
-  if (Object.keys(map).length === 0 && response.sections) {
-    const flat = flattenObject(response.sections);
-    for (const [key, value] of Object.entries(flat)) {
-      const placeholder = `{${key}}`;
-      map[placeholder] = String(value);
-    }
+  if (response.verdict) {
+    map["{verdict}"] = response.verdict;
   }
 
   return map;
 }
 
-function flattenObject(obj: Record<string, unknown>, prefix = ""): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const [key, value] of Object.entries(obj)) {
-    const fullKey = prefix ? `${prefix}.${key}` : key;
-    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-      Object.assign(result, flattenObject(value as Record<string, unknown>, fullKey));
-    } else if (value !== undefined && value !== null) {
-      result[fullKey] = String(value);
-    }
-  }
-  return result;
-}
-
-/**
- * Merge consecutive <w:r> XML runs where the second only has optional formatting.
- * This reunites placeholders that Word splits across runs:
- *   <w:r><w:t>{vehi-</w:t></w:r><w:r><w:t>cle-make}</w:t></w:r>
- *   → <w:r><w:t>{vehicle-make}</w:t></w:r>
- */
 function normalizeConsecutiveRuns(xml: string): string {
   const runBoundary =
     /<\/w:t>\s*<\/w:r>\s*<w:r\b[^>]*>\s*(?:<w:rPr>[^<]*(?:<(?:\/|[^\/])[^>]*>)*<\/w:rPr>\s*)?<w:t[^>]*>/gs;
@@ -170,25 +107,21 @@ function stripMarkdown(md: string): string {
     .trim();
 }
 
-// ── Fallback: build a .docx from scratch ──
-
 function buildFallbackDocx(
   response: AgentResponse,
-  template?: ReportTemplate | null
+  skillName?: string
 ): Promise<Blob> {
   const children: (Paragraph)[] = [];
 
-  // Title
   children.push(
     new Paragraph({
-      text: template?.name ?? "Compliance Report",
+      text: skillName ? `${skillName} Compliance Report` : "Compliance Report",
       heading: HeadingLevel.HEADING_1,
       alignment: AlignmentType.CENTER,
       spacing: { after: 200 },
     })
   );
 
-  // Metadata
   children.push(
     new Paragraph({
       spacing: { after: 400 },
@@ -207,7 +140,6 @@ function buildFallbackDocx(
     })
   );
 
-  // Content lines
   const content = response.content || "Assessment not available.";
   const lines = content.split("\n");
   for (const line of lines) {
@@ -237,7 +169,6 @@ function buildFallbackDocx(
     }
   }
 
-  // Citations
   if (response.citations.length > 0) {
     children.push(new Paragraph({ text: "", spacing: { before: 400 } }));
     children.push(
@@ -261,7 +192,7 @@ function buildFallbackDocx(
   }
 
   const doc = new Document({
-    title: template?.name ?? "Compliance Report",
+    title: skillName ? `${skillName} Compliance Report` : "Compliance Report",
     description: "Generated by clausr.ai",
     styles: { default: { document: { run: { font: "Calibri", size: 22 } } } },
     sections: [{ children }],

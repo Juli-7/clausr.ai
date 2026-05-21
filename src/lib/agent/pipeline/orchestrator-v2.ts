@@ -134,7 +134,7 @@ export async function* orchestratePipeline(
           userMessage: result.contextSnapshot.userMessage,
           contextSummary: result.contextSnapshot.contextSummary,
           skillmd: ctx.skill.skillmd,
-          templateJson: ctx.skill.template ? JSON.stringify(ctx.skill.template) : null,
+          templateJson: null,
           loadedReferences: JSON.stringify(ctx.palette.getReferences().map(r => ({ filename: r.filename, content: r.content.slice(0, 5000) }))),
           uploadedFilesJson: JSON.stringify(ctx.files.getFiles().map(f => ({
             fileId: f.fileId, filename: f.filename, extractedText: f.extractedText?.slice(0, 3000) ?? "(none)",

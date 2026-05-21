@@ -11,8 +11,6 @@ import { useApp } from "@/lib/app-context";
 import type { AgentResponse } from "@/lib/agent/types";
 import type { ChatRequest, ChatRequestFile } from "@/lib/agent/schemas";
 import type { ChatTurn } from "@/lib/agent/turn-types";
-import type { ReportTemplate } from "@/lib/agent/template-types";
-
 interface PendingComment {
   selectedText: string;
   comment: string;
@@ -33,22 +31,8 @@ export function ChatView() {
   const [filesLoading, setFilesLoading] = useState(false);
   const [sessionId, setSessionId] = useState(() => "session-" + Date.now());
   const [pendingComments, setPendingComments] = useState<PendingComment[]>([]);
-  const [template, setTemplate] = useState<ReportTemplate | null>(null);
   const [sentFiles, setSentFiles] = useState<{ name: string; size: number; type: string }[]>([]);
-  const [useTemplate, setUseTemplate] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Load template for the active skill
-  useEffect(() => {
-    if (!activeSkillId) { setTemplate(null); return; }
-    fetch("/api/skills")
-      .then(r => r.json())
-      .then((skills: { name: string; template: ReportTemplate | null }[]) => {
-        const skill = skills.find(s => s.name === activeSkillId);
-        setTemplate(skill?.template ?? null);
-      })
-      .catch(() => setTemplate(null));
-  }, [activeSkillId]);
 
   // Session loading from history
   useEffect(() => {
@@ -183,8 +167,7 @@ export function ChatView() {
           skillName: activeSkillId,
           sessionId,
           files: filesToSend,
-          useTemplate,
-        } satisfies ChatRequest & { useTemplate?: boolean }),
+        } satisfies ChatRequest),
       });
 
       if (!resp.ok) {
@@ -420,8 +403,6 @@ export function ChatView() {
             loading={loading}
             stepStatus={stepStatus}
             skillName={activeSkillName}
-            sessionId={sessionId}
-            template={template}
             clauseTexts={latestResponse?.clauseTexts}
             pendingComments={pendingComments}
             onAddComment={(turnIndex, selectedText, comment, occurrenceIndex) =>
@@ -498,20 +479,7 @@ export function ChatView() {
           >
             📎
           </button>
-          {template && (
-            <button
-              title={useTemplate ? "Using template — click to disable" : "Not using template — click to enable"}
-              className="h-7 px-2 text-[10px] font-medium rounded cursor-pointer shrink-0"
-              style={{
-                background: useTemplate ? "var(--color-accent-blue-bg)" : "transparent",
-                border: useTemplate ? "1px solid var(--color-accent-blue-border)" : "1px solid var(--color-border-input)",
-                color: useTemplate ? "var(--color-accent-blue)" : "var(--color-text-muted)",
-              }}
-              onClick={() => setUseTemplate(!useTemplate)}
-            >
-              {useTemplate ? "📋 Template" : "📋 Chat"}
-            </button>
-          )}
+
           <ChatInput onSend={handleSend} loading={loading} />
         </div>
       </div>

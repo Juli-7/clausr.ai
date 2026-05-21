@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>clausr — Compliance Assessment</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-void: #050507;
+      --bg-deep: #08080c;
+      --bg-surface: #0c0d14;
+      --bg-raised: #111220;
+      --bg-highlight: #181a2a;
+
+      --line-faint: rgba(255,255,255,0.04);
+      --line-soft: rgba(255,255,255,0.08);
+      --line-mid: rgba(255,255,255,0.12);
+
+      --green-main: #6ee7b7;
+      --green-dim: rgba(110,231,183,0.12);
+      --green-glow: rgba(110,231,183,0.06);
+
+      --text-whisper: rgba(255,255,255,0.25);
+      --text-dim: rgba(255,255,255,0.45);
+      --text-muted: rgba(255,255,255,0.6);
+      --text-body: rgba(255,255,255,0.85);
+      --text-bright: #fff;
+
+      --font-serif: 'Cormorant Garamond', Georgia, serif;
+      --font-mono: 'DM Mono', 'Courier New', monospace;
+
+      --divider: 1px solid var(--line-faint);
+    }
+
+    html, body {
+      height: 100%;
+      font-family: var(--font-serif);
+      background: var(--bg-void);
+      color: var(--text-body);
+      font-size: 15px;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+    }
+
+    /* Split canvas */
+    .workspace {
+      display: flex;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    /* Left: Source documents */
+    .source-pane {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      border-right: var(--divider);
+      background: var(--bg-deep);
+      position: relative;
+    }
+
+    .pane-label {
+      position: absolute;
+      top: 20px;
+      left: 24px;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--text-whisper);
+    }
+
+    .doc-stack {
+      flex: 1;
+      padding: 56px 24px 24px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .doc-card {
+      background: var(--bg-surface);
+      border: var(--divider);
+      padding: 20px 22px;
+      position: relative;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    .doc-card:hover {
+      background: var(--bg-raised);
+      border-color: var(--line-soft);
+    }
+
+    .doc-card.active {
+      border-color: var(--green-main);
+      background: var(--green-glow);
+    }
+
+    .doc-card::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: var(--line-faint);
+    }
+
+    .doc-card.active::before {
+      background: var(--green-main);
+    }
+
+    .doc-name {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+    }
+
+    .doc-page {
+      font-family: var(--font-serif);
+      font-size: 14px;
+      color: var(--text-body);
+      font-style: italic;
+    }
+
+    .doc-highlight {
+      margin-top: 10px;
+      padding: 8px 12px;
+      background: var(--green-dim);
+      border-left: 2px solid var(--green-main);
+      font-family: var(--font-serif);
+      font-size: 13px;
+      font-style: italic;
+      color: var(--text-muted);
+    }
+
+    /* Right: Compliance report */
+    .report-pane {
+      flex: 1.1;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-void);
+      position: relative;
+    }
+
+    .report-content {
+      flex: 1;
+      padding: 56px 64px 120px;
+      overflow-y: auto;
+      max-width: 720px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* Report typography */
+    .report-header {
+      margin-bottom: 48px;
+      padding-bottom: 32px;
+      border-bottom: var(--divider);
+    }
+
+    .report-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: var(--text-whisper);
+      margin-bottom: 12px;
+    }
+
+    .report-title {
+      font-family: var(--font-serif);
+      font-size: 36px;
+      font-weight: 600;
+      color: var(--text-bright);
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+      margin-bottom: 16px;
+    }
+
+    .report-meta {
+      display: flex;
+      gap: 20px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+
+    .verdict-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      border: 1px solid var(--green-main);
+      color: var(--green-main);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      margin-top: 16px;
+    }
+
+    .verdict-inline .dot {
+      width: 6px;
+      height: 6px;
+      background: var(--green-main);
+      border-radius: 50%;
+    }
+
+    .report-section {
+      margin-bottom: 40px;
+      position: relative;
+    }
+
+    .section-head {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--text-whisper);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .section-head::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--line-faint);
+    }
+
+    .spec-row {
+      display: flex;
+      padding: 12px 0;
+      border-bottom: var(--divider);
+    }
+
+    .spec-key {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      width: 180px;
+      flex-shrink: 0;
+      padding-right: 24px;
+    }
+
+    .spec-val {
+      font-family: var(--font-serif);
+      font-size: 15px;
+      color: var(--text-body);
+    }
+
+    .spec-val .cite {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--green-main);
+      background: var(--green-dim);
+      padding: 1px 5px;
+      border-radius: 2px;
+      margin: 0 2px;
+    }
+
+    .spec-val .src {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: rgba(168,85,247,0.8);
+      background: rgba(168,85,247,0.08);
+      padding: 1px 5px;
+      border-radius: 2px;
+      margin: 0 2px;
+    }
+
+    .prose {
+      font-family: var(--font-serif);
+      font-size: 16px;
+      line-height: 1.8;
+      color: var(--text-body);
+    }
+
+    .prose p { margin-bottom: 16px; }
+
+    .verdict-block {
+      padding: 28px 32px;
+      border: var(--divider);
+      background: var(--bg-surface);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 32px;
+    }
+
+    .verdict-left { display: flex; flex-direction: column; gap: 6px; }
+
+    .verdict-title {
+      font-family: var(--font-serif);
+      font-size: 28px;
+      font-weight: 600;
+      color: var(--green-main);
+    }
+
+    .verdict-sub {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.05em;
+    }
+
+    .verdict-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+    }
+
+    .score {
+      font-family: var(--font-serif);
+      font-size: 48px;
+      font-weight: 700;
+      color: var(--text-bright);
+      line-height: 1;
+    }
+
+    .score-label {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      color: var(--text-dim);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .confidence-pips {
+      display: flex;
+      gap: 3px;
+      margin-top: 8px;
+    }
+
+    .pip {
+      width: 4px;
+      height: 16px;
+      background: var(--line-soft);
+      border-radius: 1px;
+    }
+
+    .pip.on { background: var(--green-main); }
+
+    /* Source markers on left pane */
+    .source-marker {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      padding: 2px 6px;
+      border-radius: 2px;
+      cursor: pointer;
+      color: var(--text-dim);
+      background: var(--line-faint);
+      transition: all 0.15s ease;
+    }
+
+    .source-marker:hover { background: var(--green-dim); color: var(--green-main); }
+
+    /* Floating toolbar */
+    .toolbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 48px;
+      background: rgba(8,8,12,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: var(--divider);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      z-index: 100;
+      gap: 12px;
+    }
+
+    .toolbar-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toolbar-mark {
+      font-family: var(--font-serif);
+      font-size: 18px;
+      color: var(--text-bright);
+      font-style: italic;
+    }
+
+    .toolbar-name {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+    }
+
+    .toolbar-skill {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--green-main);
+      background: var(--green-dim);
+      padding: 3px 10px;
+      border-radius: 2px;
+      border: 1px solid rgba(110,231,183,0.15);
+    }
+
+    .toolbar-spacer { flex: 1; }
+
+    .toolbar-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .tool-btn {
+      height: 30px;
+      padding: 0 12px;
+      background: transparent;
+      border: var(--divider);
+      border-radius: 3px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tool-btn:hover { border-color: var(--line-mid); color: var(--text-body); }
+    .tool-btn.primary { background: var(--green-dim); border-color: rgba(110,231,183,0.2); color: var(--green-main); }
+    .tool-btn.primary:hover { background: rgba(110,231,183,0.15); }
+
+    /* Bottom input bar */
+    .input-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 72px;
+      background: rgba(5,5,7,0.95);
+      backdrop-filter: blur(16px);
+      border-top: var(--divider);
+      display: flex;
+      align-items: center;
+      padding: 0 32px;
+      gap: 12px;
+      z-index: 100;
+    }
+
+    .input-bar .attach-btn {
+      width: 40px;
+      height: 40px;
+      border: 1px dashed var(--line-mid);
+      border-radius: 3px;
+      background: transparent;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+      flex-shrink: 0;
+    }
+
+    .input-bar .attach-btn:hover { border-color: var(--green-main); color: var(--green-main); }
+
+    .input-field {
+      flex: 1;
+      height: 44px;
+      padding: 0 20px;
+      background: var(--bg-surface);
+      border: var(--divider);
+      border-radius: 3px;
+      color: var(--text-body);
+      font-family: var(--font-serif);
+      font-size: 14px;
+      font-style: italic;
+      outline: none;
+      transition: border-color 0.15s ease;
+    }
+
+    .input-field::placeholder { color: var(--text-whisper); font-style: italic; }
+    .input-field:focus { border-color: var(--green-main); }
+
+    .send-btn {
+      height: 44px;
+      padding: 0 24px;
+      background: var(--green-main);
+      border: none;
+      border-radius: 3px;
+      color: #050507;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 0.15s ease;
+    }
+
+    .send-btn:hover { background: #a7f3d0; }
+
+    /* Status bar - compact */
+    .status-strip {
+      position: fixed;
+      bottom: 72px;
+      left: 0;
+      right: 0;
+      height: 28px;
+      background: var(--bg-surface);
+      border-top: var(--divider);
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      gap: 16px;
+      z-index: 99;
+    }
+
+    .status-item {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      color: var(--text-whisper);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .status-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--green-main);
+      animation: pulse-dot 2s ease infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--line-soft); border-radius: 2px; }
+
+    ::selection { background: var(--green-dim); color: var(--green-main); }
+  </style>
+</head>
+<body>
+  <!-- Floating toolbar -->
+  <div class="toolbar">
+    <div class="toolbar-brand">
+      <span class="toolbar-mark">§</span>
+      <span class="toolbar-name">clausr</span>
+    </div>
+    <span class="toolbar-skill">EU-VWTA-LIGHTING</span>
+    <div class="toolbar-spacer"></div>
+    <div class="toolbar-actions">
+      <button class="tool-btn">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Skills
+      </button>
+      <button class="tool-btn">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        History
+      </button>
+      <button class="tool-btn primary">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export PDF
+      </button>
+    </div>
+  </div>
+
+  <!-- Main workspace -->
+  <div class="workspace">
+
+    <!-- Left: Source documents -->
+    <div class="source-pane">
+      <div class="pane-label">Source Documents</div>
+      <div class="doc-stack">
+        <div class="doc-card active">
+          <div class="doc-name">WLTP_test_report.pdf · p.47</div>
+          <div class="doc-page">"...the measured luminous intensity of the LED matrix headlamp assembly was recorded at 1,150 candela under standard test conditions (25°C ambient, 12.8V supply)..."</div>
+          <div class="doc-highlight">1,150 cd — cited in compliance check</div>
+        </div>
+
+        <div class="doc-card">
+          <div class="doc-name">lighting_specs.docx · §3.2</div>
+          <div class="doc-page">"Horizontal aim point deviation measured at +0.15 degrees from optical axis. All readings taken per UN R48 §5.3 measurement protocol."</div>
+          <div class="doc-highlight">+0.15° — within ±0.5° tolerance</div>
+        </div>
+
+        <div class="doc-card">
+          <div class="doc-name">WLTP_test_report.pdf · p.12</div>
+          <div class="doc-page">"Color temperature of 5,500 K ± 250 K verified using spectrometer at 550nm peak wavelength. DRL function confirmed operational."</div>
+        </div>
+
+        <div class="doc-card">
+          <div class="doc-name">type_approval_form.pdf · §2</div>
+          <div class="doc-page">"Manufacturer: Volkswagen AG. Type approval number: e1*2007/46*1167*07. Headlamp classification: Class C, LED matrix adaptive beam with DRL."</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Compliance report -->
+    <div class="report-pane">
+      <div class="report-content">
+        <div class="report-header">
+          <div class="report-eyebrow">Compliance Assessment · Round 2 of 5 · Session #a7f2</div>
+          <h1 class="report-title">EU VWTA Lighting<br>Compliance Report</h1>
+          <div class="report-meta">
+            <span>Volkswagen AG</span>
+            <span>·</span>
+            <span>20 May 2026</span>
+            <span>·</span>
+            <span>AI Examiner</span>
+          </div>
+          <div class="verdict-inline">
+            <span class="dot"></span>
+            PASS — R48.5 · R48.6
+          </div>
+        </div>
+
+        <div class="report-section">
+          <div class="section-head">Vehicle Specifications</div>
+          <div class="spec-row">
+            <div class="spec-key">Manufacturer</div>
+            <div class="spec-val">Volkswagen AG</div>
+          </div>
+          <div class="spec-row">
+            <div class="spec-key">Type Approval</div>
+            <div class="spec-val">e1*2007/46*1167*07</div>
+          </div>
+          <div class="spec-row">
+            <div class="spec-key">Headlamp Type</div>
+            <div class="spec-val">LED Matrix, adaptive beam</div>
+          </div>
+          <div class="spec-row">
+            <div class="spec-key">Beam Pattern</div>
+            <div class="spec-val">Class C (European) with DRL <span class="cite">[R48.1]</span></div>
+          </div>
+          <div class="spec-row">
+            <div class="spec-key">Luminous Intensity</div>
+            <div class="spec-val">1,150 cd ± 5% <span class="cite">[R48.5.11]</span> <span class="src">[S1]</span></div>
+          </div>
+          <div class="spec-row">
+            <div class="spec-key">Color Temperature</div>
+            <div class="spec-val">5,500 K ± 250 K <span class="cite">[R48.6.2]</span> <span class="src">[S3]</span></div>
+          </div>
+          <div class="spec-row">
+            <div class="spec-key">Aim Deviation</div>
+            <div class="spec-val">+0.15° <span class="cite">[R48.5.3]</span> <span class="src">[S2]</span></div>
+          </div>
+        </div>
+
+        <div class="report-section">
+          <div class="section-head">Technical Analysis</div>
+          <div class="prose">
+            <p>The submitted headlamp assembly meets all mandatory photometric requirements under <span class="cite">[R48.5.11]</span> for Class C beam patterns. The measured luminous intensity of 1,150 cd falls within the permitted tolerance band of 800–1,350 cd for dipped beam operation. <span class="src">[S1]</span></p>
+            <p>Color temperature verification confirms 5,500 K ± 250 K, compliant with <span class="cite">[R48.6.2]</span> requirements for white light sources in daytime running lamps. Horizontal aim point deviation of +0.15° is within the ±0.5° tolerance per <span class="cite">[R48.5.3]</span>. <span class="src">[S2]</span></p>
+          </div>
+        </div>
+
+        <div class="report-section">
+          <div class="section-head">Verdict</div>
+          <div class="verdict-block">
+            <div class="verdict-left">
+              <div class="verdict-title">Compliant</div>
+              <div class="verdict-sub">All parameters within regulation limits</div>
+            </div>
+            <div class="verdict-right">
+              <div class="score">97%</div>
+              <div class="score-label">Confidence</div>
+              <div class="confidence-pips">
+                <div class="pip on"></div>
+                <div class="pip on"></div>
+                <div class="pip on"></div>
+                <div class="pip on"></div>
+                <div class="pip on"></div>
+                <div class="pip"></div>
+                <div class="pip"></div>
+                <div class="pip"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status strip -->
+  <div class="status-strip">
+    <span class="status-item">
+      <span class="status-dot"></span>
+      AI Active
+    </span>
+    <span class="status-item">4 documents loaded</span>
+    <span class="status-item">12 regulation clauses</span>
+    <span class="status-item">Confidence: 97%</span>
+  </div>
+
+  <!-- Bottom input bar -->
+  <div class="input-bar">
+    <button class="attach-btn">📎</button>
+    <input type="text" class="input-field" placeholder="Review the analysis, request additional checks, or ask a follow-up...">
+    <button class="send-btn">Send for Analysis</button>
+  </div>
+</body>
+</html>

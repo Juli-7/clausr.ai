@@ -30,7 +30,7 @@ export async function initPhase(
     if (!skill) {
       throw new PipelineError("SKILL_NOT_FOUND", `Skill "${skillName}" not found`);
     }
-    logPipeline(`skill loaded: "${skill.name}" template="${skill.template?.name ?? "none"}" scripts=${skill.scripts.length} regulationIds=${skill.regulationIds.length}`);
+    logPipeline(`skill loaded: "${skill.name}" scripts=${skill.scripts.length} regulationIds=${skill.regulationIds.length}`);
   } else {
     // Auto-skill: create a minimal placeholder; will be generated after file processing
     logPipeline("auto-skill mode: no skill chosen, will generate from user request");
@@ -40,7 +40,6 @@ export async function initPhase(
       triggers: [],
       skillmd: "",
       scripts: [],
-      template: null,
       checks: [],
       regulationIds: [],
     };
@@ -53,7 +52,6 @@ export async function initPhase(
   const ctx = createPipelineContext(
     skill.name,
     skill.skillmd,
-    skill.template,
     sessionId,
     correlationId,
     skill.checks

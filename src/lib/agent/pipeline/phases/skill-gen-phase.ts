@@ -19,7 +19,6 @@ export async function skillGenPhase(
   // Update the pipeline context with the generated skill
   ctx.skill.name = skill.name;
   ctx.skill.skillmd = skill.skillmd;
-  ctx.skill.template = skill.template;
   ctx.skill.checks = skill.checks;
 
   logPipeline(`  ✓ skill generated: "${skill.name}" checks=${skill.checks.length} regulationIds=${skill.regulationIds.join(", ") || "none"}`);

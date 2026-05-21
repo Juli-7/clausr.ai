@@ -1,44 +1,38 @@
 import { logPipeline } from "../logger";
-import type { PipelineContext } from "../pipeline-context";
+import type { PipelineContext, CheckResult } from "../pipeline-context";
 import type { ExecutableStep } from "../step-executor";
 
 /**
  * Domain-schema report assembly.
- * Combines step outputs + check results into structured report content.
- * No LLM call — purely programmatic assembly.
+ *
+ * Produces three named sections matching the auto-derived template:
+ *   - summary:  short narrative (markdown)
+ *   - findings: { field → finding } map (rendered as a fields table)
+ *   - verdict:  set later by finalizePhase
+ *
+ * No LLM call — purely programmatic assembly from check results.
  */
 export async function reportPhase(
   ctx: PipelineContext,
-  steps: ExecutableStep[],
-  maxStepNum: number
+  _steps: ExecutableStep[],
+  _maxStepNum: number
 ): Promise<void> {
-  logPipeline("→ AUTO: assembling report from step outputs and check results");
+  logPipeline("→ AUTO: assembling report from check results");
 
-  // Step outputs as reasoning body
-  const stepTexts: string[] = [];
-  for (const step of steps) {
-    const output = ctx.steps.read(step.number);
-    if (output === undefined || output === null) continue;
-    const body = typeof output === "string" ? output : JSON.stringify(output, null, 2);
-    stepTexts.push(`## Step ${step.number}: ${step.title}\n${body}`);
-  }
-
-  // Check results as structured findings
   const checkResults = ctx.checks.getResults();
-  const findings: string[] = [];
+
+  // findings: one entry per check field
+  const findings: Record<string, string> = {};
   for (const cr of checkResults) {
-    const cite = cr.citationRef ? ` [${cr.citationRef}]` : "";
-    const src = cr.sourceRef ? ` [S${cr.sourceRef}]` : "";
-    findings.push(`- **${cr.name}**: ${cr.finding} → ${cr.verdict}${cite}${src}`);
+    findings[cr.name] = formatFinding(cr);
   }
 
-  const sections: Record<string, string> = {};
-  if (stepTexts.length > 0) {
-    sections["assessment"] = stepTexts.join("\n\n");
-  }
-  if (findings.length > 0) {
-    sections["findings"] = findings.join("\n");
-  }
+  // summary: short narrative auto-generated from check results
+  const summary = buildSummary(checkResults);
+
+  const sections: Record<string, Record<string, string> | string> = {};
+  if (summary) sections["summary"] = summary;
+  if (Object.keys(findings).length > 0) sections["findings"] = findings;
 
   if (Object.keys(sections).length > 0) {
     ctx.report.setContent(sections);
@@ -53,4 +47,37 @@ export async function reportPhase(
       ctx.files.getSourcePalette()
     );
   }
+}
+
+function formatFinding(cr: CheckResult): string {
+  const cite = cr.citationRef ? ` [${cr.citationRef}]` : "";
+  const src = cr.sourceRef ? ` [S${cr.sourceRef}]` : "";
+  return `${cr.finding} → ${cr.verdict}${cite}${src}`;
+}
+
+function buildSummary(checks: readonly CheckResult[]): string {
+  if (checks.length === 0) return "No checks were evaluated.";
+
+  const failures = checks.filter((c) => c.verdict === "FAIL");
+  const passCount = checks.length - failures.length;
+  const regulations = [...new Set(checks.map((c) => c.regulation).filter(Boolean))];
+
+  const parts: string[] = [];
+  parts.push(
+    `Evaluated ${checks.length} ${checks.length === 1 ? "check" : "checks"}` +
+      (regulations.length > 0 ? ` across ${regulations.join(", ")}` : "") +
+      `. ${passCount} passed, ${failures.length} failed.`
+  );
+
+  if (failures.length > 0) {
+    const list = failures
+      .map((f) => {
+        const cite = f.citationRef ? ` [${f.citationRef}]` : "";
+        return `**${f.name}** — ${f.finding}${cite}`;
+      })
+      .join("; ");
+    parts.push(`Failures: ${list}.`);
+  }
+
+  return parts.join(" ");
 }

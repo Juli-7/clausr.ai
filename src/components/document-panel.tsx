@@ -9,18 +9,15 @@ import { SourceCitationCard } from "@/components/source-citation-card";
 import type { HighlightChunk } from "@/components/source-citation-card";
 import { InlineCommentThread } from "@/components/inline-comment";
 import { CommentPopover } from "@/components/comment-popover";
-import { DownloadDropdown } from "@/components/download-dropdown";
 import type { Citation } from "@/lib/agent/types";
 import type { ChatTurn } from "@/lib/agent/turn-types";
-import type { ReportTemplate } from "@/lib/agent/template-types";
+import { DownloadDropdown } from "@/components/download-dropdown";
 
 interface DocumentPanelProps {
   turns: ChatTurn[];
   loading: boolean;
   stepStatus?: string | null;
   skillName?: string;
-  sessionId?: string;
-  template?: ReportTemplate | null;
   clauseTexts?: Record<string, string>;
   pendingComments?: { selectedText: string; comment: string; turnIndex: number; occurrenceIndex: number }[];
   onAddComment?: (turnIndex: number, selectedText: string, comment: string, occurrenceIndex: number) => void;
@@ -32,8 +29,6 @@ export function DocumentPanel({
   loading,
   stepStatus,
   skillName,
-  sessionId,
-  template,
   clauseTexts,
   pendingComments,
   onAddComment,
@@ -130,8 +125,6 @@ export function DocumentPanel({
             turnIndex={i}
             turn={turn}
             skillName={skillName}
-            sessionId={sessionId}
-            template={template}
             clauseTexts={clauseTexts}
             pendingComments={pendingComments?.filter((c) => c.turnIndex === i)}
             onMouseUp={(e) => handleMouseUp(e, i)}
@@ -235,8 +228,6 @@ function DocumentCard({
   turn,
   turnIndex,
   skillName,
-  sessionId,
-  template,
   clauseTexts,
   pendingComments,
   onMouseUp,
@@ -245,8 +236,6 @@ function DocumentCard({
   turn: ChatTurn;
   turnIndex: number;
   skillName?: string;
-  sessionId?: string;
-  template?: ReportTemplate | null;
   clauseTexts?: Record<string, string>;
   pendingComments?: { selectedText: string; comment: string; occurrenceIndex: number }[];
   onMouseUp?: (e: React.MouseEvent) => void;
@@ -387,10 +376,10 @@ function DocumentCard({
           <span>{new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
           <span>·</span>
           <span>Examiner: AI</span>
-          {sessionId && (
+          {response.sessionId && (
             <>
               <span>·</span>
-              <span>Ref: #{sessionId.slice(-4)}</span>
+              <span>Ref: #{response.sessionId.slice(-4)}</span>
             </>
           )}
         </div>
@@ -427,78 +416,69 @@ function DocumentCard({
       <div className="px-6 py-5" data-card-body="true" onClick={handleContentClick}>
         <style>{citationStyles}</style>
 
-        {template && response.sections ? (
-          // ── Template-aware rendering: iterate template sections ──
-          template.sections.map((section) => {
-            const sectionData = response.sections?.[section.id];
-
-            return (
-              <div key={section.id} style={{ marginBottom: 20 }}>
-                {/* Section header */}
+        {response.sections ? (
+          <>
+            {/* Fields table — from response.sections.findings */}
+            {response.sections.findings && typeof response.sections.findings === "object" && (
+              <div style={{ marginBottom: 20 }}>
                 <div
                   className="inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded mb-3"
                   style={{ color: "var(--color-text-muted)", background: "var(--color-border-default)" }}
                 >
-                  {section.title}
+                  Findings
                 </div>
-
-                {section.type === "fields" && section.fields && typeof sectionData === "object" && sectionData ? (
-                  <table className="w-full border-collapse text-xs mt-1 mb-3">
-                    <tbody>
-                      {section.fields.map((f) => (
-                        <tr key={f.id} style={{ borderBottom: "1px solid var(--color-border-default)" }}>
-                          <td className="py-2 pr-4" style={{ color: "var(--color-text-muted)", width: 180, whiteSpace: "nowrap" as const }}>
-                            {f.label}
-                          </td>
-                          <td className="py-2" style={{ color: "var(--color-text-body)", fontWeight: 500 }}>
-                            <span dangerouslySetInnerHTML={{ __html: applyHighlights(enhanceCitations((sectionData as Record<string, string>)[f.id] ?? "—", response.citations, sourceCitations), pendingComments) }} />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : null}
-
-                {section.type === "markdown" && typeof sectionData === "string" ? (
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    rehypePlugins={[rehypeRaw]}
-                    components={markdownComponents}
-                  >
-                    {applyHighlights(enhanceCitations(sectionData, response.citations, sourceCitations), pendingComments)}
-                  </ReactMarkdown>
-                ) : null}
-
-                {section.type === "table" && typeof sectionData === "string" ? (
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    rehypePlugins={[rehypeRaw]}
-                    components={markdownComponents}
-                  >
-                    {applyHighlights(enhanceCitations(sectionData, response.citations, sourceCitations), pendingComments)}
-                  </ReactMarkdown>
-                ) : null}
-
-                {section.type === "verdict" ? (
-                  <div className="p-4 rounded-lg mt-2" style={{ border: "1px solid var(--color-border-default)", background: "var(--color-bg-card)" }}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold uppercase" style={{ color: response.verdict === "FAIL" ? "var(--color-danger)" : "var(--color-success)" }}>
-                        {response.verdict === "FAIL" ? "✗ FAIL" : "✓ PASS"}
-                      </span>
-                      {response.confidence ? (
-                        <ConfidenceBadge confidence={response.confidence} />
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-
-                {/* Thin section divider */}
+                <table className="w-full border-collapse text-xs mt-1 mb-3">
+                  <tbody>
+                    {(Object.entries(response.sections.findings) as [string, string][]).map(([field, value]) => (
+                      <tr key={field} style={{ borderBottom: "1px solid var(--color-border-default)" }}>
+                        <td className="py-2 pr-4" style={{ color: "var(--color-text-muted)", width: 180, whiteSpace: "nowrap" as const }}>
+                          {humanize(field)}
+                        </td>
+                        <td className="py-2" style={{ color: "var(--color-text-body)", fontWeight: 500 }}>
+                          <span dangerouslySetInnerHTML={{ __html: applyHighlights(enhanceCitations(value, response.citations, sourceCitations), pendingComments) }} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
                 <div style={{ height: 1, background: "var(--color-border-default)", marginTop: 16 }} />
               </div>
-            );
-          })
+            )}
+
+            {/* Summary — from response.sections.summary */}
+            {response.sections.summary && typeof response.sections.summary === "string" && (
+              <div style={{ marginBottom: 20 }}>
+                <div
+                  className="inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded mb-3"
+                  style={{ color: "var(--color-text-muted)", background: "var(--color-border-default)" }}
+                >
+                  Summary
+                </div>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeRaw]}
+                  components={markdownComponents}
+                >
+                  {applyHighlights(enhanceCitations(response.sections.summary, response.citations, sourceCitations), pendingComments)}
+                </ReactMarkdown>
+                <div style={{ height: 1, background: "var(--color-border-default)", marginTop: 16 }} />
+              </div>
+            )}
+
+            {/* Verdict + Confidence */}
+            <div className="p-4 rounded-lg mt-2" style={{ border: "1px solid var(--color-border-default)", background: "var(--color-bg-card)" }}>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase" style={{ color: response.verdict === "FAIL" ? "var(--color-danger)" : "var(--color-success)" }}>
+                  {response.verdict === "FAIL" ? "✗ FAIL" : "✓ PASS"}
+                </span>
+                {response.confidence ? (
+                  <ConfidenceBadge confidence={response.confidence} />
+                ) : null}
+              </div>
+            </div>
+          </>
         ) : (
-          // ── Fallback: render raw markdown (current behavior) ──
+          /* No sections — render raw markdown content */
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             rehypePlugins={[rehypeRaw]}
@@ -667,13 +647,12 @@ function DocumentCard({
         </button>
         <DownloadDropdown
           response={response}
-          template={template ?? undefined}
           skillName={skillName}
         />
       </div>
 
-      {/* Verdict box — only shown in fallback mode (template renders verdict inline) */}
-      {response.verdict && !(template && response.sections) && (
+      {/* Verdict box — fallback when no sections */}
+      {response.verdict && !response.sections && (
         <div
           className="mx-6 mb-5 p-4 rounded-lg"
           style={{
@@ -1021,4 +1000,10 @@ function normalizeTables(content: string): string {
   }
 
   return result.join("\n");
+}
+
+function humanize(slug: string): string {
+  return slug
+    .replace(/[-_.]/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
