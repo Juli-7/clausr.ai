@@ -2,16 +2,19 @@ import { getDb } from "@/lib/agent/memory/database";
 import type { AgentResponse } from "@/lib/agent/types";
 import type { Citation } from "@/lib/agent/schemas";
 
+function safeJsonParse<T>(json: string, fallback?: T): T {
+  try {
+    return JSON.parse(json) as T;
+  } catch {
+    return (fallback ?? undefined) as T;
+  }
+}
+
 export function getOrCreateSession(sessionId: string, skillName: string): void {
   const db = getDb();
-  const existing = db.prepare("SELECT id FROM sessions WHERE id = ?").get(sessionId);
-  if (!existing) {
-    db.prepare("INSERT INTO sessions (id, skill_name, created_at) VALUES (?, ?, ?)").run(
-      sessionId,
-      skillName,
-      Date.now()
-    );
-  }
+  db.prepare(
+    "INSERT OR IGNORE INTO sessions (id, skill_name, created_at) VALUES (?, ?, ?)"
+  ).run(sessionId, skillName, Date.now());
 }
 
 export function addUserMessage(sessionId: string, content: string): void {
@@ -216,16 +219,16 @@ export function getResponsesForSession(sessionId: string): {
   return rows.map((r) => ({
     content: r.content,
     reasoning: r.reasoning,
-    citations: JSON.parse(r.citations_json),
+    citations: safeJsonParse(r.citations_json, []),
     verdict: r.verdict,
     round: r.round,
-    sections: r.sections_json ? JSON.parse(r.sections_json) : undefined,
-    sourceCitations: r.source_citations_json ? JSON.parse(r.source_citations_json) : undefined,
-    clauseTexts: r.clause_texts_json ? JSON.parse(r.clause_texts_json) : undefined,
-    toolCalls: r.tool_calls_json ? JSON.parse(r.tool_calls_json) : undefined,
-    reasoningSteps: r.reasoning_steps_json ? JSON.parse(r.reasoning_steps_json) : undefined,
-    claims: r.claims_json ? JSON.parse(r.claims_json) : undefined,
-    confidence: r.confidence_json ? JSON.parse(r.confidence_json) : undefined,
+    sections: r.sections_json ? safeJsonParse(r.sections_json) : undefined,
+    sourceCitations: r.source_citations_json ? safeJsonParse(r.source_citations_json) : undefined,
+    clauseTexts: r.clause_texts_json ? safeJsonParse(r.clause_texts_json) : undefined,
+    toolCalls: r.tool_calls_json ? safeJsonParse(r.tool_calls_json) : undefined,
+    reasoningSteps: r.reasoning_steps_json ? safeJsonParse(r.reasoning_steps_json) : undefined,
+    claims: r.claims_json ? safeJsonParse(r.claims_json) : undefined,
+    confidence: r.confidence_json ? safeJsonParse(r.confidence_json) : undefined,
     createdAt: r.created_at,
   }));
 }

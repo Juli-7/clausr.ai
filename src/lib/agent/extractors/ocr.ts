@@ -1,5 +1,5 @@
 import Tesseract from "tesseract.js";
-import type { WordBox, TextChunk } from "./index";
+import { mergeWordBoxes, type WordBox, type TextChunk } from "./index";
 
 export interface BBox {
   x: number;
@@ -13,6 +13,21 @@ export interface OcrResult {
   chunks: TextChunk[];
   ocrConfidence: number;
   extractorUsed: string;
+}
+
+let tesseractWorker: Tesseract.Worker | null = null;
+let tesseractWorkerReady: Promise<void> | null = null;
+
+async function getTesseractWorker(): Promise<Tesseract.Worker> {
+  if (!tesseractWorker) {
+    tesseractWorkerReady = (async () => {
+      tesseractWorker = await Tesseract.createWorker("eng");
+    })();
+    await tesseractWorkerReady;
+  } else if (tesseractWorkerReady) {
+    await tesseractWorkerReady;
+  }
+  return tesseractWorker!;
 }
 
 function collectWords(page: Tesseract.Page): Tesseract.Word[] {
@@ -42,15 +57,18 @@ function toWordBox(b: Tesseract.Bbox): WordBox {
 function groupWordsIntoLines(words: Tesseract.Word[]): Tesseract.Word[][] {
   if (words.length === 0) return [];
   const sorted = [...words].sort((a, b) => a.bbox.y0 - b.bbox.y0 || a.bbox.x0 - b.bbox.x0);
+
+  const avgHeight = sorted.reduce((s, w) => s + (w.bbox.y1 - w.bbox.y0), 0) / sorted.length;
+  const tolerance = avgHeight * 0.5;
+
   const lines: Tesseract.Word[][] = [[sorted[0]]];
 
   for (let i = 1; i < sorted.length; i++) {
     const current = sorted[i];
     const lastLine = lines[lines.length - 1];
     const lastWord = lastLine[lastLine.length - 1];
-    // Words on the same line share similar y (within 8px tolerance)
     const yGap = Math.abs(current.bbox.y0 - lastWord.bbox.y0);
-    if (yGap <= 8) {
+    if (yGap <= tolerance) {
       lastLine.push(current);
     } else {
       lines.push([current]);
@@ -59,23 +77,9 @@ function groupWordsIntoLines(words: Tesseract.Word[]): Tesseract.Word[][] {
   return lines;
 }
 
-function mergeWordBoxes(wordBoxes: WordBox[]): WordBox {
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const wb of wordBoxes) {
-    if (wb.x < minX) minX = wb.x;
-    if (wb.y < minY) minY = wb.y;
-    if (wb.x + wb.width > maxX) maxX = wb.x + wb.width;
-    if (wb.y + wb.height > maxY) maxY = wb.y + wb.height;
-  }
-  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
-}
-
 export async function extractImageText(dataUrl: string): Promise<OcrResult> {
-  const result = await Tesseract.recognize(dataUrl, "eng", {
-    logger: () => {
-      /* silent by default; enable for debugging */
-    },
-  });
+  const worker = await getTesseractWorker();
+  const result = await worker.recognize(dataUrl);
 
   const page = result.data;
   const words = collectWords(page);

@@ -105,11 +105,13 @@ export const AgentResponseSchema = z.object({
 
 // ── Request ──
 
+const dataUrlPattern = /^data:[\w/+]+;base64,[a-zA-Z0-9+/=]+$/;
+
 export const ChatRequestFileSchema = z.object({
   name: z.string().min(1),
-  size: z.number().int().nonnegative(),
+  size: z.number().int().nonnegative().max(50 * 1024 * 1024),
   type: z.string().min(1),
-  dataUrl: z.string().optional(),
+  dataUrl: z.string().regex(dataUrlPattern).optional(),
 });
 
 export const ChatRequestSchema = z.object({

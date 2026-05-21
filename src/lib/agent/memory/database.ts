@@ -86,8 +86,10 @@ export function getDb(): Database.Database {
   try { db.exec("ALTER TABLE responses ADD COLUMN claims_json TEXT"); } catch { /* column exists */ }
   try { db.exec("ALTER TABLE sessions ADD COLUMN file_chunks TEXT NOT NULL DEFAULT '[]'"); } catch { /* column exists */ }
   try { db.exec("ALTER TABLE responses ADD COLUMN confidence_json TEXT"); } catch { /* column exists */ }
-  // Index for context snapshots
+  // Indexes
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_snapshots_session ON context_snapshots(session_id)"); } catch { /* index exists */ }
+  try { db.exec("CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id)"); } catch { /* index exists */ }
+  try { db.exec("CREATE INDEX IF NOT EXISTS idx_responses_session ON responses(session_id)"); } catch { /* index exists */ }
   const insertSetting = db.prepare(
     "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)"
   );

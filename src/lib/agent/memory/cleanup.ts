@@ -4,6 +4,31 @@ import path from "path";
 
 const UPLOADS_DIR = path.join(process.cwd(), "data", "uploads");
 
+const SESSION_ID_RE = /^[a-zA-Z0-9_-]+$/;
+
+function isValidSessionId(id: string): boolean {
+  return SESSION_ID_RE.test(id) && id.length >= 1 && id.length <= 128;
+}
+
+function deleteSessionCascade(db: ReturnType<typeof getDb>, sessionId: string): void {
+  db.prepare("DELETE FROM context_snapshots WHERE session_id = ?").run(sessionId);
+  db.prepare("DELETE FROM messages WHERE session_id = ?").run(sessionId);
+  db.prepare("DELETE FROM responses WHERE session_id = ?").run(sessionId);
+  db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
+}
+
+function removeUploadDir(sessionId: string): void {
+  if (!isValidSessionId(sessionId)) return;
+  const dir = path.join(UPLOADS_DIR, sessionId);
+  try {
+    if (fs.existsSync(dir)) {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  } catch {
+    // best-effort
+  }
+}
+
 /**
  * Prune sessions based on retention policy.
  * - Deletes unstarred sessions older than retention_days
@@ -17,9 +42,9 @@ export function pruneOldSessions(): void {
   const retentionDays = parseInt(getSetting("retention_days") ?? "90", 10);
   const maxSessions = parseInt(getSetting("retention_max_sessions") ?? "0", 10);
 
-  const deletedIds: string[] = [];
-
   const pruneByAge = db.transaction(() => {
+    const idsToRemove: string[] = [];
+
     // 1. Time-based: delete sessions older than cutoff (exclude starred)
     if (retentionDays > 0) {
       const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
@@ -30,8 +55,7 @@ export function pruneOldSessions(): void {
         .all(cutoff) as { id: string }[];
 
       for (const s of oldSessions) {
-        deleteSessionCascade(db, s.id);
-        deletedIds.push(s.id);
+        idsToRemove.push(s.id);
       }
     }
 
@@ -46,30 +70,15 @@ export function pruneOldSessions(): void {
         .all(maxSessions) as { id: string }[];
 
       for (const s of excess) {
-        deleteSessionCascade(db, s.id);
-        deletedIds.push(s.id);
+        idsToRemove.push(s.id);
       }
+    }
+
+    for (const id of idsToRemove) {
+      deleteSessionCascade(db, id);
+      removeUploadDir(id);
     }
   });
 
   pruneByAge();
-
-  // Clean up upload directories for deleted sessions
-  for (const id of deletedIds) {
-    const dir = path.join(UPLOADS_DIR, id);
-    try {
-      if (fs.existsSync(dir)) {
-        fs.rmSync(dir, { recursive: true, force: true });
-      }
-    } catch {
-      // Directory cleanup is best-effort
-    }
-  }
-}
-
-function deleteSessionCascade(db: ReturnType<typeof getDb>, sessionId: string): void {
-  db.prepare("DELETE FROM context_snapshots WHERE session_id = ?").run(sessionId);
-  db.prepare("DELETE FROM messages WHERE session_id = ?").run(sessionId);
-  db.prepare("DELETE FROM responses WHERE session_id = ?").run(sessionId);
-  db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
 }

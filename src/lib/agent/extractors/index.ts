@@ -19,6 +19,17 @@ export interface TextChunk {
   pageNumber?: number;
 }
 
+export function mergeWordBoxes(boxes: WordBox[]): WordBox {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const b of boxes) {
+    if (b.x < minX) minX = b.x;
+    if (b.y < minY) minY = b.y;
+    if (b.x + b.width > maxX) maxX = b.x + b.width;
+    if (b.y + b.height > maxY) maxY = b.y + b.height;
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
 export interface ExtractionResult {
   text: string;
   chunks: TextChunk[];
@@ -39,10 +50,15 @@ export interface ExtractionResult {
 export async function extractFileContent(file: {
   name: string;
   type: string;
+  size?: number;
   dataUrl?: string;
 }): Promise<ExtractionResult> {
   if (!file.dataUrl) {
     return { text: `[File: ${file.name} — no content data available]`, chunks: [] };
+  }
+
+  if (file.size && file.size > 50 * 1024 * 1024) {
+    return { text: `[File: ${file.name} — file exceeds 50MB maximum size]`, chunks: [] };
   }
 
   const type = file.type.toLowerCase();
@@ -53,7 +69,6 @@ export async function extractFileContent(file: {
   if (type.startsWith("image/") || imageExts.includes(ext)) {
     try {
       const result = await extractImageText(file.dataUrl);
-      console.log(`[extractors] OCR success for ${file.name} (${result.text.length} chars, ${result.chunks.length} chunks): ${result.text.slice(0, 200)}`);
       return {
         text: result.text,
         chunks: result.chunks,
@@ -70,7 +85,6 @@ export async function extractFileContent(file: {
   if (type === "application/pdf" || ext === "pdf") {
     try {
       const result = await extractPdfText(file.dataUrl);
-      console.log(`[extractors] PDF success for ${file.name} (${result.text.length} chars, ${result.pageCount} pages, ${result.chunks.length} chunks): ${result.text.slice(0, 200)}`);
       return {
         text: result.text,
         chunks: result.chunks,

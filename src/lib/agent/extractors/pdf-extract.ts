@@ -1,7 +1,7 @@
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { PDFParse } from "pdf-parse";
 import { extractImageText } from "./ocr";
-import type { TextChunk, WordBox } from "./index";
+import { mergeWordBoxes, type TextChunk, type WordBox } from "./index";
 
 export interface PdfResult {
   text: string;
@@ -39,24 +39,14 @@ function groupItemsIntoLines(items: PdfTextItem[]): PdfTextItem[][] {
   for (let i = 1; i < withPos.length; i++) {
     const prevBox = withPos[i - 1].box;
     const currBox = withPos[i].box;
-    if (Math.abs(currBox.y - prevBox.y) <= 8) {
+    const tolerance = Math.max(prevBox.height, currBox.height) * 0.75;
+    if (Math.abs(currBox.y - prevBox.y) <= tolerance) {
       lines[lines.length - 1].push(withPos[i].item);
     } else {
       lines.push([withPos[i].item]);
     }
   }
   return lines;
-}
-
-function mergeWordBoxes(boxes: WordBox[]): WordBox {
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const b of boxes) {
-    if (b.x < minX) minX = b.x;
-    if (b.y < minY) minY = b.y;
-    if (b.x + b.width > maxX) maxX = b.x + b.width;
-    if (b.y + b.height > maxY) maxY = b.y + b.height;
-  }
-  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
 function linesToChunks(lines: PdfTextItem[][], pageNumber: number): TextChunk[] {
@@ -113,22 +103,36 @@ function linesToChunks(lines: PdfTextItem[][], pageNumber: number): TextChunk[] 
   return chunks.map((c, i) => ({ ...c, id: `c${i + 1}` }));
 }
 
+const PDF_MAGIC = /^%PDF/;
+
 export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
   const base64 = dataUrl.split(",")[1] ?? dataUrl;
   const buffer = Buffer.from(base64, "base64");
+
+  if (!PDF_MAGIC.test(buffer.slice(0, 4).toString("ascii"))) {
+    return {
+      text: "[PDF processing failed: file does not start with %PDF header]",
+      pageCount: 0,
+      chunks: [],
+      ocrConfidence: 0,
+      extractorUsed: "error",
+    };
+  }
+
   const data = new Uint8Array(buffer);
 
   // Path A: Positioned text extraction via pdfjs-dist
+  let pdfjsDoc: pdfjs.PDFDocumentProxy | null = null;
   try {
     const loadingTask = pdfjs.getDocument({ data });
-    const doc = await loadingTask.promise;
-    const pageCount = doc.numPages;
+    pdfjsDoc = await loadingTask.promise;
+    const pageCount = pdfjsDoc.numPages;
 
     const allChunks: TextChunk[] = [];
     let totalChars = 0;
 
     for (let i = 1; i <= pageCount; i++) {
-      const page = await doc.getPage(i);
+      const page = await pdfjsDoc.getPage(i);
       const textContent = await page.getTextContent();
       const items = textContent.items as PdfTextItem[];
       const lines = groupItemsIntoLines(items);
@@ -142,8 +146,6 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
       page.cleanup();
     }
 
-    doc.destroy();
-
     if (totalChars > 50) {
       const fullText = allChunks.map((c) => c.text).join("\n\n");
       return {
@@ -154,10 +156,10 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
         extractorUsed: "pdfjs-dist",
       };
     }
-
-    console.warn(`[pdf-extract] pdfjs-dist found only ${totalChars} chars — PDF is likely scanned`);
   } catch (err) {
     console.warn(`[pdf-extract] pdfjs-dist extraction failed:`, err);
+  } finally {
+    pdfjsDoc?.destroy();
   }
 
   // Path B: Scanned PDF — render pages via pdf-parse's getScreenshot, then OCR
@@ -171,34 +173,41 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
 
     const pageCount = screenshots.total;
     const allChunks: TextChunk[] = [];
-    let fullText = "";
     let totalConfidence = 0;
     let pageWithText = 0;
     let chunkCounter = 0;
 
-    for (const screenshot of screenshots.pages) {
-      if (!screenshot.dataUrl) continue;
+    const validScreenshots = screenshots.pages.filter((s) => s.dataUrl);
 
-      try {
-        const ocrResult = await extractImageText(screenshot.dataUrl);
-        if (ocrResult.text.trim().length > 0) {
-          fullText += (fullText ? "\n\n" : "") + ocrResult.text;
-          totalConfidence += ocrResult.ocrConfidence ?? 0;
-          pageWithText++;
+    const ocrResults = await Promise.all(
+      validScreenshots.map((screenshot) =>
+        extractImageText(screenshot.dataUrl!).then(
+          (result) => ({ screenshot, result, error: null }),
+          (error) => ({ screenshot, result: null, error })
+        )
+      )
+    );
 
-          for (const chunk of ocrResult.chunks) {
-            allChunks.push({
-              ...chunk,
-              id: `c${++chunkCounter}`,
-              pageNumber: screenshot.pageNumber,
-            });
-          }
-        }
-      } catch (ocrErr) {
-        console.warn(`[pdf-extract] OCR failed for page ${screenshot.pageNumber}:`, ocrErr);
+    for (const { screenshot, result, error } of ocrResults) {
+      if (error) {
+        console.warn(`[pdf-extract] OCR failed for page ${screenshot.pageNumber}:`, error);
+        continue;
+      }
+      if (!result || result.text.trim().length === 0) continue;
+
+      totalConfidence += result.ocrConfidence ?? 0;
+      pageWithText++;
+
+      for (const chunk of result.chunks) {
+        allChunks.push({
+          ...chunk,
+          id: `c${++chunkCounter}`,
+          pageNumber: screenshot.pageNumber,
+        });
       }
     }
 
+    const fullText = allChunks.map((c) => c.text).join("\n\n");
     const avgConfidence = pageWithText > 0 ? totalConfidence / pageWithText : 0;
 
     if (fullText.length > 0) {
