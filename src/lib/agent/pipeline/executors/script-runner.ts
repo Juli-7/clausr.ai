@@ -8,12 +8,6 @@ export interface ScriptResult {
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
-/**
- * Run a Python script from a skill's scripts/ directory.
- *
- * Uses execFile (not exec) to prevent shell injection.
- * Throws on ENOENT; returns { success: false } on non-zero exit or timeout.
- */
 export function runScript(
   scriptPath: string,
   input: unknown,
@@ -45,7 +39,6 @@ export function runScript(
       }
     );
 
-    // Send JSON input via stdin
     if (input !== undefined) {
       child.stdin?.write(JSON.stringify(input));
       child.stdin?.end();

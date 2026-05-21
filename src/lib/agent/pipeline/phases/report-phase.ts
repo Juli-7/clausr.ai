@@ -1,6 +1,6 @@
 import { logPipeline } from "../logger";
 import type { PipelineContext } from "../pipeline-context";
-import type { ParsedStep } from "@/lib/agent/skill/step-parser";
+import type { ExecutableStep } from "../step-executor";
 
 /**
  * Domain-schema report assembly.
@@ -9,7 +9,7 @@ import type { ParsedStep } from "@/lib/agent/skill/step-parser";
  */
 export async function reportPhase(
   ctx: PipelineContext,
-  steps: ParsedStep[],
+  steps: ExecutableStep[],
   maxStepNum: number
 ): Promise<void> {
   logPipeline("→ AUTO: assembling report from step outputs and check results");

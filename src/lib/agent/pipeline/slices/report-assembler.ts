@@ -1,5 +1,3 @@
-import type { ParsedStep } from "@/lib/agent/skill/step-parser";
-
 export class ReportAssembler {
   private sections: Record<string, Record<string, string> | string> | null = null;
   private verdict: "PASS" | "FAIL" | null = null;

@@ -1,5 +1,5 @@
 import { loadSkill } from "@/lib/agent/skill/loader";
-import { generateSkill } from "@/lib/agent/skill/skill-generator";
+import { generateSkill } from "@/lib/agent/extractors/skill-generator";
 import { getOrCreateSession, addUserMessage } from "@/lib/agent/memory/repository";
 import { getResponsesForSession } from "@/lib/agent/memory/repository";
 import { pruneOldSessions } from "@/lib/agent/memory/cleanup";

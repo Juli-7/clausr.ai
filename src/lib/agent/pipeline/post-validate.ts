@@ -1,5 +1,5 @@
 import type { PipelineContext, CheckResult } from "./pipeline-context";
-import type { ParsedStep } from "@/lib/agent/skill/step-parser";
+import type { ExecutableStep } from "./step-executor";
 
 export interface ValidationError {
   type:
@@ -14,7 +14,7 @@ export interface ValidationError {
 
 export function postValidate(
   ctx: PipelineContext,
-  steps?: ParsedStep[]
+  steps?: ExecutableStep[]
 ): ValidationError[] {
   const errors: ValidationError[] = [];
 

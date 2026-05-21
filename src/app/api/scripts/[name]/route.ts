@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadSkill } from "@/lib/agent/skill/loader";
-import { runScript } from "@/lib/agent/skill/script-runner";
+import { runScript } from "@/lib/agent/pipeline/executors/script-runner";
 import { ComplianceCheckSchema } from "@/lib/agent/schemas";
 
 /**

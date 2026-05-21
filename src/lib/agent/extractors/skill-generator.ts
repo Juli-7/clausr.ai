@@ -2,7 +2,6 @@ import { streamText } from "ai";
 import matter from "gray-matter";
 import { createModel } from "@/lib/agent/llm/factory";
 import { parseChecks, extractRegulationIds } from "@/lib/agent/skill/check-parser";
-import { parseSteps } from "@/lib/agent/skill/step-parser";
 import { SkillLoadError } from "@/lib/agent/pipeline/errors";
 import type { SkillLoader } from "@/lib/agent/skill/loader";
 import { logPipeline } from "@/lib/agent/pipeline/logger";
@@ -48,13 +47,8 @@ Examples:
 
 (System-maintained area, initially empty.)
 
-
 Now generate the SKILL.md for the user's request below.`;
 
-/**
- * Generate a SkillLoader-compatible object from a user message and optional file texts.
- * Uses the LLM to generate a SKILL.md, then parses it.
- */
 export async function generateSkill(
   message: string,
   fileTexts: string[]
@@ -84,7 +78,6 @@ export async function generateSkill(
 
   logPipeline(`[SKILL-GEN] raw output length=${fullText.length}chars`);
 
-  // Parse frontmatter and body
   let parsed: matter.GrayMatterFile<string>;
   try {
     parsed = matter(fullText);
@@ -98,24 +91,11 @@ export async function generateSkill(
 
   const skillmd = parsed.content.trim();
 
-  // Parse checks
   const checks = parseChecks(skillmd);
   const regulationIds = extractRegulationIds(checks);
 
-  // Parse steps
-  let steps;
-  try {
-    steps = parseSteps(skillmd);
-  } catch (err) {
-    throw new SkillLoadError(
-      "SKILL_GENERATION_FAILED",
-      `Generated SKILL.md missing or invalid §2 Execution Flow: ${err instanceof Error ? err.message : String(err)}`,
-      "auto-generated"
-    );
-  }
-
   logPipeline(
-    `[SKILL-GEN] name="${parsed.data?.name ?? "auto-generated"}" checks=${checks.length} steps=${steps.length} regulationIds=${regulationIds.join(", ") || "none"}`
+    `[SKILL-GEN] name="${parsed.data?.name ?? "auto-generated"}" checks=${checks.length} regulationIds=${regulationIds.join(", ") || "none"}`
   );
 
   return {

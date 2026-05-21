@@ -1,10 +1,10 @@
 import { streamText, tool } from "ai";
 import { createModel } from "@/lib/agent/llm/factory";
 import { loadSkill } from "@/lib/agent/skill/loader";
-import { runScript } from "@/lib/agent/skill/script-runner";
+import { runScript } from "./script-runner";
 import { ComplianceCheckSchema, type ComplianceCheckInput } from "@/lib/agent/schemas";
 import { executeComplianceCheck } from "@/lib/agent/pipeline/builtins";
-import type { ParsedStep } from "@/lib/agent/skill/step-parser";
+import type { ExecutableStep } from "../step-executor";
 import type { ParsedCheck } from "@/lib/agent/skill/check-parser";
 import type { PipelineContext } from "../pipeline-context";
 import type { StepResult } from "../step-executor";
@@ -12,7 +12,7 @@ import type { ToolCallRecord } from "@/lib/agent/types";
 import { logPipeline, truncate } from "../logger";
 
 export async function executeLlmStep(
-  step: ParsedStep,
+  step: ExecutableStep,
   ctx: PipelineContext,
   previousError?: string
 ): Promise<StepResult> {
@@ -86,7 +86,7 @@ ${citationGuide}
 }
 
 export async function executeLlmToolStep(
-  step: ParsedStep,
+  step: ExecutableStep,
   ctx: PipelineContext,
   previousError?: string
 ): Promise<StepResult> {

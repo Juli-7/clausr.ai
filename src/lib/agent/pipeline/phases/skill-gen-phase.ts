@@ -1,4 +1,4 @@
-import { generateSkill } from "@/lib/agent/skill/skill-generator";
+import { generateSkill } from "@/lib/agent/extractors/skill-generator";
 import { logPipeline } from "../logger";
 import type { PipelineContext } from "../pipeline-context";
 

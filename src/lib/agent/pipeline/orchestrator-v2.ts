@@ -1,4 +1,4 @@
-import { executeStep } from "./step-executor";
+import { executeStep, generateStepsFromChecks } from "./step-executor";
 import { saveContextSnapshot, getResponseCount } from "@/lib/agent/memory/repository";
 import { PipelineError, formatPipelineError } from "./errors";
 import { logPipeline, truncate } from "./logger";
@@ -6,7 +6,6 @@ import { initPhase } from "./phases/init-phase";
 import { inputPhase } from "./phases/input-phase";
 import { skillGenPhase } from "./phases/skill-gen-phase";
 import { identifyRevisionTarget } from "./phases/revision-phase";
-import { parseStepsPhase } from "./phases/execute-phase";
 import { enforceChecks } from "./phases/enforce-checks";
 import { reportPhase } from "./phases/report-phase";
 import { finalizePhase } from "./phases/finalize-phase";
@@ -57,20 +56,8 @@ export async function* orchestratePipeline(
     }
   }
 
-  // ── Phase 3: Parse steps ──
-  let steps;
-  try {
-    steps = parseStepsPhase(ctx);
-  } catch (err) {
-    yield {
-      type: "error",
-      error: formatPipelineError(err, correlationId),
-      code: err instanceof PipelineError ? err.code : "SKILL_PARSE_FAILED",
-      correlationId,
-    };
-    return;
-  }
-
+  // ── Phase 3: Generate steps from Checks table ──
+  const steps = generateStepsFromChecks(ctx.skill.checks);
   yield { type: "status", phase: `executing-${steps.length}-steps` };
   const turnNumber = getResponseCount(sessionId) + 1;
 

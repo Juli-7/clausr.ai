@@ -14,13 +14,6 @@ triggers: ["VWTA", "lighting", "headlamp", "R48", "R112", "type approval"]
 | beam_cutoff_angle | number(0-2) | <= 0.57 | R112.5.3 | | Degrees; compliance-check tool required |
 | luminous_flux | number(0-500) | >= 150 | R112.5.2 | | Lumens per lamp |
 
-## 2. Execution Flow
-| # | Step | Executor |
-|---|------|----------|
-| 1 | Identify light source type and vehicle mounting configuration from documents | llm |
-| 2 | Load regulation references for all cited clauses | builtin:load-references |
-| 3 | Extract numerical values and run compliance checks against regulations | llm+tool |
-
 ## 3. Expected Output
 A compliance report with PASS/FAIL verdict for each check, citing specific regulation clauses. Auto-leveling must be flagged as required for all LED sources.
 

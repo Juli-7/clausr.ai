@@ -1,24 +1,30 @@
-import type { ParsedStep } from "@/lib/agent/skill/step-parser";
 import type { PipelineContext } from "./pipeline-context";
+import type { ParsedCheck } from "@/lib/agent/skill/check-parser";
 import { executeLlmStep, executeLlmToolStep } from "./executors/llm-executor";
 import { executeBuiltin } from "./builtins";
 import { PipelineError } from "./errors";
 import { logPipeline } from "./logger";
 
+export type StepType = "llm" | "llm+tool" | `builtin:${string}`;
+
+export interface ExecutableStep {
+  number: number;
+  title: string;
+  type: StepType;
+  instructions: string;
+  temperature?: number;
+}
+
 export interface StepResult {
   success: boolean;
   error?: string;
-  /** Machine-readable error code for the client */
   errorCode?: string;
-  /** Context snapshot data captured during LLM execution (null for script steps) */
   contextSnapshot?: {
     systemPrompt: string;
     userMessage: string;
     contextSummary: string;
   };
-  /** Buffered text tokens from LLM streaming — flushed to client after step succeeds */
   streamedTokens?: string[];
-  /** Per-check tool results — flushed to client after step succeeds */
   toolResults?: {
     name: string;
     value: number;
@@ -29,18 +35,28 @@ export interface StepResult {
   }[];
 }
 
-/**
- * Execute a single pipeline step.
- *
- * Dispatch order:
- * 1. Check if the step matches a built-in handler (keyword-detected)
- * 2. Dispatch by step type (llm, script, llm+tool)
- *
- * Each step gets 1 retry on failure, with the previous error
- * passed as context for the retry.
- */
+export function generateStepsFromChecks(checks: ParsedCheck[]): ExecutableStep[] {
+  return [
+    {
+      number: 1,
+      title: "Load regulation references from checks",
+      type: "builtin:load-references",
+      instructions: "Load all regulation references cited in the ## Checks table clauses",
+    },
+    {
+      number: 2,
+      title: "Extract values and run compliance checks",
+      type: "llm+tool",
+      instructions:
+        "Analyze the uploaded documents, extract values for every field in the ## Checks table, " +
+        "run the compliance-check tool for numerical constraints, and produce structured results " +
+        "with citations to the loaded regulation clauses.",
+    },
+  ];
+}
+
 export async function executeStep(
-  step: ParsedStep,
+  step: ExecutableStep,
   ctx: PipelineContext,
   maxRetries = 1
 ): Promise<StepResult> {
@@ -66,13 +82,12 @@ export async function executeStep(
 }
 
 async function tryExecute(
-  step: ParsedStep,
+  step: ExecutableStep,
   ctx: PipelineContext,
   previousError: string
 ): Promise<StepResult> {
   logPipeline(`  [DISPATCH] step=${step.number} → type="${step.type}"`);
 
-  // Dispatch by step type
   if (step.type.startsWith("builtin:")) {
     return executeBuiltin(step.type, ctx);
   }

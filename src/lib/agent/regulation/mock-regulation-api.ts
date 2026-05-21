@@ -1,3 +1,4 @@
+import Database from "better-sqlite3";
 import type {
   Regulation,
   Clause,
@@ -10,180 +11,188 @@ import type {
   SearchClausesRequest,
   SearchClausesResponse,
 } from "./regulation-types";
-import { RegulationSchema } from "./regulation-types";
 import type { IRegulationApi } from "./regulation-api";
 
-// ── Mock data ──
+let _db: Database.Database | null = null;
 
-const MOCK_REGULATIONS: Regulation[] = [
-  {
-    id: "un-r48",
-    code: "R48",
-    title: "UN Regulation No. 48 — Lighting and Light-Signalling Devices",
-    description: "Uniform provisions concerning the approval of vehicles with regard to the installation of lighting and light-signalling devices.",
-    jurisdiction: "UNECE",
-    versions: [
-      { version: "06", effectiveDate: "2019-01-01", isCurrent: false, changelog: "Initial supplement 4 to 06 series" },
-      { version: "07", effectiveDate: "2023-01-01", isCurrent: true, changelog: "07 series amendments — LED and adaptive driving beam provisions" },
-    ],
-    clauses: [
-      { id: "r48-5", number: "5", title: "General specifications", text: "All lighting and light-signalling devices shall be installed so that the vehicle complies with the requirements of this Regulation under normal conditions of use." },
-      { id: "r48-5.1", number: "5.1", title: "General", text: "Devices shall be securely fixed and shall not be affected by vibrations encountered in normal use." },
-      { id: "r48-6", number: "6", title: "Individual specifications", text: "The installation of each type of device shall conform to the requirements specified in the following paragraphs." },
-      { id: "r48-6.1", number: "6.1", title: "Headlamps — Mounting height", text: "The mounting height of headlamps shall be not less than 500 mm and not more than 1,200 mm above the ground for vehicles of category M1 and N1." },
-      { id: "r48-6.2", number: "6.2", title: "Headlamps — Number", text: "The number of headlamps shall be two for vehicles of a width exceeding 1,300 mm, and one for vehicles of a width not exceeding 1,300 mm." },
-      { id: "r48-6.3", number: "6.3", title: "Position lamps — Geometrical visibility", text: "The geometrical visibility of position lamps shall include the angles defined in paragraph 2.13 of this Regulation." },
-      { id: "r48-6.4", number: "6.4", title: "Stop lamps — Colour", text: "Stop lamps shall emit red light. The chromaticity coordinates shall conform to the boundaries specified in paragraph 2.17.1." },
-      { id: "r48-6.5", number: "6.5", title: "Direction indicator lamps — Electrical connections", text: "Direction indicator lamps shall flash. The electrical connections shall be such that the lamps cannot be switched off individually." },
-      { id: "r48-6.6", number: "6.6", title: "Rear fog lamps — Position", text: "The rear fog lamp shall be mounted on the centreline of the vehicle, or offset to the driver's side." },
-      { id: "r48-6.7", number: "6.7", title: "Daytime running lamps", text: "Daytime running lamps shall be installed in the front of the vehicle and shall switch off automatically when headlamps are activated." },
-      { id: "r48-6.8", number: "6.8", title: "Adaptive Driving Beam (ADB)", text: "ADB systems shall automatically adjust the beam pattern to avoid dazzling other road users while maintaining maximum illumination." },
-      { id: "r48-6.9", number: "6.9", title: "Rear registration plate illuminating device", text: "The rear registration plate shall be illuminated by a white light device that ensures readability at night." },
-      { id: "r48-6.10", number: "6.10", title: "Reversing lamps", text: "Reversing lamps shall be white and shall illuminate the area behind the vehicle." },
-      { id: "r48-6.11", number: "6.11", title: "End-outline marker lamps", text: "End-outline marker lamps shall be fitted to vehicles exceeding 2.10 m in width." },
-      { id: "r48-6.12", number: "6.12", title: "Side marker lamps", text: "Side marker lamps shall be fitted to vehicles exceeding 6 m in length." },
-    ],
-    crossReferences: ["R112", "R148", "R149"],
-  },
-  {
-    id: "un-r112",
-    code: "R112",
-    title: "UN Regulation No. 112 — Headlamps Emitting an Asymmetrical Passing Beam",
-    description: "Uniform provisions concerning the approval of motor vehicle headlamps emitting an asymmetrical passing beam or a driving beam or both.",
-    jurisdiction: "UNECE",
-    versions: [
-      { version: "01", effectiveDate: "2015-01-01", isCurrent: false },
-      { version: "02", effectiveDate: "2022-01-01", isCurrent: true, changelog: "LED source provisions updated" },
-    ],
-    clauses: [
-      { id: "r112-5", number: "5", title: "General specifications", text: "Each headlamp shall be so manufactured as to conform to the specifications set out in this Regulation." },
-      { id: "r112-5.1", number: "5.1", title: "General — Markings", text: "Headlamps shall bear the applicant's trade name or mark and the designation 'HC' or 'HC/R'." },
-      { id: "r112-5.2", number: "5.2", title: "General — Materials", text: "Lenses shall be made of glass or plastic material that meets the requirements of this Regulation." },
-      { id: "r112-6", number: "6", title: "Illumination specifications", text: "Headlamps shall meet the photometric requirements specified in Annex 3." },
-      { id: "r112-6.1", number: "6.1", title: "Passing beam — Cut-off", text: "The passing beam shall have a distinct cut-off line. The horizontal portion shall be at an angle of 0° to 0.5° below the horizontal plane." },
-      { id: "r112-6.2", number: "6.2", title: "Passing beam — Intensity", text: "The maximum intensity of the passing beam shall not exceed the values specified in Table 1 of Annex 3." },
-      { id: "r112-6.3", number: "6.3", title: "Driving beam — Intensity", text: "The driving beam shall produce a maximum luminous intensity of not less than the value specified in paragraph 6.3.1." },
-      { id: "r112-6.4", number: "6.4", title: "Colour temperature", text: "The colour temperature of the light source shall be between 2,800 K and 6,500 K. For LED sources, the chromaticity coordinates shall fall within the boundaries defined in Annex 7." },
-      { id: "r112-6.5", number: "6.5", title: "Beam pattern — Uniformity", text: "The illumination across the beam pattern shall be uniform, with no abrupt changes in intensity." },
-    ],
-    crossReferences: ["R48", "R148"],
-  },
-  {
-    id: "un-r83",
-    code: "R83",
-    title: "UN Regulation No. 83 — Emission of Pollutants",
-    description: "Uniform provisions concerning the approval of vehicles with regard to the emission of pollutants according to engine fuel requirements.",
-    jurisdiction: "UNECE",
-    versions: [
-      { version: "07", effectiveDate: "2017-01-01", isCurrent: false },
-      { version: "08", effectiveDate: "2023-01-01", isCurrent: true, changelog: "WLTP test cycle integration" },
-    ],
-    clauses: [
-      { id: "r83-5", number: "5", title: "Application for approval", text: "The application for approval shall be submitted by the vehicle manufacturer." },
-      { id: "r83-5.1", number: "5.1", title: "Application — Test vehicle", text: "A vehicle representative of the type to be approved shall be submitted to the technical service." },
-      { id: "r83-5.2", number: "5.2", title: "Application — Documentation", text: "The application shall include a description of the engine, fuel system, and emission control devices." },
-      { id: "r83-5.3", number: "5.3", title: "OBD system documentation", text: "Documentation describing the OBD system architecture, monitored components, and malfunction indicators." },
-      { id: "r83-6", number: "6", title: "Specifications and tests", text: "The vehicle shall be tested according to the procedures described in Annex 4." },
-      { id: "r83-6.1", number: "6.1", title: "Exhaust emissions — Type I test", text: "The Type I test shall measure CO, HC, NOx, and PM emissions over the applicable driving cycle." },
-      { id: "r83-6.2", number: "6.2", title: "Exhaust emissions — Type III test", text: "The Type III test (crankcase emissions) shall verify that no crankcase gases are discharged to the atmosphere." },
-      { id: "r83-6.3", number: "6.3", title: "Evaporative emissions — Type IV test", text: "The Type IV test shall measure hydrocarbon emissions from the fuel system." },
-      { id: "r83-6.4", number: "6.4", title: "Durability — Type V test", text: "The durability test shall verify that emission limits are maintained over the vehicle's useful life." },
-      { id: "r83-6.5", number: "6.5", title: "OBD system", text: "The OBD system shall detect malfunctions in emission-related components and illuminate the MIL." },
-    ],
-    crossReferences: ["R49", "R96"],
-  },
-  {
-    id: "un-r154",
-    code: "R154",
-    title: "UN Regulation No. 154 — WLTP Emissions",
-    description: "Uniform provisions concerning the approval of M1, N1 and M2 vehicles with regard to WLTP emissions.",
-    jurisdiction: "UNECE",
-    versions: [
-      { version: "00", effectiveDate: "2020-01-01", isCurrent: false },
-      { version: "01", effectiveDate: "2024-01-01", isCurrent: true, changelog: "Supplement 2 — RDE provisions" },
-    ],
-    clauses: [
-      { id: "r154-5", number: "5", title: "Application for approval", text: "The application for approval of a vehicle type with regard to WLTP emissions shall be submitted by the manufacturer." },
-      { id: "r154-6", number: "6", title: "WLTP test procedure", text: "The WLTP test shall be conducted according to the procedures specified in Annex 1." },
-      { id: "r154-6.1", number: "6.1", title: "WLTP — Vehicle preparation", text: "The test vehicle shall be preconditioned according to the procedures in Annex 1, paragraph 2." },
-      { id: "r154-6.2", number: "6.2", title: "WLTP — Dynamometer settings", text: "Road load coefficients shall be determined according to Annex 4." },
-      { id: "r154-6.3", number: "6.3", title: "WLTP — Test cycle", text: "The applicable WLTC cycle shall be determined based on the vehicle's power-to-mass ratio and maximum speed." },
-    ],
-    crossReferences: ["R83"],
-  },
-  {
-    id: "un-r13",
-    code: "R13",
-    title: "UN Regulation No. 13 — Braking",
-    description: "Uniform provisions concerning the approval of vehicles of categories M, N and O with regard to braking.",
-    jurisdiction: "UNECE",
-    versions: [
-      { version: "11", effectiveDate: "2018-01-01", isCurrent: false },
-      { version: "12", effectiveDate: "2023-01-01", isCurrent: true, changelog: "AEBS and ESC provisions" },
-    ],
-    clauses: [
-      { id: "r13-5", number: "5", title: "Application for approval", text: "The application for approval shall be submitted by the vehicle manufacturer or authorized representative." },
-      { id: "r13-5.1", number: "5.1", title: "Braking system description", text: "The application shall include a detailed description of the service, secondary, and parking braking systems." },
-      { id: "r13-5.2", number: "5.2", title: "ABS documentation", text: "If equipped with ABS, documentation describing the system architecture and performance characteristics." },
-      { id: "r13-6", number: "6", title: "Braking performance", text: "The vehicle shall meet the braking performance requirements specified in Annex 3." },
-      { id: "r13-6.1", number: "6.1", title: "Service braking — Type 0 test", text: "The Type 0 test shall verify braking performance with cold brakes at the prescribed test speed." },
-      { id: "r13-6.2", number: "6.2", title: "Service braking — Type I test", text: "The Type I test (fade test) shall verify braking performance after repeated applications." },
-      { id: "r13-6.3", number: "6.3", title: "Parking braking", text: "The parking brake shall hold the vehicle stationary on a 20% gradient, both laden and unladen." },
-      { id: "r13-6.4", number: "6.4", title: "ABS performance", text: "ABS-equipped vehicles shall meet the adhesion utilization and wheel lock requirements." },
-    ],
-    crossReferences: ["R13H", "R79"],
-  },
-];
+function getDb(): Database.Database {
+  if (_db) return _db;
 
-// ── Code resolution map ──
+  _db = new Database(":memory:");
+  _db.pragma("journal_mode = WAL");
 
-const CODE_ALIASES: Record<string, string> = {
-  "R48": "R48", "r48": "R48", "UN R48": "R48", "UN-R48": "R48", "UNR48": "R48",
-  "R112": "R112", "r112": "R112", "UN R112": "R112", "UN-R112": "R112", "UNR112": "R112",
-  "R83": "R83", "r83": "R83", "UN R83": "R83", "UN-R83": "R83", "UNR83": "R83",
-  "R154": "R154", "r154": "R154", "UN R154": "R154", "UN-R154": "R154", "UNR154": "R154",
-  "R13": "R13", "r13": "R13", "UN R13": "R13", "UN-R13": "R13", "UNR13": "R13",
-};
+  _db.exec(`
+    CREATE TABLE regulations (
+      id TEXT PRIMARY KEY,
+      code TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      jurisdiction TEXT NOT NULL,
+      cross_references TEXT NOT NULL DEFAULT '[]'
+    );
 
-// ── Mock implementation ──
+    CREATE TABLE code_aliases (
+      alias TEXT PRIMARY KEY,
+      code TEXT NOT NULL REFERENCES regulations(code)
+    );
+
+    CREATE TABLE regulation_versions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      regulation_code TEXT NOT NULL REFERENCES regulations(code),
+      version TEXT NOT NULL,
+      effective_date TEXT NOT NULL,
+      is_current INTEGER NOT NULL DEFAULT 0,
+      changelog TEXT DEFAULT ''
+    );
+
+    CREATE TABLE clauses (
+      id TEXT PRIMARY KEY,
+      regulation_code TEXT NOT NULL REFERENCES regulations(code),
+      number TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT '',
+      text TEXT NOT NULL,
+      parent_clause_id TEXT
+    );
+
+    CREATE INDEX idx_clauses_regulation ON clauses(regulation_code);
+    CREATE INDEX idx_versions_regulation ON regulation_versions(regulation_code);
+  `);
+
+  seedData(_db);
+  return _db;
+}
+
+function seedData(db: Database.Database): void {
+  const regStmt = db.prepare(
+    "INSERT INTO regulations (id, code, title, description, jurisdiction, cross_references) VALUES (?, ?, ?, ?, ?, ?)"
+  );
+  const aliasStmt = db.prepare("INSERT OR IGNORE INTO code_aliases (alias, code) VALUES (?, ?)");
+  const verStmt = db.prepare(
+    "INSERT INTO regulation_versions (regulation_code, version, effective_date, is_current, changelog) VALUES (?, ?, ?, ?, ?)"
+  );
+  const clauseStmt = db.prepare(
+    "INSERT INTO clauses (id, regulation_code, number, title, text, parent_clause_id) VALUES (?, ?, ?, ?, ?, ?)"
+  );
+
+  const seed = db.transaction(() => {
+    // R48 — Lighting
+    regStmt.run("un-r48", "R48", "UN Regulation No. 48 — Lighting and Light-Signalling Devices", "Uniform provisions concerning the approval of vehicles with regard to the installation of lighting and light-signalling devices.", "UNECE", JSON.stringify(["R112", "R148", "R149"]));
+    for (const a of ["R48", "r48", "UN R48", "UN-R48", "UNR48"]) aliasStmt.run(a, "R48");
+    verStmt.run("R48", "06", "2019-01-01", 0, "Initial supplement 4 to 06 series");
+    verStmt.run("R48", "07", "2023-01-01", 1, "07 series amendments — LED and adaptive driving beam provisions");
+    clauseStmt.run("r48-5", "R48", "5", "General specifications", "All lighting and light-signalling devices shall be installed so that the vehicle complies with the requirements of this Regulation under normal conditions of use.", null);
+    clauseStmt.run("r48-5.1", "R48", "5.1", "General", "Devices shall be securely fixed and shall not be affected by vibrations encountered in normal use.", null);
+    clauseStmt.run("r48-6", "R48", "6", "Individual specifications", "The installation of each type of device shall conform to the requirements specified in the following paragraphs.", null);
+    clauseStmt.run("r48-6.1", "R48", "6.1", "Headlamps — Mounting height", "The mounting height of headlamps shall be not less than 500 mm and not more than 1,200 mm above the ground for vehicles of category M1 and N1.", null);
+    clauseStmt.run("r48-6.2", "R48", "6.2", "Headlamps — Number", "The number of headlamps shall be two for vehicles of a width exceeding 1,300 mm, and one for vehicles of a width not exceeding 1,300 mm.", null);
+    clauseStmt.run("r48-6.3", "R48", "6.3", "Position lamps — Geometrical visibility", "The geometrical visibility of position lamps shall include the angles defined in paragraph 2.13 of this Regulation.", null);
+    clauseStmt.run("r48-6.4", "R48", "6.4", "Stop lamps — Colour", "Stop lamps shall emit red light. The chromaticity coordinates shall conform to the boundaries specified in paragraph 2.17.1.", null);
+    clauseStmt.run("r48-6.5", "R48", "6.5", "Direction indicator lamps — Electrical connections", "Direction indicator lamps shall flash. The electrical connections shall be such that the lamps cannot be switched off individually.", null);
+    clauseStmt.run("r48-6.6", "R48", "6.6", "Rear fog lamps — Position", "The rear fog lamp shall be mounted on the centreline of the vehicle, or offset to the driver's side.", null);
+    clauseStmt.run("r48-6.7", "R48", "6.7", "Daytime running lamps", "Daytime running lamps shall be installed in the front of the vehicle and shall switch off automatically when headlamps are activated.", null);
+    clauseStmt.run("r48-6.8", "R48", "6.8", "Adaptive Driving Beam (ADB)", "ADB systems shall automatically adjust the beam pattern to avoid dazzling other road users while maintaining maximum illumination.", null);
+    clauseStmt.run("r48-6.9", "R48", "6.9", "Rear registration plate illuminating device", "The rear registration plate shall be illuminated by a white light device that ensures readability at night.", null);
+    clauseStmt.run("r48-6.10", "R48", "6.10", "Reversing lamps", "Reversing lamps shall be white and shall illuminate the area behind the vehicle.", null);
+    clauseStmt.run("r48-6.11", "R48", "6.11", "End-outline marker lamps", "End-outline marker lamps shall be fitted to vehicles exceeding 2.10 m in width.", null);
+    clauseStmt.run("r48-6.12", "R48", "6.12", "Side marker lamps", "Side marker lamps shall be fitted to vehicles exceeding 6 m in length.", null);
+
+    // R112 — Headlamps
+    regStmt.run("un-r112", "R112", "UN Regulation No. 112 — Headlamps Emitting an Asymmetrical Passing Beam", "Uniform provisions concerning the approval of motor vehicle headlamps emitting an asymmetrical passing beam or a driving beam or both.", "UNECE", JSON.stringify(["R48", "R148"]));
+    for (const a of ["R112", "r112", "UN R112", "UN-R112", "UNR112"]) aliasStmt.run(a, "R112");
+    verStmt.run("R112", "01", "2015-01-01", 0, "");
+    verStmt.run("R112", "02", "2022-01-01", 1, "LED source provisions updated");
+    clauseStmt.run("r112-5", "R112", "5", "General specifications", "Each headlamp shall be so manufactured as to conform to the specifications set out in this Regulation.", null);
+    clauseStmt.run("r112-5.1", "R112", "5.1", "General — Markings", "Headlamps shall bear the applicant's trade name or mark and the designation 'HC' or 'HC/R'.", null);
+    clauseStmt.run("r112-5.2", "R112", "5.2", "General — Materials", "Lenses shall be made of glass or plastic material that meets the requirements of this Regulation.", null);
+    clauseStmt.run("r112-6", "R112", "6", "Illumination specifications", "Headlamps shall meet the photometric requirements specified in Annex 3.", null);
+    clauseStmt.run("r112-6.1", "R112", "6.1", "Passing beam — Cut-off", "The passing beam shall have a distinct cut-off line. The horizontal portion shall be at an angle of 0° to 0.5° below the horizontal plane.", null);
+    clauseStmt.run("r112-6.2", "R112", "6.2", "Passing beam — Intensity", "The maximum intensity of the passing beam shall not exceed the values specified in Table 1 of Annex 3.", null);
+    clauseStmt.run("r112-6.3", "R112", "6.3", "Driving beam — Intensity", "The driving beam shall produce a maximum luminous intensity of not less than the value specified in paragraph 6.3.1.", null);
+    clauseStmt.run("r112-6.4", "R112", "6.4", "Colour temperature", "The colour temperature of the light source shall be between 2,800 K and 6,500 K. For LED sources, the chromaticity coordinates shall fall within the boundaries defined in Annex 7.", null);
+    clauseStmt.run("r112-6.5", "R112", "6.5", "Beam pattern — Uniformity", "The illumination across the beam pattern shall be uniform, with no abrupt changes in intensity.", null);
+
+    // R83 — Emissions
+    regStmt.run("un-r83", "R83", "UN Regulation No. 83 — Emission of Pollutants", "Uniform provisions concerning the approval of vehicles with regard to the emission of pollutants according to engine fuel requirements.", "UNECE", JSON.stringify(["R49", "R96"]));
+    for (const a of ["R83", "r83", "UN R83", "UN-R83", "UNR83"]) aliasStmt.run(a, "R83");
+    verStmt.run("R83", "07", "2017-01-01", 0, "");
+    verStmt.run("R83", "08", "2023-01-01", 1, "WLTP test cycle integration");
+    clauseStmt.run("r83-5", "R83", "5", "Application for approval", "The application for approval shall be submitted by the vehicle manufacturer.", null);
+    clauseStmt.run("r83-5.1", "R83", "5.1", "Application — Test vehicle", "A vehicle representative of the type to be approved shall be submitted to the technical service.", null);
+    clauseStmt.run("r83-5.2", "R83", "5.2", "Application — Documentation", "The application shall include a description of the engine, fuel system, and emission control devices.", null);
+    clauseStmt.run("r83-5.3", "R83", "5.3", "OBD system documentation", "Documentation describing the OBD system architecture, monitored components, and malfunction indicators.", null);
+    clauseStmt.run("r83-6", "R83", "6", "Specifications and tests", "The vehicle shall be tested according to the procedures described in Annex 4.", null);
+    clauseStmt.run("r83-6.1", "R83", "6.1", "Exhaust emissions — Type I test", "The Type I test shall measure CO, HC, NOx, and PM emissions over the applicable driving cycle.", null);
+    clauseStmt.run("r83-6.2", "R83", "6.2", "Exhaust emissions — Type III test", "The Type III test (crankcase emissions) shall verify that no crankcase gases are discharged to the atmosphere.", null);
+    clauseStmt.run("r83-6.3", "R83", "6.3", "Evaporative emissions — Type IV test", "The Type IV test shall measure hydrocarbon emissions from the fuel system.", null);
+    clauseStmt.run("r83-6.4", "R83", "6.4", "Durability — Type V test", "The durability test shall verify that emission limits are maintained over the vehicle's useful life.", null);
+    clauseStmt.run("r83-6.5", "R83", "6.5", "OBD system", "The OBD system shall detect malfunctions in emission-related components and illuminate the MIL.", null);
+
+    // R154 — WLTP
+    regStmt.run("un-r154", "R154", "UN Regulation No. 154 — WLTP Emissions", "Uniform provisions concerning the approval of M1, N1 and M2 vehicles with regard to WLTP emissions.", "UNECE", JSON.stringify(["R83"]));
+    for (const a of ["R154", "r154", "UN R154", "UN-R154", "UNR154"]) aliasStmt.run(a, "R154");
+    verStmt.run("R154", "00", "2020-01-01", 0, "");
+    verStmt.run("R154", "01", "2024-01-01", 1, "Supplement 2 — RDE provisions");
+    clauseStmt.run("r154-5", "R154", "5", "Application for approval", "The application for approval of a vehicle type with regard to WLTP emissions shall be submitted by the manufacturer.", null);
+    clauseStmt.run("r154-6", "R154", "6", "WLTP test procedure", "The WLTP test shall be conducted according to the procedures specified in Annex 1.", null);
+    clauseStmt.run("r154-6.1", "R154", "6.1", "WLTP — Vehicle preparation", "The test vehicle shall be preconditioned according to the procedures in Annex 1, paragraph 2.", null);
+    clauseStmt.run("r154-6.2", "R154", "6.2", "WLTP — Dynamometer settings", "Road load coefficients shall be determined according to Annex 4.", null);
+    clauseStmt.run("r154-6.3", "R154", "6.3", "WLTP — Test cycle", "The applicable WLTC cycle shall be determined based on the vehicle's power-to-mass ratio and maximum speed.", null);
+
+    // R13 — Braking
+    regStmt.run("un-r13", "R13", "UN Regulation No. 13 — Braking", "Uniform provisions concerning the approval of vehicles of categories M, N and O with regard to braking.", "UNECE", JSON.stringify(["R13H", "R79"]));
+    for (const a of ["R13", "r13", "UN R13", "UN-R13", "UNR13"]) aliasStmt.run(a, "R13");
+    verStmt.run("R13", "11", "2018-01-01", 0, "");
+    verStmt.run("R13", "12", "2023-01-01", 1, "AEBS and ESC provisions");
+    clauseStmt.run("r13-5", "R13", "5", "Application for approval", "The application for approval shall be submitted by the vehicle manufacturer or authorized representative.", null);
+    clauseStmt.run("r13-5.1", "R13", "5.1", "Braking system description", "The application shall include a detailed description of the service, secondary, and parking braking systems.", null);
+    clauseStmt.run("r13-5.2", "R13", "5.2", "ABS documentation", "If equipped with ABS, documentation describing the system architecture and performance characteristics.", null);
+    clauseStmt.run("r13-6", "R13", "6", "Braking performance", "The vehicle shall meet the braking performance requirements specified in Annex 3.", null);
+    clauseStmt.run("r13-6.1", "R13", "6.1", "Service braking — Type 0 test", "The Type 0 test shall verify braking performance with cold brakes at the prescribed test speed.", null);
+    clauseStmt.run("r13-6.2", "R13", "6.2", "Service braking — Type I test", "The Type I test (fade test) shall verify braking performance after repeated applications.", null);
+    clauseStmt.run("r13-6.3", "R13", "6.3", "Parking braking", "The parking brake shall hold the vehicle stationary on a 20% gradient, both laden and unladen.", null);
+    clauseStmt.run("r13-6.4", "R13", "6.4", "ABS performance", "ABS-equipped vehicles shall meet the adhesion utilization and wheel lock requirements.", null);
+  });
+
+  seed();
+}
+
+function rowToRegulation(row: Record<string, unknown>, db: Database.Database): Regulation {
+  const code = row.code as string;
+  const versions = db.prepare("SELECT version, effective_date AS effectiveDate, is_current AS isCurrent, changelog FROM regulation_versions WHERE regulation_code = ? ORDER BY id ASC").all(code) as Regulation["versions"];
+  const clauses = db.prepare("SELECT id, number, title, text, parent_clause_id AS parentClauseId FROM clauses WHERE regulation_code = ? ORDER BY number ASC").all(code) as Clause[];
+  return {
+    id: row.id as string,
+    code,
+    title: row.title as string,
+    description: row.description as string,
+    jurisdiction: row.jurisdiction as string,
+    versions: versions.map((v) => ({ ...v, isCurrent: Boolean(v.isCurrent) })),
+    clauses,
+    crossReferences: JSON.parse(row.cross_references as string),
+  };
+}
 
 export class MockRegulationApi implements IRegulationApi {
-  private cache = new Map<string, Regulation>();
-  private clauseCache = new Map<string, Clause>();
-
-  constructor() {
-    for (const reg of MOCK_REGULATIONS) {
-      this.cache.set(reg.code, reg);
-      for (const clause of reg.clauses) {
-        this.clauseCache.set(`${reg.code}:${clause.number}`, clause);
-      }
-    }
+  resolveCode(rawCode: string): string | null {
+    const db = getDb();
+    const row = db.prepare("SELECT code FROM code_aliases WHERE alias = ?").get(rawCode) as { code: string } | undefined;
+    return row?.code ?? null;
   }
 
   async getRegulation(req: GetRegulationRequest): Promise<GetRegulationResponse> {
     try {
       const code = this.resolveCode(req.code);
-      if (!code) {
-        return { success: false, error: `Unknown regulation code: ${req.code}` };
-      }
+      if (!code) return { success: false, error: `Unknown regulation code: ${req.code}` };
 
-      const regulation = this.cache.get(code);
-      if (!regulation) {
-        return { success: false, error: `Regulation ${code} not found in mock database` };
-      }
+      const db = getDb();
+      const row = db.prepare("SELECT * FROM regulations WHERE code = ?").get(code) as Record<string, unknown> | undefined;
+      if (!row) return { success: false, error: `Regulation ${code} not found` };
 
-      // Validate before returning
-      const validated = RegulationSchema.safeParse(regulation);
-      if (!validated.success) {
-        return { success: false, error: `Invalid regulation data: ${validated.error.message}` };
-      }
+      const regulation = rowToRegulation(row, db);
 
-      // Version filtering (mock: just check if version exists)
       if (req.version) {
-        const versionExists = regulation.versions.some((v) => v.version === req.version);
-        if (!versionExists) {
-          return { success: false, error: `Version ${req.version} not found for regulation ${code}` };
-        }
+        const exists = regulation.versions.some((v) => v.version === req.version);
+        if (!exists) return { success: false, error: `Version ${req.version} not found for regulation ${code}` };
       }
 
       return { success: true, data: regulation };
@@ -195,17 +204,13 @@ export class MockRegulationApi implements IRegulationApi {
   async getClause(req: GetClauseRequest): Promise<GetClauseResponse> {
     try {
       const code = this.resolveCode(req.regulationCode);
-      if (!code) {
-        return { success: false, error: `Unknown regulation code: ${req.regulationCode}` };
-      }
+      if (!code) return { success: false, error: `Unknown regulation code: ${req.regulationCode}` };
 
-      const key = `${code}:${req.clauseNumber}`;
-      const clause = this.clauseCache.get(key);
-      if (!clause) {
-        return { success: false, error: `Clause ${req.clauseNumber} not found in regulation ${code}` };
-      }
+      const db = getDb();
+      const row = db.prepare("SELECT id, number, title, text, parent_clause_id AS parentClauseId FROM clauses WHERE regulation_code = ? AND number = ?").get(code, req.clauseNumber) as Clause | undefined;
+      if (!row) return { success: false, error: `Clause ${req.clauseNumber} not found in regulation ${code}` };
 
-      return { success: true, data: clause, regulationCode: code };
+      return { success: true, data: row, regulationCode: code };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
     }
@@ -213,23 +218,24 @@ export class MockRegulationApi implements IRegulationApi {
 
   async listRegulations(req: ListRegulationsRequest): Promise<ListRegulationsResponse> {
     try {
-      let results = [...this.cache.values()];
+      const db = getDb();
+      let query = "SELECT * FROM regulations WHERE 1=1";
+      const params: unknown[] = [];
 
       if (req.jurisdiction) {
-        results = results.filter((r) => r.jurisdiction === req.jurisdiction);
+        query += " AND jurisdiction = ?";
+        params.push(req.jurisdiction);
       }
 
       if (req.keyword) {
-        const kw = req.keyword.toLowerCase();
-        results = results.filter(
-          (r) =>
-            r.title.toLowerCase().includes(kw) ||
-            r.description.toLowerCase().includes(kw) ||
-            r.code.toLowerCase().includes(kw)
-        );
+        query += " AND (title LIKE ? OR description LIKE ? OR code LIKE ?)";
+        const kw = `%${req.keyword}%`;
+        params.push(kw, kw, kw);
       }
 
-      return { success: true, data: results };
+      const rows = db.prepare(query).all(...params) as Record<string, unknown>[];
+      const data = rows.map((r) => rowToRegulation(r, db));
+      return { success: true, data };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
     }
@@ -237,46 +243,32 @@ export class MockRegulationApi implements IRegulationApi {
 
   async searchClauses(req: SearchClausesRequest): Promise<SearchClausesResponse> {
     try {
-      const results: { clause: Clause; regulationCode: string }[] = [];
-      const regulations = req.regulationCodes
-        ? req.regulationCodes.map((c) => this.resolveCode(c)).filter(Boolean) as string[]
-        : [...this.cache.keys()];
+      const db = getDb();
+      const kw = `%${req.keyword}%`;
 
-      const kw = req.keyword.toLowerCase();
+      let query = "SELECT c.*, c.regulation_code AS regulationCode FROM clauses c WHERE (c.title LIKE ? OR c.text LIKE ? OR c.number LIKE ?)";
+      const params: unknown[] = [kw, kw, kw];
 
-      for (const code of regulations) {
-        const reg = this.cache.get(code);
-        if (!reg) continue;
-
-        for (const clause of reg.clauses) {
-          if (
-            clause.title.toLowerCase().includes(kw) ||
-            clause.text.toLowerCase().includes(kw) ||
-            clause.number.includes(kw)
-          ) {
-            results.push({ clause, regulationCode: code });
-          }
+      if (req.regulationCodes && req.regulationCodes.length > 0) {
+        const codes = req.regulationCodes.map((c) => this.resolveCode(c)).filter(Boolean) as string[];
+        if (codes.length > 0) {
+          query += ` AND c.regulation_code IN (${codes.map(() => "?").join(",")})`;
+          params.push(...codes);
         }
       }
 
-      return { success: true, data: results };
+      const rows = db.prepare(query).all(...params) as (Clause & { regulationCode: string })[];
+      const data = rows.map((r) => ({ clause: { id: r.id, number: r.number, title: r.title, text: r.text, parentClauseId: r.parentClauseId } as Clause, regulationCode: r.regulationCode }));
+      return { success: true, data };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
     }
   }
 
-  resolveCode(rawCode: string): string | null {
-    return CODE_ALIASES[rawCode] ?? null;
-  }
-
   invalidateCache(): void {
-    this.cache.clear();
-    this.clauseCache.clear();
-    for (const reg of MOCK_REGULATIONS) {
-      this.cache.set(reg.code, reg);
-      for (const clause of reg.clauses) {
-        this.clauseCache.set(`${reg.code}:${clause.number}`, clause);
-      }
+    if (_db) {
+      _db.close();
+      _db = null;
     }
   }
 }

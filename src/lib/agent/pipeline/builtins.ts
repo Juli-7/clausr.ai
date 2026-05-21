@@ -1,4 +1,4 @@
-import { loadRegulations } from "@/lib/agent/regulation/skill-source";
+import { getRegulationApi } from "@/lib/agent/regulation/regulation-api";
 import { getConversationHistory } from "@/lib/agent/memory/repository";
 import type { ComplianceCheckInput } from "@/lib/agent/schemas";
 import type {
@@ -45,7 +45,17 @@ async function loadReferences(ctx: PipelineContext): Promise<StepResult> {
 
     logPipeline(`  [BUILTIN] load-references: ${regulationIds.join(", ")}`);
 
-    const regulations = await loadRegulations(regulationIds);
+    const api = getRegulationApi();
+    const regulations = (
+      await Promise.all(
+        regulationIds.map(async (id) => {
+          const resolved = api.resolveCode(id);
+          if (!resolved) return null;
+          const result = await api.getRegulation({ code: resolved });
+          return result.success ? result.data : null;
+        })
+      )
+    ).filter((r): r is NonNullable<typeof r> => r !== null);
 
     const refTexts: string[] = [];
     const palette: CitationPaletteEntry[] = [];

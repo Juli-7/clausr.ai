@@ -3,7 +3,7 @@ import { buildClauseTextsFromPalette } from "../clause-texts";
 import { postValidate } from "../post-validate";
 import { AgentResponseSchema } from "@/lib/agent/schemas";
 import type { AgentResponse } from "@/lib/agent/types";
-import type { ParsedStep } from "@/lib/agent/skill/step-parser";
+import type { ExecutableStep } from "../step-executor";
 import { logPipeline, truncate } from "../logger";
 import type { PipelineContext } from "../pipeline-context";
 
@@ -15,7 +15,7 @@ export interface FinalizePhaseResult {
 
 export async function finalizePhase(
   ctx: PipelineContext,
-  steps: ParsedStep[],
+  steps: ExecutableStep[],
   sessionId: string
 ): Promise<FinalizePhaseResult> {
   logPipeline("→ AUTO: computing verdict");
@@ -91,7 +91,7 @@ export async function finalizePhase(
 
 function formatContent(
   ctx: PipelineContext,
-  steps: ParsedStep[]
+  steps: ExecutableStep[]
 ): string {
   const sections = ctx.report.getSections();
   if (sections) {
@@ -171,7 +171,7 @@ function computeObjectiveConfidence(ctx: PipelineContext): {
 
 function buildReasoningSteps(
   ctx: PipelineContext,
-  steps: ParsedStep[]
+  steps: ExecutableStep[]
 ): { stepNumber: number; title: string; body: string }[] {
   const result: { stepNumber: number; title: string; body: string }[] = [];
   for (const step of steps) {
@@ -185,7 +185,7 @@ function buildReasoningSteps(
 
 function buildReasoningFromSteps(
   ctx: PipelineContext,
-  steps: ParsedStep[]
+  steps: ExecutableStep[]
 ): string {
   const parts: string[] = [];
 
