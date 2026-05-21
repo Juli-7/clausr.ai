@@ -37,7 +37,6 @@ export async function POST(req: NextRequest) {
 
     const { message, skillName, sessionId, files } = parsed.data;
     dbg("skillName: " + String(skillName) + " | message: " + message.slice(0, 80) + " | files: " + (files ? files.map(f => f.name + " (" + f.type + ", dataUrl:" + (f.dataUrl ? f.dataUrl.slice(0, 30) + "..." : "MISSING") + ")" ).join("; ") : "none"));
-    const useTemplate = body.useTemplate !== false; // default true
 
     // ── SSE streaming response ──
     const stream = new ReadableStream({
@@ -48,7 +47,7 @@ export async function POST(req: NextRequest) {
         };
 
         try {
-          for await (const event of orchestratePipeline(message, skillName, sessionId, useTemplate, files)) {
+          for await (const event of orchestratePipeline(message, skillName, sessionId, files)) {
             send(event);
           }
         } catch (err) {

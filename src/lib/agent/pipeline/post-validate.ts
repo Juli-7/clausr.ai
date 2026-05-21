@@ -1,9 +1,9 @@
-import type { PipelineContext } from "./pipeline-context";
+import type { PipelineContext, CheckResult } from "./pipeline-context";
+import type { ParsedStep } from "@/lib/agent/skill/step-parser";
 
 export interface ValidationError {
   type:
     | "citation-mismatch"
-    | "template-incomplete"
     | "verdict-inconsistent"
     | "source-mismatch"
     | "chunk-mismatch"
@@ -12,8 +12,25 @@ export interface ValidationError {
   message: string;
 }
 
-export function postValidate(ctx: PipelineContext): ValidationError[] {
+export function postValidate(
+  ctx: PipelineContext,
+  steps?: ParsedStep[]
+): ValidationError[] {
   const errors: ValidationError[] = [];
+
+  // Step completeness check
+  if (steps && steps.length > 0) {
+    for (const step of steps) {
+      const output = ctx.steps.read(step.number);
+      if (output === undefined || output === null) {
+        errors.push({
+          type: "step-missing",
+          message: `Step ${step.number} "${step.title}" produced no output`,
+        });
+      }
+    }
+  }
+
   const checks = ctx.checks;
   const palette = ctx.palette;
   const sourcePalette = ctx.files.getSourcePalette();
@@ -118,18 +135,6 @@ export function postValidate(ctx: PipelineContext): ValidationError[] {
         type: "source-mismatch",
         message: `[S${marker}] appears in content but not in compiledSourceCitations`,
       });
-    }
-  }
-
-  if (ctx.skill.template) {
-    for (const section of ctx.skill.template.sections) {
-      const sectionValue = sections[section.id];
-      if (sectionValue === undefined || sectionValue === null) {
-        errors.push({
-          type: "template-incomplete",
-          message: `Template section "${section.id}" is missing`,
-        });
-      }
     }
   }
 

@@ -56,7 +56,6 @@ export interface PipelineContext {
   };
   sessionId: string;
   correlationId: string;
-  useTemplate: boolean;
 
   /** Decomposed context slices */
   checks: CheckStore;
@@ -106,14 +105,12 @@ export function createPipelineContext(
   template: ReportTemplate | null,
   sessionId: string,
   correlationId: string,
-  useTemplate?: boolean,
   checks?: ParsedCheck[]
 ): PipelineContext {
   return {
     skill: { name: skillName, skillmd, template, checks: checks ?? [] },
     sessionId,
     correlationId,
-    useTemplate: useTemplate ?? (template !== null),
     checks: new CheckStore(),
     steps: new StepMemory(),
     files: new FileRegistry(),

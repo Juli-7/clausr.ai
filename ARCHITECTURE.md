@@ -16,11 +16,17 @@
 - **Session persistence** (`src/lib/agent/memory/`) — conversation history, context snapshots
 
 ### 3. Pipeline (`src/lib/agent/pipeline/`)
+- **Orchestrator** (`orchestrator-v2.ts`) — coordinator async generator; calls 5 phases in sequence, keeps step execution loop inline for real-time token/tool-result streaming
 - **PipelineContext** (`pipeline-context.ts`) — shared state: skill (incl. `checks`), files, palette, conversation, session store
-- **Orchestrator** (`orchestrator-v2.ts`) — step-parsing loop, passes `skill.checks` to `createPipelineContext`
-- **Executors** (`executors/`) — `llm-executor.ts` dual-path: `buildDomainSchemaGuide()` for new format (checks → Zod → structured output guide), `buildTemplateOutputGuide()` for old format
-- **Builtins** (`builtins.ts`) — reference loading: picks `loadReferencesForRegulationIds` when checks present, falls back to `extractConditions` + `loadReferencesForConditions` for old format
-- **Steps** — concept, instruction, conversation, builtin (refs loaded into palette, citation palette built from clauseIndex)
+- **Step dispatcher** (`step-executor.ts`) — dispatch by type: `llm`, `llm+tool`, `builtin:*`; retry logic
+- **Phase modules** (`phases/`):
+  - `init-phase.ts` — load skill, create session, build `PipelineContext`
+  - `input-phase.ts` — extract files or restore from saved chunks
+  - `execute-phase.ts` — `parseStepsPhase()`: parse SKILL.md §2 Execution Flow
+  - `report-phase.ts` — template auto-report with claim extraction + chunk validation retry
+  - `finalize-phase.ts` — verdict, confidence, post-validation, response assembly, persist
+- **Builtins** (`builtins.ts`) — reference loading: picks `loadReferencesForRegulationIds` when checks present, falls back to `extractConditions` + `loadReferencesForConditions` for old format; compliance check calculator
+- **LLM executor** (`executors/llm-executor.ts`) — `streamText` with dual-path output guide: `buildDomainSchemaGuide()` for new format (checks → Zod → structured output guide), `buildTemplateOutputGuide()` for old format
 
 ### 4. Output Layer
 - **Report assembly** (`src/lib/agent/export/`) — sections, claims, citations
@@ -76,20 +82,5 @@ pipeline/
     ├── execute-phase.ts        # step parsing (parseStepsPhase)
     ├── report-phase.ts         # auto report compilation
     └── finalize-phase.ts       # verdict, confidence, validation, response
-```
-SKILL.md → loader.ts → checks[], regulationIds[]
-                              ↓
-createPipelineContext() → ctx.skill.checks[]
-                              ↓
-llm-executor: checks present? → buildDomainSchemaGuide() : buildTemplateOutputGuide()
-                              ↓
-builtins: checks present? → loadReferencesForRegulationIds() : loadReferencesForConditions()
-                              ↓
-  loadReferencesForRegulationIds() → RegulationApi.getRegulation() → clause texts
-  (fallback: skill references/ directory if API doesn't have regulation)
-                              ↓
-palette built from loaded references' clauseIndex
-```
-
 ## Pre-existing Issues (not introduced by segmentation work)
 - `schemas.test.ts`: 7 of 21 tests fail — `CitationSchema.ref` type mismatch, `dataUrl` pattern reject

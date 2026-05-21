@@ -27,7 +27,7 @@ export async function finalizePhase(
   const confidence = computeObjectiveConfidence(ctx);
   logPipeline(`  ✓ confidence=${confidence.score.toFixed(1)}% (ocr=${confidence.ocrConfidence.toFixed(0)}% data=${confidence.dataCompleteness.toFixed(0)}% llm×${confidence.llmMultiplier.toFixed(2)})${confidence.needsExpert ? " NEEDS_EXPERT" : ""}`);
 
-  const validationErrors = postValidate(ctx);
+  const validationErrors = postValidate(ctx, steps);
 
   if (validationErrors.length > 0) {
     logPipeline(`⚠ POST-VALIDATION found ${validationErrors.length} issue(s): ${validationErrors.map(e => e.message).join("; ")}`);

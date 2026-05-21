@@ -17,7 +17,7 @@ export async function executeLlmStep(
   previousError?: string
 ): Promise<StepResult> {
   try {
-    const wantsJson = ctx.useTemplate && ctx.skill.template !== null;
+    const wantsJson = ctx.skill.checks.length > 0;
 
     const contextSummary = buildContextSummary(ctx);
     const retryContext = previousError
@@ -336,7 +336,7 @@ function findCitationRef(ctx: PipelineContext, result: Record<string, unknown>):
   return `${regulation}.0`;
 }
 
-function buildDomainSchemaGuide(checks: ParsedCheck[]): string {
+export function buildDomainSchemaGuide(checks: ParsedCheck[]): string {
   const parts: string[] = [];
   parts.push("");
   parts.push("# Expected Data Schema");
@@ -359,52 +359,6 @@ function buildDomainSchemaGuide(checks: ParsedCheck[]): string {
   parts.push("Every factual value MUST end with citation markers like [R48.5.11] or [S1].");
   parts.push("For numerical checks, use the compliance-check tool to validate. Include the tool result.");
   parts.push("For conditional checks, evaluate the condition first before including the result.");
-  return parts.join("\n");
-}
-
-function buildTemplateOutputGuide(template: NonNullable<PipelineContext["skill"]["template"]>): string {
-  const sectionsSkeleton: Record<string, unknown> = {};
-  for (const s of template.sections) {
-    if (s.type === "fields" && s.fields && s.fields.length > 0) {
-      const fieldObj: Record<string, string> = {};
-      for (const f of s.fields) fieldObj[f.id] = "";
-      sectionsSkeleton[s.id] = fieldObj;
-    } else if (s.type === "verdict") {
-      sectionsSkeleton[s.id] = "PASS";
-    } else {
-      sectionsSkeleton[s.id] = "";
-    }
-  }
-
-  const example = {
-    content: "## Compliance Report\\nYour markdown report text here with [R48.5.11] and [S1] citations...",
-    sections: sectionsSkeleton,
-    verdict: "PASS",
-    claims: [
-      { statement: "Product model is XYZ-200", citationRef: "S1", chunkRef: "S1.c2" },
-      { statement: "Luminous flux reading is 150 units", citationRef: "R48.5.11", chunkRef: "S1.c3", sourceRef: 1 },
-    ],
-    confidence: {
-      llmMultiplier: 0.95,
-      llmReasoning: "Sources are consistent, no hedging or ambiguity detected",
-    },
-  };
-
-  const parts: string[] = [];
-  parts.push("");
-  parts.push("# Template Output Format");
-  parts.push(`Template: "${template.name}"`);
-  parts.push("Output your response as a JSON object with this exact structure.");
-  parts.push("The `content` field is the markdown report text. The `sections` object matches the template.");
-  parts.push("Fill every field. Each value in sections MUST end with [R48.x.x] and [SN] citation markers.");
-  parts.push("`claims`: an array of every factual statement you make and which citation backs it.");
-  parts.push("Each claim MUST have: \"statement\" (factual text), \"citationRef\" (R48.5.11 for regulation, or S1 for source file — never comma-separated), \"chunkRef\" (source chunk ID like S1.c3), and optionally \"sourceRef\" (source file number).");
-  parts.push("`confidence`: assesses the reliability of this assessment.");
-  parts.push("  - `llmMultiplier` (0.5–1.0): your judgment of ambiguity + cross-source consistency. 1.0 = all sources agree, no hedging. 0.5 = contradictory sources or heavy uncertainty.");
-  parts.push("  - `llmReasoning`: short explanation of the multiplier (ambiguity, hedging, source consistency).");
-  parts.push("```json");
-  parts.push(JSON.stringify(example, null, 2));
-  parts.push("```");
   return parts.join("\n");
 }
 
@@ -434,9 +388,6 @@ function buildContextSummary(ctx: PipelineContext): string {
 
   if (ctx.skill.checks.length > 0) {
     const guide = buildDomainSchemaGuide(ctx.skill.checks);
-    if (guide) parts.push(guide);
-  } else if (ctx.skill.template && ctx.useTemplate && ctx.checks.getResults().length > 0) {
-    const guide = buildTemplateOutputGuide(ctx.skill.template);
     if (guide) parts.push(guide);
   }
 

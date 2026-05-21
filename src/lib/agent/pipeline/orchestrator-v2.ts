@@ -1,11 +1,11 @@
 import { executeStep } from "./step-executor";
-import { saveContextSnapshot } from "@/lib/agent/memory/repository";
-import { getResponseCount } from "@/lib/agent/memory/repository";
+import { saveContextSnapshot, getResponseCount } from "@/lib/agent/memory/repository";
 import { PipelineError, formatPipelineError } from "./errors";
 import { logPipeline, truncate } from "./logger";
 import { initPhase } from "./phases/init-phase";
 import { inputPhase } from "./phases/input-phase";
 import { parseStepsPhase } from "./phases/execute-phase";
+import { enforceChecks } from "./phases/enforce-checks";
 import { reportPhase } from "./phases/report-phase";
 import { finalizePhase } from "./phases/finalize-phase";
 import type { PipelineEvent } from "./phases/types";
@@ -14,7 +14,6 @@ export async function* orchestratePipeline(
   message: string,
   skillName: string,
   sessionId: string,
-  useTemplate?: boolean,
   files?: {
     name: string;
     size: number;
@@ -26,7 +25,7 @@ export async function* orchestratePipeline(
   let ctx;
   let correlationId: string;
   try {
-    const initResult = await initPhase(skillName, sessionId, message, useTemplate);
+    const initResult = await initPhase(skillName, sessionId, message);
     ctx = initResult.ctx;
     correlationId = initResult.correlationId;
   } catch (err) {
@@ -121,6 +120,9 @@ export async function* orchestratePipeline(
   }
 
   const maxStepNum = steps.length > 0 ? Math.max(...steps.map(s => s.number)) : 0;
+
+  // ── Phase 3b: Enforce checks ──
+  enforceChecks(ctx);
 
   // ── Phase 4: Report ──
   yield { type: "status", phase: "compiling-report" };

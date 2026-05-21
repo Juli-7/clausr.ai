@@ -1,6 +1,5 @@
-import { loadReferencesForConditions, loadReferencesForRegulationIds } from "@/lib/agent/regulation/skill-source";
+import { loadRegulations } from "@/lib/agent/regulation/skill-source";
 import { getConversationHistory } from "@/lib/agent/memory/repository";
-import { loadSkill } from "@/lib/agent/skill/loader";
 import type { ComplianceCheckInput } from "@/lib/agent/schemas";
 import type {
   PipelineContext,
@@ -27,45 +26,65 @@ export async function executeBuiltin(
 
 async function loadReferences(ctx: PipelineContext): Promise<StepResult> {
   try {
-    let refTexts: string[];
+    const regulationIds = ctx.skill.checks.length > 0
+      ? Array.from(new Set(
+          ctx.skill.checks
+            .filter((c) => c.clause)
+            .map((c) => {
+              const match = c.clause!.match(/R(\d+)/);
+              return match ? `R${match[1]}` : null;
+            })
+            .filter((id): id is string => id !== null)
+        )).sort()
+      : [];
 
-    if (ctx.skill.checks.length > 0) {
-      // New format: derive regulation IDs from ## Checks table
-      const regulationIds = Array.from(new Set(
-        ctx.skill.checks
-          .filter((c) => c.clause)
-          .map((c) => {
-            const match = c.clause!.match(/R(\d+)/);
-            return match ? `R${match[1]}` : null;
-          })
-          .filter((id): id is string => id !== null)
-      )).sort();
-      logPipeline(`  [BUILTIN] load-references from checks: ${regulationIds.join(", ")}`);
-      refTexts = loadReferencesForRegulationIds(ctx.skill.name, regulationIds);
-    } else {
-      // Old format: scan files/messages for keywords
-      const conditions = extractConditions(ctx);
-      logPipeline(`  [BUILTIN] load-references conditions=[${conditions.join(", ")}]`);
-      refTexts = loadReferencesForConditions(ctx.skill.name, conditions);
+    if (regulationIds.length === 0) {
+      logPipeline(`  [BUILTIN] load-references: no regulation IDs from checks, skipping`);
+      return { success: true };
     }
 
-    logPipeline(`  [BUILTIN] loaded ${refTexts.length} reference texts`);
+    logPipeline(`  [BUILTIN] load-references: ${regulationIds.join(", ")}`);
+
+    const regulations = await loadRegulations(regulationIds);
+
+    const refTexts: string[] = [];
+    const palette: CitationPaletteEntry[] = [];
+    const seen = new Set<string>();
+
+    for (const reg of regulations) {
+      const header = `--- ${reg.code} ---`;
+      const bodyLines: string[] = [];
+
+      for (const clause of reg.clauses) {
+        const clauseText = clause.title
+          ? `§${clause.number} ${clause.title}\n${clause.text}`
+          : `§${clause.number}\n${clause.text}`;
+        bodyLines.push(clauseText);
+
+        const id = `${reg.code}.${clause.number}`;
+        if (!seen.has(id)) {
+          seen.add(id);
+          palette.push({
+            id,
+            regulation: reg.code,
+            clause: clause.number,
+            text: clauseText,
+          });
+        }
+      }
+
+      refTexts.push(`${header}\n${bodyLines.join("\n\n")}`);
+    }
+
+    logPipeline(`  [BUILTIN] loaded ${refTexts.length} regulation texts`);
     ctx.palette.loadReferences(refTexts.map((rt) => {
-      const headerMatch = rt.match(/^--- ([\w-]+\.md) ---\n/);
+      const headerMatch = rt.match(/^--- ([\w-]+) ---\n/);
       return {
         filename: headerMatch?.[1] ?? "unknown.md",
         content: rt,
       };
     }));
 
-    const skill = loadSkill(ctx.skill.name);
-    const loadedFilenames = new Set(ctx.palette.getReferences().map(r => r.filename));
-    const relevantClauses = (skill.clauseIndex ?? []).filter(c => {
-      const refFilename = `un-r${c.regulation.slice(1)}.md`;
-      return loadedFilenames.has(refFilename);
-    });
-
-    const palette = buildCitationPaletteFromIndex(relevantClauses);
     ctx.palette.loadCitationPalette(palette);
     logPipeline(`  [BUILTIN] citationPalette=${palette.length} entries: ${palette.map(e => `${e.regulation}§${e.clause}[${e.id}]`).join(", ")}`);
 
@@ -140,64 +159,3 @@ export function executeComplianceCheck(input: ComplianceCheckInput): { results: 
 
   return { results };
 }
-
-// ── Helpers ──
-
-function extractConditions(ctx: PipelineContext): string[] {
-  const conditions: string[] = [];
-
-  for (const file of ctx.files.getFiles()) {
-    const lower = file.extractedText.toLowerCase();
-    const filePatterns = [
-      { words: ["led", "headlamp", "low beam", "high beam", "lighting", "xenon"], kw: "lighting" },
-      { words: ["brake", "braking", "abs", "stop lamp"], kw: "braking" },
-      { words: ["emission", "exhaust", "co2", "nox"], kw: "emissions" },
-      { words: ["cut-off", "cutoff"], kw: "cutoff" },
-      { words: ["colour", "color", "temperature", "kelvin"], kw: "colour" },
-    ];
-    for (const { words, kw } of filePatterns) {
-      if (words.some((w) => lower.includes(w))) conditions.push(kw);
-    }
-  }
-
-  try {
-    const history = getConversationHistory(ctx.sessionId);
-    const lastMsg =
-      history.filter((m) => m.role === "user").pop()?.content ?? "";
-    const lower = lastMsg.toLowerCase();
-    const msgPatterns = [
-      { words: ["light", "led", "headlamp", "beam", "flash"], kw: "lighting" },
-      { words: ["brake", "braking", "abs"], kw: "braking" },
-      { words: ["emission", "exhaust", "co2", "nox"], kw: "emissions" },
-      { words: ["cutoff", "cut-off"], kw: "cutoff" },
-      { words: ["colour", "color", "temperature"], kw: "colour" },
-    ];
-    for (const { words, kw } of msgPatterns) {
-      if (words.some((w) => lower.includes(w))) conditions.push(kw);
-    }
-  } catch {
-    // ignore
-  }
-
-  return conditions;
-}
-
-function buildCitationPaletteFromIndex(
-  clauseIndex: { regulation: string; clause: string; text: string }[]
-): CitationPaletteEntry[] {
-  const palette: CitationPaletteEntry[] = [];
-  const seen = new Set<string>();
-  for (const entry of clauseIndex) {
-    const id = `${entry.regulation}.${entry.clause}`;
-    if (seen.has(id)) continue;
-    seen.add(id);
-    palette.push({
-      id,
-      regulation: entry.regulation,
-      clause: entry.clause,
-      text: entry.text,
-    });
-  }
-  return palette;
-}
-

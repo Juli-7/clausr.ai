@@ -8,12 +8,6 @@ import type { ParsedCheck } from "@/lib/agent/skill/check-parser";
 
 const SKILLS_DIR = path.join(process.cwd(), "skills");
 
-export interface ClauseEntry {
-  regulation: string;
-  clause: string;
-  text: string;
-}
-
 export interface SkillLoader {
   /** L1: metadata */
   name: string;
@@ -21,14 +15,10 @@ export interface SkillLoader {
   triggers: string[];
   /** L2: full SKILL.md body (minus frontmatter) */
   skillmd: string;
-  /** L3: reference files available for on-demand loading */
-  references: { name: string; path: string; clauses: string }[];
   /** Scripts available via function calling */
   scripts: { name: string; path: string; desc: string; params: string }[];
   /** Report template (loaded from assets/template.json, optional) */
   template: ReportTemplate | null;
-  /** Pre-parsed clause index from reference files (built at load time) */
-  clauseIndex: ClauseEntry[];
   /** Parsed checks from ## Checks table (new format), empty if not present */
   checks: ParsedCheck[];
   /** Regulation IDs derived from checks' clause column */
@@ -53,24 +43,6 @@ export function loadSkill(skillId: string): SkillLoader {
   const name = parsed.data?.name ?? skillId;
   const description = parsed.data?.description ?? "";
   const triggers: string[] = parsed.data?.triggers ?? [];
-
-  // Discover references/
-  const refsDir = path.join(skillDir, "references");
-  const references: SkillLoader["references"] = [];
-  if (fs.existsSync(refsDir)) {
-    for (const f of fs.readdirSync(refsDir)) {
-      if (!f.endsWith(".md")) continue;
-      const refPath = path.join(refsDir, f);
-      const refContent = fs.readFileSync(refPath, "utf-8");
-      // Extract heading-based clause markers from the reference file
-      const clauses = extractClauses(refContent);
-      references.push({
-        name: f,
-        path: refPath,
-        clauses,
-      });
-    }
-  }
 
   // Discover scripts/
   const scriptsDir = path.join(skillDir, "scripts");
@@ -101,20 +73,6 @@ export function loadSkill(skillId: string): SkillLoader {
     }
   }
 
-  // Pre-parse clause index from all reference files
-  const clauseIndex: ClauseEntry[] = [];
-  for (const ref of references) {
-    const refPath = path.join(refsDir, ref.name);
-    try {
-      const refContent = fs.readFileSync(refPath, "utf-8");
-      referenceCache.set(`${skillId}/${ref.name}`, refContent);
-      const entries = parseClausesFromReference(refContent, ref.name);
-      clauseIndex.push(...entries);
-    } catch {
-      // skip unreadable references
-    }
-  }
-
   // Parse ## Checks table (new format, empty if not present)
   const checks = parseChecks(parsed.content);
   const regulationIds = extractRegulationIds(checks);
@@ -124,39 +82,11 @@ export function loadSkill(skillId: string): SkillLoader {
     description,
     triggers,
     skillmd: parsed.content.trim(),
-    references,
     scripts,
     template,
-    clauseIndex,
     checks,
     regulationIds,
   };
-}
-
-// ── Reference content cache (avoid re-reading from disk) ──
-const referenceCache = new Map<string, string>();
-
-function parseClausesFromReference(content: string, filename: string): ClauseEntry[] {
-  const regMatch = filename.match(/un-r(\d+)\.md/i);
-  if (!regMatch) return [];
-  const regulation = `R${regMatch[1]}`;
-
-  const entries: ClauseEntry[] = [];
-  const clauseRegex =
-    /^(?:##\s*)?§?(\d+(?:\.\d+)*)\s*([^\n]*)\n+([^#]*?)(?=\n(?:##\s*)?§?\d|$)/gms;
-  let match;
-  while ((match = clauseRegex.exec(content)) !== null) {
-    const clause = match[1];
-    const title = match[2].trim();
-    const text = match[3].trim();
-    entries.push({
-      regulation,
-      clause,
-      text: title ? `${title}\n${text}` : text,
-    });
-  }
-
-  return entries;
 }
 
 /**
@@ -168,39 +98,6 @@ export function listSkills(): string[] {
     .readdirSync(SKILLS_DIR, { withFileTypes: true })
     .filter((d) => d.isDirectory() && fs.existsSync(path.join(SKILLS_DIR, d.name, "SKILL.md")))
     .map((d) => d.name);
-}
-
-/**
- * Load on-demand reference text by skillId + reference name.
- */
-export function loadReference(skillId: string, refName: string): string {
-  const cacheKey = `${skillId}/${refName}`;
-  const cached = referenceCache.get(cacheKey);
-  if (cached) return cached;
-
-  const refPath = path.join(SKILLS_DIR, skillId, "references", refName);
-  if (!fs.existsSync(refPath)) {
-    throw new SkillLoadError("SKILL_NOT_FOUND", `Reference "${refName}" not found for skill "${skillId}"`, skillId, { refName });
-  }
-  const content = fs.readFileSync(refPath, "utf-8");
-  referenceCache.set(cacheKey, content);
-  return content;
-}
-
-/**
- * Extract clause markers (headings like "§5.11" or "## §5.11") from markdown reference text.
- */
-function extractClauses(content: string): string {
-  const markers: string[] = [];
-  const regex = /(?:§\s*)?(\d+(?:\.\d+)*)|§(\d+(?:\.\d+)*)/g;
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(content)) !== null) {
-    const clause = match[1] || match[2];
-    if (clause && !markers.includes(clause)) {
-      markers.push(`§${clause}`);
-    }
-  }
-  return markers.join(", ");
 }
 
 function getScriptDescription(filePath: string, filename: string): string {
