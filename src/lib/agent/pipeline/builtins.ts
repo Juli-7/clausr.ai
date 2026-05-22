@@ -1,5 +1,4 @@
 import { getRegulationApi } from "@/lib/agent/knowledge/regulation-api";
-import { getConversationHistory } from "@/lib/agent/shared/memory/repository";
 import type { ComplianceCheckInput } from "@/lib/agent/shared/schemas";
 import type {
   PipelineContext,
@@ -8,23 +7,9 @@ import type {
 import type { StepResult } from "./step-executor";
 import { logPipeline } from "./logger";
 
-// ── Builtin executors ──
-
-export async function executeBuiltin(
-  executor: string,
-  ctx: PipelineContext
-): Promise<StepResult> {
-  switch (executor) {
-    case "builtin:load-references":
-      return loadReferences(ctx);
-    default:
-      return { success: false, error: `Unknown builtin executor: "${executor}"`, errorCode: "BUILTIN_ERROR" };
-  }
-}
-
 // ── Reference loading ──
 
-async function loadReferences(ctx: PipelineContext): Promise<StepResult> {
+export async function loadReferences(ctx: PipelineContext): Promise<StepResult> {
   try {
     const regulationIds = ctx.skill.checks.length > 0
       ? Array.from(new Set(

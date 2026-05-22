@@ -1,10 +1,9 @@
 import type { PipelineContext } from "./pipeline-context";
-import { executeLlmStep, executeLlmToolStep } from "./executors/llm-executor";
-import { executeBuiltin } from "./builtins";
+import { executeLlmToolStep } from "./executors/llm-executor";
 import { PipelineError } from "./errors";
 import { logPipeline } from "./logger";
 
-export type StepType = "llm" | "llm+tool" | `builtin:${string}`;
+export type StepType = "llm+tool";
 
 export interface ExecutableStep {
   number: number;
@@ -65,22 +64,6 @@ async function tryExecute(
   ctx: PipelineContext,
   previousError: string
 ): Promise<StepResult> {
-  logPipeline(`  [DISPATCH] step=${step.number} → type="${step.type}"`);
-
-  if (step.type.startsWith("builtin:")) {
-    return executeBuiltin(step.type, ctx);
-  }
-
-  switch (step.type) {
-    case "llm":
-      return executeLlmStep(step, ctx, previousError);
-    case "llm+tool":
-      return executeLlmToolStep(step, ctx, previousError);
-    default:
-      return {
-        success: false,
-        error: `Step ${step.number}: unknown type "${step.type}"`,
-        errorCode: "UNKNOWN_STEP_TYPE",
-      };
-  }
+  logPipeline(`  [DISPATCH] step=${step.number} → llm+tool`);
+  return executeLlmToolStep(step, ctx, previousError);
 }

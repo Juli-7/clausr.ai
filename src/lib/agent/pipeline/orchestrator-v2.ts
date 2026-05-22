@@ -1,4 +1,5 @@
 import { executeStep } from "./step-executor";
+import { loadReferences } from "./builtins";
 import { generateStepsFromChecks } from "@/lib/agent/loading/generate-steps";
 import { saveContextSnapshot, getResponseCount } from "@/lib/agent/shared/memory/repository";
 import { PipelineError, formatPipelineError } from "./errors";
@@ -56,7 +57,11 @@ export async function* orchestratePipeline(
     }
   }
 
-  // ── Phase 3: Generate steps from Checks table ──
+  // ── Phase 3: Load regulation references into palette ──
+  yield { type: "status", phase: "loading-references" };
+  await loadReferences(ctx);
+
+  // ── Phase 4: Generate steps from Checks table ──
   const steps = generateStepsFromChecks(ctx.skill.checks);
   yield { type: "status", phase: `executing-${steps.length}-steps` };
   const turnNumber = getResponseCount(sessionId) + 1;

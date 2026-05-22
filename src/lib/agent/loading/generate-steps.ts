@@ -2,27 +2,12 @@ import type { ParsedCheck } from "@/lib/agent/loading/skill/check-parser";
 import type { ExecutableStep } from "@/lib/agent/pipeline/step-executor";
 
 export function generateStepsFromChecks(checks: ParsedCheck[]): ExecutableStep[] {
-  const steps: ExecutableStep[] = [
-    {
-      number: 1,
-      title: "Load regulation references from checks",
-      type: "builtin:load-references",
-      instructions: "Load all regulation references cited in the Checks table clauses",
-    },
-  ];
-
-  for (let i = 0; i < checks.length; i++) {
-    const c = checks[i];
-    const fieldInfo = buildFieldInstructions(c);
-    steps.push({
-      number: i + 2,
-      title: `Evaluate: ${c.field}`,
-      type: "llm+tool",
-      instructions: fieldInfo,
-    });
-  }
-
-  return steps;
+  return checks.map((c, i) => ({
+    number: i + 1,
+    title: `Evaluate: ${c.field}`,
+    type: "llm+tool" as const,
+    instructions: buildFieldInstructions(c),
+  }));
 }
 
 function buildFieldInstructions(c: ParsedCheck): string {
