@@ -8,7 +8,7 @@ import { initPhase } from "@/lib/agent/loading/phases/init-phase";
 import { inputPhase } from "@/lib/agent/loading/phases/input-phase";
 import { skillGenPhase } from "@/lib/agent/loading/phases/skill-gen-phase";
 import { identifyRevisionTarget } from "@/lib/agent/loading/phases/revision-phase";
-import { enforceChecks } from "./phases/enforce-checks";
+import { enforceChecks } from "@/lib/agent/evaluation/enforce-checks";
 import { finalizePhase } from "@/lib/agent/present/phases/finalize-phase";
 import type { PipelineEvent } from "./phases/types";
 

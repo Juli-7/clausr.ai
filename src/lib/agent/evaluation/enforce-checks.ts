@@ -1,5 +1,5 @@
-import { logPipeline } from "../logger";
-import type { PipelineContext, CheckResult } from "../pipeline-context";
+import { logPipeline } from "@/lib/agent/pipeline/logger";
+import type { PipelineContext, CheckResult } from "@/lib/agent/pipeline/pipeline-context";
 
 /**
  * Verify every check in `## Checks` was executed as a CheckResult.
