@@ -1,4 +1,5 @@
-import { executeStep, generateStepsFromChecks } from "./step-executor";
+import { executeStep } from "./step-executor";
+import { generateStepsFromChecks } from "@/lib/agent/loading/generate-steps";
 import { saveContextSnapshot, getResponseCount } from "@/lib/agent/shared/memory/repository";
 import { PipelineError, formatPipelineError } from "./errors";
 import { logPipeline, truncate } from "./logger";
