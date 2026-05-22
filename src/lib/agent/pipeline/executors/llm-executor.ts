@@ -104,7 +104,7 @@ ${retryContext}
     }[] = [];
 
     const humanField = step.title.replace("Evaluate: ", "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-    const userMessage = `Execute step ${step.number}: ${step.title}. Write a narrative analysis starting with "### ${humanField}". Then output a JSON code block with the structured result.`;
+    const userMessage = `Execute step ${step.number}: ${step.title}. Write a narrative analysis starting with "### ${humanField}". Then output a JSON code block with this exact structure:\n\`\`\`json\n{"${step.title.replace("Evaluate: ", "")}": {"value": "narrative text with citations", "sourceRef": 1, "chunkRef": "S1.c1", "citationRef": "R37.1b", "verdict": "PASS"}}\n\`\`\``;
 
     const result = streamText({
       model: createModel(),
@@ -180,35 +180,41 @@ ${retryContext}
       };
     }
 
-    // Extract CheckResults from tool calls (numerical)
-    if (collectedToolRuns.length > 0) {
-      const allResults = collectedToolRuns.flatMap(run => run.outputs);
-      const results = allResults.map((r, i) => ({
-        name: (r.name as string) ?? `check-${i + 1}`,
-        type: "numerical" as const,
-        regulation: (r.regulation as string) ?? "",
-        clause: (r.clause as string) ?? "",
-        finding: `${r.name}: ${r.value} ${r.comparison} → ${r.status}`,
-        verdict: r.status === "pass" ? ("PASS" as const) : ("FAIL" as const),
-        citationRef: findCitationRef(ctx, r),
-        toolResult: {
-          value: r.value as number,
-          limit: r.limit as number,
-          comparison: r.comparison as string,
-          status: r.status as "pass" | "fail",
-        },
-      }));
-      ctx.checks.addResults(results);
-      logPipeline(`  [LLM+TOOL] built ${results.length} CheckResult entries from tool output`);
-    }
+    // Always parse narrative from LLM text output
+    const textResults = ctx.skill.checks.length > 0
+      ? extractCheckResultsFromText(fullText, ctx.skill.checks, step.number, ctx.skill.regulationIds)
+      : [];
 
-    // Extract CheckResults from LLM text output when no tool was called (qualitative checks)
-    if (collectedToolRuns.length === 0 && ctx.skill.checks.length > 0) {
-      const textResults = extractCheckResultsFromText(fullText, ctx.skill.checks, step.number);
-      if (textResults.length > 0) {
-        ctx.checks.addResults(textResults);
-        logPipeline(`  [LLM+TOOL] extracted ${textResults.length} CheckResult(s) from LLM text output`);
-      }
+    if (collectedToolRuns.length > 0) {
+      // Build CheckResults from tool output, merge narrative from text
+      const allResults = collectedToolRuns.flatMap(run => run.outputs);
+      const mergedResults = allResults.map((r, i) => {
+        const name = (r.name as string) ?? `check-${i + 1}`;
+        const narrative = textResults.find(tr => tr.name === name);
+        return {
+          name,
+          type: "numerical" as const,
+          regulation: narrative?.regulation ?? (r.regulation as string) ?? "",
+          clause: narrative?.clause ?? (r.clause as string) ?? "",
+          finding: narrative?.finding ?? `${r.name}: ${r.value} ${r.comparison} → ${r.status}`,
+          verdict: r.status === "pass" ? ("PASS" as const) : ("FAIL" as const),
+          citationRef: narrative?.citationRef ?? findCitationRef(ctx, r),
+          sourceRef: narrative?.sourceRef,
+          chunkRef: narrative?.chunkRef,
+          toolResult: {
+            value: r.value as number,
+            limit: r.limit as number,
+            comparison: r.comparison as string,
+            status: r.status as "pass" | "fail",
+          },
+        };
+      });
+      ctx.checks.addResults(mergedResults);
+      logPipeline(`  [LLM+TOOL] merged ${mergedResults.length} CheckResult entry(ies) from tool + narrative`);
+    } else if (textResults.length > 0) {
+      // No tool calls — use narrative results directly (qualitative checks)
+      ctx.checks.addResults(textResults);
+      logPipeline(`  [LLM+TOOL] extracted ${textResults.length} CheckResult(s) from LLM text output`);
     }
 
     storeOutput(ctx, step.number, fullText);
@@ -379,17 +385,27 @@ function buildCitationGuide(ctx: PipelineContext): string {
 }
 
 /**
- * Try to parse the LLM's text output as JSON and extract check results for the current step.
- * Used when no tool was called (qualitative/boolean/enum checks that don't need the compliance tool).
+ * Parse the LLM's JSON output and extract a CheckResult for the current step.
+ *
+ * Expected JSON format (per field):
+ *   {"field_name": {"value": "narrative...", "sourceRef": 1, "chunkRef": "S1.c1", "citationRef": "R37.1b", "verdict": "PASS"}}
  */
 function extractCheckResultsFromText(
   text: string,
   checks: ParsedCheck[],
-  stepNumber: number
+  stepNumber: number,
+  regulationIds: string[]
 ): CheckResult[] {
   let cleaned = text.trim();
-  const fenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
-  if (fenceMatch) cleaned = fenceMatch[1].trim();
+  const startFence = cleaned.indexOf("```");
+  if (startFence !== -1) {
+    const endFence = cleaned.indexOf("```", startFence + 3);
+    if (endFence !== -1) {
+      cleaned = cleaned.substring(startFence + 3, endFence).trim();
+      const jsonIdx = cleaned.indexOf("json");
+      if (jsonIdx === 0) cleaned = cleaned.substring(4).trim();
+    }
+  }
 
   let parsed: Record<string, unknown>;
   try {
@@ -404,34 +420,40 @@ function extractCheckResultsFromText(
   if (!checkDef) return [];
 
   const field = checkDef.field;
-  const rawValue = parsed[field];
-  if (rawValue === undefined) return [];
+  const entry = (parsed as Record<string, unknown>)[field];
+  if (!entry || typeof entry !== "object") return [];
 
-  const valueStr = String(rawValue);
-  const cleanVal = valueStr.replace(/\[.*?\]/g, "").trim().toLowerCase();
-
-  const citationMatch = valueStr.match(/\[(S\d+(?:\.c\d+)?|R\d+\.\d+(?:\.\d+)*)\]/);
-  const citationRef = citationMatch?.[1] ?? "";
-
-  const passValues = new Set(["true", "yes", "present", "available", "completed", "required", "appointed", "pass", "adequacy", "scc", "bcr", "not_required", "partial"]);
-  let verdict: "PASS" | "FAIL" = "FAIL";
-  if (passValues.has(cleanVal)) verdict = "PASS";
-
-  const sourceMatch = citationRef.match(/S(\d+)/);
-  const sourceRef = sourceMatch ? parseInt(sourceMatch[1], 10) : undefined;
+  const e = entry as Record<string, unknown>;
+  const value = typeof e.value === "string" ? e.value : "";
+  const sourceRef = typeof e.sourceRef === "number" ? e.sourceRef : undefined;
+  const chunkRef = typeof e.chunkRef === "string" ? e.chunkRef : "";
+  const citationRef = typeof e.citationRef === "string" ? e.citationRef : "";
+  const verdictRaw = typeof e.verdict === "string" ? e.verdict : "PASS";
+  const verdict = verdictRaw.toUpperCase() === "FAIL" ? "FAIL" as const : "PASS" as const;
 
   const clause = checkDef.clause ?? "";
-  const regMatch = clause.match(/R(\d+)/);
-  const regulation = regMatch ? `R${regMatch[1]}` : clause.match(/Art/i) ? "GDPR" : "";
+  const regulation = deriveRegulation(clause, regulationIds);
+
+  if (!value) return [];
 
   return [{
     name: field,
     type: checkDef.type.kind === "number" ? "numerical" as const : "qualitative" as const,
     regulation,
     clause,
-    finding: `${field}: ${valueStr.replace(/\[.*?\]/g, "").trim()}`,
+    finding: value,
     verdict,
     citationRef,
     sourceRef,
+    chunkRef,
   }];
+}
+
+function deriveRegulation(clause: string, regulationIds: string[]): string {
+  if (regulationIds.length === 1) return regulationIds[0];
+  for (const id of regulationIds) {
+    if (clause.startsWith(id) || clause.includes(id)) return id;
+  }
+  if (regulationIds.length > 0) return regulationIds[0];
+  return "";
 }

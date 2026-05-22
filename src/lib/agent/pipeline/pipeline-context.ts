@@ -35,6 +35,7 @@ export interface CheckResult {
   verdict: "PASS" | "FAIL";
   citationRef: string;
   sourceRef?: number;
+  chunkRef?: string;
   toolCallId?: string;
   toolResult?: {
     value: number;
