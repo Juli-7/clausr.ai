@@ -73,12 +73,6 @@ export function saveFileContents(sessionId: string, fileContents: string): void 
   db.prepare("UPDATE sessions SET file_contents = ? WHERE id = ?").run(fileContents, sessionId);
 }
 
-export function getFileContents(sessionId: string): string {
-  const db = getDb();
-  const row = db.prepare("SELECT file_contents FROM sessions WHERE id = ?").get(sessionId) as { file_contents: string | null } | undefined;
-  return row?.file_contents ?? "";
-}
-
 export function saveFileChunks(sessionId: string, chunksJson: string): void {
   const db = getDb();
   db.prepare("UPDATE sessions SET file_chunks = ? WHERE id = ?").run(chunksJson, sessionId);
@@ -163,7 +157,9 @@ export function getAllSessions(): {
         else if (c.score >= 80) confidenceColor = "#3fb950";
         else if (c.score >= 50) confidenceColor = "#d29922";
         else confidenceColor = "#f85149";
-      } catch { /* ignore corrupt JSON */ }
+      } catch {
+          console.warn("[repository] corrupt confidence_json in response", r.id);
+        }
     }
     return {
       id: r.id,

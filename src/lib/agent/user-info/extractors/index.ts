@@ -1,8 +1,6 @@
-import { extractImageText, type BBox } from "./ocr";
+import { extractImageText } from "./ocr";
 import { extractPdfText } from "./pdf-extract";
 import { extractDocxText } from "./docx-extract";
-
-export type { BBox };
 
 export interface WordBox {
   x: number;

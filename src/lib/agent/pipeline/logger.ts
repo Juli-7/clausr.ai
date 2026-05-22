@@ -7,7 +7,7 @@ function ensureLogFile(): void {
   try {
     fs.mkdirSync(path.dirname(LOG_FILE), { recursive: true });
   } catch {
-    /* ignore */
+    console.warn("[logger] cannot create log directory");
   }
 }
 

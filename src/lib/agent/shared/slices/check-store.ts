@@ -1,3 +1,4 @@
+import { parseChunkRef } from "@/lib/agent/shared/schemas";
 import type { Citation, Claim, SourceCitation } from "@/lib/agent/shared/schemas";
 import type { CheckResult, CitationPaletteEntry, SourcePaletteEntry } from "@/lib/agent/pipeline/pipeline-context";
 import { logPipeline } from "@/lib/agent/pipeline/logger";
@@ -14,6 +15,18 @@ export class CheckStore {
 
   addResults(results: CheckResult[]): void {
     this.checkResults.push(...results);
+  }
+
+  removeResultsForField(field: string): CheckResult[] {
+    const removed: CheckResult[] = [];
+    this.checkResults = this.checkResults.filter((r) => {
+      if (r.name === field) {
+        removed.push(r);
+        return false;
+      }
+      return true;
+    });
+    return removed;
   }
 
   getResults(): readonly CheckResult[] {
@@ -146,10 +159,9 @@ export class CheckStore {
         }
       }
       if (claim.chunkRef) {
-        const match = claim.chunkRef.match(/^S(\d+)\.(.+)$/);
-        if (match) {
-          const fileRef = parseInt(match[1], 10);
-          const chunkId = match[2];
+        const parsed = parseChunkRef(claim.chunkRef);
+        if (parsed) {
+          const { fileRef, chunkId } = parsed;
           if (!referencedChunks.has(fileRef)) referencedChunks.set(fileRef, new Set());
           referencedChunks.get(fileRef)!.add(chunkId);
           if (!firstChunkPerFile.has(fileRef)) {

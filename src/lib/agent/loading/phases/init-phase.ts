@@ -47,14 +47,17 @@ export async function initPhase(
 
   getOrCreateSession(sessionId, skill.name);
   addUserMessage(sessionId, message);
-  try { pruneOldSessions(); } catch { /* best-effort */ }
+  try { pruneOldSessions(); } catch (err) {
+    logPipeline(`session pruning failed (non-critical): ${err instanceof Error ? err.message : String(err)}`);
+  }
 
   const ctx = createPipelineContext(
     skill.name,
     skill.skillmd,
     sessionId,
     correlationId,
-    skill.checks
+    skill.checks,
+    skill.scripts
   );
 
   // Load previous turns from DB into ctx.previousTurns
@@ -78,6 +81,26 @@ export async function initPhase(
       ctx.steps.write(rs.stepNumber, restored);
     }
     logPipeline(`restored ${lastResponse.reasoningSteps.length} step output(s) from previous turn`);
+  }
+
+  // Restore previous CheckResults from the most recent response's findings
+  if (lastResponse?.sections?.findings && typeof lastResponse.sections.findings === "object") {
+    const restoredResults: CheckResult[] = [];
+    for (const [field, finding] of Object.entries(lastResponse.sections.findings)) {
+      const checkDef = ctx.skill.checks.find((c) => c.field === field);
+      const regMatch = finding.match(/\[(R\d+\.\d+(?:\.\d+)*)\]/);
+      restoredResults.push({
+        name: field,
+        type: checkDef?.type.kind === "number" ? "numerical" : "qualitative",
+        regulation: regMatch?.[1]?.replace(/\.\d+$/, "") ?? "",
+        clause: regMatch?.[1] ?? "",
+        finding,
+        verdict: finding.startsWith("FAIL") ? "FAIL" : "PASS",
+        citationRef: regMatch?.[1] ?? "",
+      });
+    }
+    ctx.checks.addResults(restoredResults);
+    logPipeline(`restored ${restoredResults.length} CheckResult(s) from previous turn`);
   }
 
   return { ctx, correlationId, isAutoSkill };

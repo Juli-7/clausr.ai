@@ -1,3 +1,4 @@
+import { parseChunkRef } from "@/lib/agent/shared/schemas";
 import type { Claim, Citation, SourceCitation } from "@/lib/agent/shared/schemas";
 import type { CitationPaletteEntry, SourcePaletteEntry } from "@/lib/agent/pipeline/pipeline-context";
 
@@ -106,16 +107,15 @@ function validateClaimChunks(
 
   for (const claim of claims) {
     if (!claim.chunkRef) continue;
-    const match = claim.chunkRef.match(/^S(\d+)\.(.+)$/);
-    if (!match) {
+    const parsed = parseChunkRef(claim.chunkRef);
+    if (!parsed) {
       errors.push({
         type: "chunk-mismatch",
         message: `Claim "${claim.statement.slice(0, 80)}" has invalid chunkRef "${claim.chunkRef}"`,
       });
       continue;
     }
-    const fileRef = parseInt(match[1], 10);
-    const chunkId = match[2];
+    const { fileRef, chunkId } = parsed;
     const sourceEntry = sourcePalette.find((e) => e.id === fileRef);
     if (!sourceEntry) {
       errors.push({ type: "chunk-missing", message: `Claim references S${fileRef} not in source palette` });

@@ -1,5 +1,5 @@
 import type { ParsedCheck } from "@/lib/agent/loading/skill/check-parser";
-import type { ExecutableStep } from "@/lib/agent/pipeline/step-executor";
+import type { ExecutableStep } from "@/lib/agent/pipeline/types";
 
 export function generateStepsFromChecks(checks: ParsedCheck[]): ExecutableStep[] {
   return checks.map((c, i) => ({

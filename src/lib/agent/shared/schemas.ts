@@ -105,7 +105,7 @@ export const AgentResponseSchema = z.object({
 
 // ── Request ──
 
-const dataUrlPattern = /^data:[\w/+]+;base64,[a-zA-Z0-9+/=]+$/;
+const dataUrlPattern = /^data:[-+\w/.]+;base64,[a-zA-Z0-9+/=]+$/;
 
 export const ChatRequestFileSchema = z.object({
   name: z.string().min(1),
@@ -119,6 +119,7 @@ export const ChatRequestSchema = z.object({
   skillName: z.string().optional(),
   sessionId: z.string().min(1, "Session ID is required"),
   files: z.array(ChatRequestFileSchema).optional(),
+  revisionFields: z.array(z.string()).optional(),
 });
 
 // ── Script tools ──
@@ -155,3 +156,13 @@ export type Claim = z.infer<typeof ClaimSchema>;
 export type ToolCallRecord = z.infer<typeof ToolCallRecordSchema>;
 export type ValidationError = z.infer<typeof ValidationErrorSchema>;
 export type ReasoningStep = z.infer<typeof ReasoningStepSchema>;
+
+// ── Chunk ref parsing utility ──
+
+const CHUNK_REF_RE = /^S(\d+)\.(.+)$/;
+
+export function parseChunkRef(chunkRef: string): { fileRef: number; chunkId: string } | null {
+  const match = chunkRef.match(CHUNK_REF_RE);
+  if (!match) return null;
+  return { fileRef: parseInt(match[1], 10), chunkId: match[2] };
+}

@@ -4,7 +4,7 @@ import type {
   PipelineContext,
   CitationPaletteEntry,
 } from "./pipeline-context";
-import type { StepResult } from "./step-executor";
+import type { StepResult } from "./types";
 import { logPipeline } from "./logger";
 
 // ── Reference loading ──
@@ -16,8 +16,11 @@ export async function loadReferences(ctx: PipelineContext): Promise<StepResult> 
           ctx.skill.checks
             .filter((c) => c.clause)
             .map((c) => {
-              const match = c.clause!.match(/R(\d+)/);
-              return match ? `R${match[1]}` : null;
+              const rMatch = c.clause!.match(/R(\d+)/);
+              if (rMatch) return `R${rMatch[1]}`;
+              const artMatch = c.clause!.match(/Art\s*(\d+)/i);
+              if (artMatch) return "GDPR";
+              return null;
             })
             .filter((id): id is string => id !== null)
         )).sort()

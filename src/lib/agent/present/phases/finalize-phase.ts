@@ -1,7 +1,7 @@
 import { getResponseCount, addAssistantResponse } from "@/lib/agent/shared/memory/repository";
 import { AgentResponseSchema } from "@/lib/agent/shared/schemas";
 import type { AgentResponse } from "@/lib/agent/shared/types";
-import type { ExecutableStep } from "@/lib/agent/pipeline/step-executor";
+import type { ExecutableStep } from "@/lib/agent/pipeline/types";
 import { logPipeline } from "@/lib/agent/pipeline/logger";
 import type { PipelineContext } from "@/lib/agent/pipeline/pipeline-context";
 import { evaluate } from "@/lib/agent/evaluation";

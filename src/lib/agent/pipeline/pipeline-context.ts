@@ -1,4 +1,3 @@
-import type { Citation, SourceCitation, Verdict, Claim } from "@/lib/agent/shared/schemas";
 import type { TextChunk } from "@/lib/agent/user-info/extractors";
 import type { ParsedCheck } from "@/lib/agent/loading/skill/check-parser";
 import { CheckStore } from "@/lib/agent/shared/slices/check-store";
@@ -51,31 +50,19 @@ export interface PipelineContext {
     name: string;
     skillmd: string;
     checks: ParsedCheck[];
+    scripts: { name: string; path: string; desc: string; params: string }[];
   };
   sessionId: string;
   correlationId: string;
 
-  /** Decomposed context slices */
+  /** Owned context slices — canonical data store */
   checks: CheckStore;
   steps: StepMemory;
   files: FileRegistry;
   palette: PaletteStore;
   report: ReportAssembler;
 
-  /** @deprecated — use ctx.checks / ctx.steps / ctx.files / ctx.palette / ctx.report instead */
-  stepOutputs: Record<string, unknown>;
-
-  skillData: Record<string, unknown>;
-  loadedReferences: { filename: string; content: string }[];
-  citationPalette: CitationPaletteEntry[];
-  sourcePalette: SourcePaletteEntry[];
-  checkResults: CheckResult[];
-  claims: Claim[];
-  compiledCitations: Citation[];
-  compiledSourceCitations: SourceCitation[];
-  reportSections: Record<string, Record<string, string> | string> | null;
-  verdict: Verdict | null;
-
+  /** Data carried across turns */
   previousTurns: {
     turnNumber: number;
     userMessage: string;
@@ -102,10 +89,11 @@ export function createPipelineContext(
   skillmd: string,
   sessionId: string,
   correlationId: string,
-  checks?: ParsedCheck[]
+  checks?: ParsedCheck[],
+  scripts?: { name: string; path: string; desc: string; params: string }[]
 ): PipelineContext {
   return {
-    skill: { name: skillName, skillmd, checks: checks ?? [] },
+    skill: { name: skillName, skillmd, checks: checks ?? [], scripts: scripts ?? [] },
     sessionId,
     correlationId,
     checks: new CheckStore(),
@@ -113,61 +101,9 @@ export function createPipelineContext(
     files: new FileRegistry(),
     palette: new PaletteStore(),
     report: new ReportAssembler(),
-    stepOutputs: {},
-    skillData: {},
-    loadedReferences: [],
-    citationPalette: [],
-    sourcePalette: [],
-    checkResults: [],
-    claims: [],
-    compiledCitations: [],
-    compiledSourceCitations: [],
-    reportSections: null,
-    verdict: null,
     previousTurns: [],
     uploadedFiles: [],
   };
 }
 
-// ── Context persistence across turns ──
-
-export function serializeContext(ctx: PipelineContext): string {
-  return JSON.stringify({
-    skillData: ctx.skillData,
-    citationPalette: [...ctx.palette.getCitationPalette()],
-    sourcePalette: ctx.files.getSourcePalette(),
-    checkResults: [...ctx.checks.getResults()],
-    compiledCitations: [...ctx.checks.getCitations()],
-    compiledSourceCitations: [...ctx.checks.getSourceCitations()],
-    uploadedFiles: ctx.files.getFiles().map((f) => ({
-      fileId: f.fileId,
-      filename: f.filename,
-      dataUrl: f.dataUrl,
-      pageCount: f.pageCount,
-      chunks: f.chunks,
-    })),
-  });
-}
-
-export function deserializeContext(
-  json: string,
-  skill: PipelineContext["skill"],
-  sessionId: string
-): Partial<PipelineContext> {
-  const data = JSON.parse(json);
-  return {
-    skill,
-    sessionId,
-    skillData: data.skillData ?? {},
-    citationPalette: data.citationPalette ?? [],
-    sourcePalette: data.sourcePalette ?? [],
-    checkResults: data.checkResults ?? [],
-    compiledCitations: data.compiledCitations ?? [],
-    compiledSourceCitations: data.compiledSourceCitations ?? [],
-    uploadedFiles: data.uploadedFiles ?? [],
-    loadedReferences: [],
-    reportSections: null,
-    verdict: null,
-    previousTurns: [],
-  };
-}
+// ── (serialization removed — context persistence uses DB snapshots directly) ──

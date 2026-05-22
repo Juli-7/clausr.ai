@@ -1,13 +1,12 @@
 import { streamText, tool } from "ai";
 import { createModel } from "@/lib/agent/llm/factory";
-import { loadSkill } from "@/lib/agent/loading/skill/loader";
 import { runScript } from "./script-runner";
 import { ComplianceCheckSchema, type ComplianceCheckInput } from "@/lib/agent/shared/schemas";
 import { executeComplianceCheck } from "@/lib/agent/pipeline/builtins";
-import type { ExecutableStep } from "../step-executor";
+import type { ExecutableStep } from "../types";
 import type { ParsedCheck } from "@/lib/agent/loading/skill/check-parser";
-import type { PipelineContext } from "../pipeline-context";
-import type { StepResult } from "../step-executor";
+import type { PipelineContext, CheckResult } from "../pipeline-context";
+import type { StepResult } from "../types";
 import type { ToolCallRecord } from "@/lib/agent/shared/types";
 import { logPipeline, truncate } from "../logger";
 
@@ -17,14 +16,7 @@ export async function executeLlmToolStep(
   previousError?: string
 ): Promise<StepResult> {
   try {
-    const skill = loadSkill(ctx.skill.name);
-    if (!skill) {
-      return {
-        success: false,
-        error: `Skill "${ctx.skill.name}" not found for tool step`,
-        errorCode: "SKILL_NOT_FOUND",
-      };
-    }
+    const scripts = ctx.skill.scripts;
 
     const contextSummary = buildContextSummary(ctx);
     const retryContext = previousError
@@ -49,41 +41,46 @@ ${retryContext}
 - Output the final results as structured data.
 `;
 
-    logPipeline(`  [LLM+TOOL] step=${step.number} promptLen=${systemPrompt.length}chars scripts=${skill.scripts.length}`);
+    logPipeline(`  [LLM+TOOL] step=${step.number} promptLen=${systemPrompt.length}chars scripts=${scripts.length}`);
 
     const tools: Record<string, any> = {};
-    for (const script of skill.scripts) {
-      if (script.name === "compliance-check") {
-        logPipeline(`  [TOOL] registering "checkCompliance" from ${script.path}`);
-        tools.checkCompliance = tool({
-          description: "Run numerical compliance checks. Pass multiple checks as a JSON array.",
-          inputSchema: ComplianceCheckSchema,
-          execute: async (input) => {
-            const checks = (input as any)?.checks;
-            logPipeline(`  [TOOL EXEC] compliance-check builtin with ${checks?.length ?? 0} check(s): ${checks ? JSON.stringify(checks).slice(0, 200) : "none"}`);
-            const result = executeComplianceCheck(input as ComplianceCheckInput);
-            logPipeline(`  [TOOL EXEC] result: ${truncate(JSON.stringify(result), 200)}`);
-            return result;
-          },
-        });
-      } else {
-        logPipeline(`  [TOOL] registering generic tool "${script.name}"`);
-        tools[script.name] = tool({
-          description: script.desc || `Run ${script.name} script`,
-          inputSchema: ComplianceCheckSchema,
-          execute: async (input) => {
-            const result = await runScript(script.path, input);
-            if (!result.success) {
-              return { error: true, message: result.stderr || "Failed" };
-            }
-            try {
-              return JSON.parse(result.stdout);
-            } catch {
-              return { raw: result.stdout };
-            }
-          },
-        });
-      }
+
+    // Always register compliance-check builtin when there are checks that need it
+    const hasNumericalChecks = ctx.skill.checks.some(
+      c => c.type.kind === "number" || c.constraint
+    );
+    if (hasNumericalChecks) {
+      tools.checkCompliance = tool({
+        description: "Run numerical compliance checks. Pass multiple checks as a JSON array.",
+        inputSchema: ComplianceCheckSchema,
+        execute: async (input) => {
+          const checks = (input as any)?.checks;
+          logPipeline(`  [TOOL EXEC] compliance-check builtin with ${checks?.length ?? 0} check(s): ${checks ? JSON.stringify(checks).slice(0, 200) : "none"}`);
+          const result = executeComplianceCheck(input as ComplianceCheckInput);
+          logPipeline(`  [TOOL EXEC] result: ${truncate(JSON.stringify(result), 200)}`);
+          return result;
+        },
+      });
+    }
+
+    for (const script of scripts) {
+      if (script.name === "compliance-check") continue;
+      logPipeline(`  [TOOL] registering generic tool "${script.name}"`);
+      tools[script.name] = tool({
+        description: script.desc || `Run ${script.name} script`,
+        inputSchema: ComplianceCheckSchema,
+        execute: async (input) => {
+          const result = await runScript(script.path, input);
+          if (!result.success) {
+            return { error: true, message: result.stderr || "Failed" };
+          }
+          try {
+            return JSON.parse(result.stdout);
+          } catch {
+            return { raw: result.stdout };
+          }
+        },
+      });
     }
 
     logPipeline(`  [LLM+TOOL] step=${step.number} calling streamText with ${Object.keys(tools).length} tool(s)`);
@@ -169,8 +166,11 @@ ${retryContext}
 
     logPipeline(`  [LLM+TOOL] step=${step.number} finalText=${fullText.length}chars preview=${truncate(fullText, 150)}`);
 
-    if (Object.keys(tools).length > 0 && collectedToolRuns.length === 0) {
-      logPipeline(`  [LLM+TOOL] tool was NOT called — will retry with error context`);
+    // Retry only when numerical checks exist AND tool should have been called for this step
+    const currentCheck = ctx.skill.checks[step.number - 1];
+    const stepNeedsTool = currentCheck && (currentCheck.type.kind === "number" || currentCheck.constraint);
+    if (stepNeedsTool && Object.keys(tools).length > 0 && collectedToolRuns.length === 0) {
+      logPipeline(`  [LLM+TOOL] tool was NOT called for numerical step — will retry with error context`);
       return {
         success: false,
         error: `Step ${step.number}: You MUST call the compliance tool for all numerical checks. Extract values from the file data and pass them as structured check objects to the tool.`,
@@ -178,6 +178,7 @@ ${retryContext}
       };
     }
 
+    // Extract CheckResults from tool calls (numerical)
     if (collectedToolRuns.length > 0) {
       const allResults = collectedToolRuns.flatMap(run => run.outputs);
       const results = allResults.map((r, i) => ({
@@ -197,6 +198,15 @@ ${retryContext}
       }));
       ctx.checks.addResults(results);
       logPipeline(`  [LLM+TOOL] built ${results.length} CheckResult entries from tool output`);
+    }
+
+    // Extract CheckResults from LLM text output when no tool was called (qualitative checks)
+    if (collectedToolRuns.length === 0 && ctx.skill.checks.length > 0) {
+      const textResults = extractCheckResultsFromText(fullText, ctx.skill.checks, step.number);
+      if (textResults.length > 0) {
+        ctx.checks.addResults(textResults);
+        logPipeline(`  [LLM+TOOL] extracted ${textResults.length} CheckResult(s) from LLM text output`);
+      }
     }
 
     storeOutput(ctx, step.number, fullText);
@@ -364,4 +374,62 @@ function buildCitationGuide(ctx: PipelineContext): string {
   }
 
   return parts.join("\n");
+}
+
+/**
+ * Try to parse the LLM's text output as JSON and extract check results for the current step.
+ * Used when no tool was called (qualitative/boolean/enum checks that don't need the compliance tool).
+ */
+function extractCheckResultsFromText(
+  text: string,
+  checks: ParsedCheck[],
+  stepNumber: number
+): CheckResult[] {
+  let cleaned = text.trim();
+  const fenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+  if (fenceMatch) cleaned = fenceMatch[1].trim();
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    return [];
+  }
+
+  if (typeof parsed !== "object" || Array.isArray(parsed)) return [];
+
+  const checkDef = checks[stepNumber - 1];
+  if (!checkDef) return [];
+
+  const field = checkDef.field;
+  const rawValue = parsed[field];
+  if (rawValue === undefined) return [];
+
+  const valueStr = String(rawValue);
+  const cleanVal = valueStr.replace(/\[.*?\]/g, "").trim().toLowerCase();
+
+  const citationMatch = valueStr.match(/\[(S\d+(?:\.c\d+)?|R\d+\.\d+(?:\.\d+)*)\]/);
+  const citationRef = citationMatch?.[1] ?? "";
+
+  const passValues = new Set(["true", "yes", "present", "available", "completed", "required", "appointed", "pass", "adequacy", "scc", "bcr", "not_required", "partial"]);
+  let verdict: "PASS" | "FAIL" = "FAIL";
+  if (passValues.has(cleanVal)) verdict = "PASS";
+
+  const sourceMatch = citationRef.match(/S(\d+)/);
+  const sourceRef = sourceMatch ? parseInt(sourceMatch[1], 10) : undefined;
+
+  const clause = checkDef.clause ?? "";
+  const regMatch = clause.match(/R(\d+)/);
+  const regulation = regMatch ? `R${regMatch[1]}` : clause.match(/Art/i) ? "GDPR" : "";
+
+  return [{
+    name: field,
+    type: checkDef.type.kind === "number" ? "numerical" as const : "qualitative" as const,
+    regulation,
+    clause,
+    finding: `${field}: ${valueStr.replace(/\[.*?\]/g, "").trim()}`,
+    verdict,
+    citationRef,
+    sourceRef,
+  }];
 }

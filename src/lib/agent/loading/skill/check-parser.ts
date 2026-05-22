@@ -1,5 +1,3 @@
-import { z } from "zod";
-
 // ── Parsed check type ──
 
 export interface ParsedCheck {
@@ -65,45 +63,22 @@ export function parseChecks(skillmd: string): ParsedCheck[] {
 
 /**
  * Extract unique regulation IDs from the clause column.
- * e.g. "R48 §6.2" → "R48", "R112 §5.5" → "R112"
+ * e.g. "R48 §6.2" → "R48", "R112 §5.5" → "R112", "Art 6" → "GDPR"
  */
 export function extractRegulationIds(checks: ParsedCheck[]): string[] {
   const ids = new Set<string>();
   for (const check of checks) {
     if (check.clause) {
-      const match = check.clause.match(/R(\d+)/);
-      if (match) ids.add(`R${match[1]}`);
+      const rMatch = check.clause.match(/R(\d+)/);
+      if (rMatch) {
+        ids.add(`R${rMatch[1]}`);
+      } else {
+        const artMatch = check.clause.match(/Art\s*(\d+)/i);
+        if (artMatch) ids.add("GDPR");
+      }
     }
   }
   return [...ids].sort();
-}
-
-/**
- * Build a Zod schema from the Checks table.
- * Generates an object schema from field paths like "vehicle.make" → nested object.
- */
-export function deriveDomainSchema(checks: ParsedCheck[]): z.ZodObject<Record<string, z.ZodTypeAny>> {
-  const shape: Record<string, z.ZodTypeAny> = {};
-  const grouped = groupFieldsByPrefix(checks);
-
-  for (const [prefix, fields] of Object.entries(grouped)) {
-    if (prefix === "") {
-      for (const check of fields) {
-        shape[check.field] = fieldTypeToZod(check);
-      }
-    } else {
-      shape[prefix] = z.object(buildNestedShape(fields));
-    }
-  }
-
-  return z.object(shape);
-}
-
-/**
- * Try to match a field path against the Checks table to find the relevant check definition.
- */
-export function findCheck(fieldPath: string, checks: ParsedCheck[]): ParsedCheck | undefined {
-  return checks.find((c) => c.field === fieldPath);
 }
 
 // ── Helpers ──
@@ -121,57 +96,6 @@ function parseFieldType(raw: string): CheckFieldType | null {
   }
 
   return null;
-}
-
-function groupFieldsByPrefix(checks: ParsedCheck[]): Record<string, ParsedCheck[]> {
-  const groups: Record<string, ParsedCheck[]> = {};
-  for (const check of checks) {
-    const dot = check.field.indexOf(".");
-    const prefix = dot > 0 ? check.field.slice(0, dot) : "";
-    if (!groups[prefix]) groups[prefix] = [];
-    groups[prefix].push({
-      ...check,
-      field: dot > 0 ? check.field.slice(dot + 1) : check.field,
-    });
-  }
-  return groups;
-}
-
-function buildNestedShape(fields: ParsedCheck[]): Record<string, z.ZodTypeAny> {
-  const shape: Record<string, z.ZodTypeAny> = {};
-  for (const check of fields) {
-    shape[check.field] = fieldTypeToZod(check);
-  }
-  return shape;
-}
-
-function fieldTypeToZod(check: ParsedCheck): z.ZodTypeAny {
-  let schema: z.ZodTypeAny;
-
-  switch (check.type.kind) {
-    case "string":
-      schema = z.string();
-      break;
-    case "number":
-      schema = z.number();
-      break;
-    case "boolean":
-      schema = z.boolean();
-      break;
-    case "enum":
-      schema = z.enum(check.type.values as [string, ...string[]]);
-      break;
-    default:
-      schema = z.any();
-  }
-
-  if (check.constraint === "required") {
-    // keep as required (no .optional())
-  } else {
-    schema = schema.optional();
-  }
-
-  return schema;
 }
 
 

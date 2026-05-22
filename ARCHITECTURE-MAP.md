@@ -97,33 +97,31 @@
 │  ┌─────────────────────────────────────────────────────────────────────────────┐    │
 │  │  orchestrator-v2.ts (ENTRY POINT — async generator, yields PipelineEvent)   │    │
 │  │  orchestratePipeline(message, skillName, sessionId, files?)                  │    │
-│  │    ├─► initPhase()          — LOADING: skill load, session, context          │    │
-│  │    ├─► inputPhase()         — LOADING: file extraction / restore             │    │
-│  │    ├─► skillGenPhase()      — LOADING: create skill if none                  │    │
-│  │    ├─► generateStepsFromChecks() — build step list from Checks table         │    │
-│  │    ├─► identifyRevisionTarget() — LOADING: which step to redo                │    │
-│  │    ├─► [loop] executeStep() — execute each step                              │    │
-│  │    ├─► enforceChecks()      — gap-fill missing checks                        │    │
-│  │    └─► finalizePhase()      — PRESENT: evaluate + assemble + persist        │    │
+│  │    ├─► initPhase()                — LOADING: skill load, session, context    │    │
+│  │    ├─► inputPhase()               — LOADING: file extraction / restore       │    │
+│  │    ├─► skillGenPhase()            — LOADING: create skill if none            │    │
+│  │    ├─► loadReferences()           — load regulation data into palette        │    │
+│  │    ├─► generateStepsFromChecks()  — LOADING: build step list                 │    │
+│  │    ├─► identifyRevisionTarget()   — LOADING: which step to redo              │    │
+│  │    ├─► [loop] executeStep()       — execute each step (llm+tool)            │    │
+│  │    ├─► enforceChecks()            — EVALUATION: gap-fill missing checks     │    │
+│  │    └─► finalizePhase()            — PRESENT: evaluate + assemble + persist  │    │
 │  └─────────────────────────────────────────────────────────────────────────────┘    │
 │         │               │              │               │              │              │
 │         ▼               ▼              ▼               ▼              ▼              │
 │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐   │
-│  │ step-executor│ │ builtins.ts │ │ enforce-    │ │ errors.ts  │ │ logger.ts   │   │
-│  │ executeStep()│ │ .execute-  │ │ checks.ts   │ │ PipelineErr│ │ logPipeline │   │
-│  │ generateSteps│ │ Builtin()  │ │ enforceCheck│ │ format...  │ │ truncate()  │   │
-│  └──────┬──────┘ │ .execute-  │ └─────────────┘ └────────────┘ └─────────────┘   │
-│         │        │  Compliance │                                                        │
-│         │        │  Check()    │                                                        │
-│         ▼        └─────────────┘                                                        │
-│  ┌────────────────────────────────────┐                                                │
-│  │ executors/llm-executor.ts          │                                                │
-│  │ executeLlmStep(step, ctx)          │                                                │
-│  │ executeLlmToolStep(step, ctx)      │                                                │
-│  │ buildDomainSchemaGuide(checks)     │                                                │
-│  │ buildContextSummary(ctx)           │                                                │
-│  │ buildCitationGuide(ctx)            │                                                │
-│  └────────────────────────────────────┘                                                │
+│  │ step-executor│ │ builtins.ts │ │ errors.ts   │ │ logger.ts   │ │ types.ts    │   │
+│  │ executeStep()│ │ loadRefer-  │ │ PipelineErr │ │ logPipeline │ │ PipelineEv- │   │
+│  │ tryExecute() │ │ ences()     │ │ format...   │ │ truncate()  │ │ ent (type)  │   │
+│  └──────┬──────┘ │ .execute-   │ └─────────────┘ └─────────────┘ └─────────────┘   │
+│         │        │  Compliance │                                                         │
+│         │        │  Check()    │                                                         │
+│         ▼        └─────────────┘                                                         │
+│  ┌────────────────────────────────────────────────────────────────────────────────┐    │
+│  │ executors/llm-executor.ts                                                     │    │
+│  │ executeLlmToolStep(step, ctx, previousError?) — only executor, always llm+tool │    │
+│  │ buildDomainSchemaGuide(checks), buildContextSummary(ctx), buildCitationGuide() │    │
+│  └────────────────────────────────────────────────────────────────────────────────┘    │
 │                                                                                      │
 │  PROVIDES: StepResult[], streamed PipelineEvents                                      │
 │  CONSIDERS FROM: Loading (context), Shared (slices), Knowledge (regulation data)      │
@@ -133,20 +131,27 @@
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │                           SEGMENT 5: EVALUATION LAYER                                │
 │                                                                                      │
-│  evaluation/index.ts           evaluation/confidence.ts                               │
+│  evaluation/enforce-checks.ts     evaluation/index.ts                                │
+│  ┌────────────────────────────┐   ┌────────────────────────────────────┐             │
+│  │ enforceChecks(ctx)         │──►│ evaluate(input)                    │             │
+│  │  → gap-fill missing checks │   │  → main entry, calls sub-modules   │             │
+│  │  → regex extract from files│   └────────────────────────────────────┘             │
+│  └────────────────────────────┘              │                                         │
+│                                               ▼                                         │
+│  evaluation/summary.ts          evaluation/confidence.ts                               │
 │  ┌──────────────────────┐      ┌──────────────────────────────────────┐              │
-│  │ evaluate(input)      │─────►│ computeConfidence(input)             │              │
-│  │  → main entry         │      │  → OCR penalty + PDF + LLM mult.   │              │
+│  │ buildFindings(checks)│      │ computeConfidence(input)             │              │
+│  │  → per-check map      │      │  → OCR penalty + PDF + LLM mult.   │              │
 │  └──────────────────────┘      └──────────────────────────────────────┘              │
 │                                                                                      │
-│  evaluation/summary.ts          evaluation/validate.ts                               │
-│  ┌──────────────────────┐      ┌──────────────────────────────────────┐              │
-│  │ buildFindings(checks)│      │ validate({claims, citations, ...})   │              │
-│  │  → per-check map      │      │  → citation/chunk consistency       │              │
-│  └──────────────────────┘      └──────────────────────────────────────┘              │
+│  evaluation/validate.ts                                                              │
+│  ┌──────────────────────────────────────────────────────────────────────┐           │
+│  │ validate({claims, citations, sourceCitations, ...})                   │           │
+│  │  → citation/chunk consistency, verdict alignment, claim validation   │           │
+│  └──────────────────────────────────────────────────────────────────────┘           │
 │                                                                                      │
 │  PROVIDES: EvaluationResult {confidence, findings, validationErrors}                  │
-│  CONSIDERS FROM: Pipeline (CheckStore), Shared (slices)                               │
+│  CONSIDERS FROM: Pipeline (CheckStore, PipelineContext), Shared (slices)               │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
@@ -274,13 +279,22 @@ HTTP POST /api/chat
        │         ├─ parseChecks(skillmd)
        │         └─ extractRegulationIds(checks)
        │
-       ├─═══════════════════════════════════════════════════════════════
-       │  PIPELINE — Phase 3: GENERATE STEPS + EXECUTE
+        ├─═══════════════════════════════════════════════════════════════
+       │  LOADING/PIPELINE — Phase 3: LOAD REFERENCES + GENERATE STEPS
        │════════════════════════════════════════════════════════════════
        │
-       ├─ generateStepsFromChecks(ctx.skill.checks)
-       │    ├─ Step 1: builtin (load-references)
-       │    └─ Steps 2..N: llm+tool (one per check field)
+       ├─ loadReferences(ctx)  ◄── pipeline/builtins.ts
+       │    ├─ extract regulationIds from ctx.skill.checks
+       │    ├─ loadRegulations(regulationIds)
+       │    │    └─ for each id:
+       │    │         ├─ api.resolveCode(id)
+       │    │         └─ api.getRegulation({code})
+       │    │              └─ RegulationSchema.safeParse()
+       │    ├─ ctx.palette.loadReferences([{filename, content}])
+       │    └─ ctx.palette.loadCitationPalette(palette)
+       │
+       ├─ generateStepsFromChecks(ctx.skill.checks)  ◄── loading/generate-steps.ts
+       │    └─ Steps 1..N: llm+tool (one per check field)
        │
        ├─ identifyRevisionTarget(ctx, userMessage)  ◄── loading/phases/revision-phase.ts
        │    (only on follow-up turns — LLM decides which step to redo)
@@ -289,37 +303,16 @@ HTTP POST /api/chat
        │  │    │
        │  │    ├─ executeStep(step, ctx, maxRetries=1)
        │  │    │    └─ tryExecute(step, ctx, previousError)  [retry loop]
-       │  │    │         │
-       │  │    │         ├─ [builtin:*] ──► executeBuiltin(step.type, ctx)
-       │  │    │         │    └─ "builtin:load-references":
-       │  │    │         │         └─ loadReferences(ctx)
-       │  │    │         │              ├─ extract regulationIds from ctx.skill.checks
-       │  │    │         │              ├─ loadRegulations(regulationIds)
-       │  │    │         │              │    └─ for each id:
-       │  │    │         │              │         ├─ api.resolveCode(id)
-       │  │    │         │              │         └─ api.getRegulation({code})
-       │  │    │         │              │              └─ RegulationSchema.safeParse()
-       │  │    │         │              ├─ ctx.palette.loadReferences([{filename, content}])
-       │  │    │         │              ├─ ctx.palette.loadCitationPalette(palette)
-       │  │    │         │              └─ ctx.steps.setRaw("2", metadata)
-       │  │    │         │
-       │  │    │         ├─ [llm] ──► executeLlmStep(step, ctx, previousError)
-       │  │    │         │    ├─ buildContextSummary(ctx)
-       │  │    │         │    │    ├─ ctx.files.buildContextSummary()
-       │  │    │         │    │    ├─ ctx.steps.latest()
-       │  │    │         │    │    ├─ ctx.palette.formatContextSummary()
-       │  │    │         │    │    ├─ ctx.checks.getResults()
-       │  │    │         │    │    ├─ buildDomainSchemaGuide(ctx.skill.checks)
-       │  │    │         │    │    └─ ctx.palette.formatSourceSummary(sourcePalette)
-       │  │    │         │    ├─ buildCitationGuide(ctx)
-       │  │    │         │    ├─ createModel()  ◄── llm/factory.ts
-       │  │    │         │    ├─ streamText({model, system, messages, responseFormat?})
-       │  │    │         │    └─ storeOutput(ctx, step.number, fullText)
-       │  │    │         │         └─ ctx.steps.write(stepNumber, parsed-or-raw)
-       │  │    │         │
        │  │    │         └─ [llm+tool] ──► executeLlmToolStep(step, ctx, previousError)
        │  │    │              ├─ buildContextSummary(ctx)
+       │  │    │              │    ├─ ctx.files.buildContextSummary()
+       │  │    │              │    ├─ ctx.steps.latest()
+       │  │    │              │    ├─ ctx.palette.formatContextSummary()
+       │  │    │              │    ├─ ctx.checks.getResults()
+       │  │    │              │    ├─ buildDomainSchemaGuide(ctx.skill.checks)
+       │  │    │              │    └─ ctx.palette.formatSourceSummary(sourcePalette)
        │  │    │              ├─ buildCitationGuide(ctx)
+       │  │    │              ├─ createModel()  ◄── llm/factory.ts
        │  │    │              ├─ Register tools from skill.scripts:
        │  │    │              │    ├─ "compliance-check" → executeComplianceCheck()
        │  │    │              │    │    └─ eval operator (>=, <=, >, <, range)
@@ -335,6 +328,7 @@ HTTP POST /api/chat
        │  │    │              ├─ findCitationRef(ctx, result)
        │  │    │              │    └─ lookup in ctx.palette.getCitationPalette()
        │  │    │              └─ storeOutput(ctx, step.number, fullText)
+       │  │    │                   └─ ctx.steps.write(stepNumber, parsed-or-raw)
        │  │    │
        │  │    ├─ yield {type: "token", text, stepNumber}  for each streamedToken
        │  │    ├─ yield {type: "tool-result", stepNumber, results}  if toolResults
@@ -349,10 +343,10 @@ HTTP POST /api/chat
        │  └─ [after all steps]
        │
        ├─═══════════════════════════════════════════════════════════════
-       │  PIPELINE — Phase 3b: ENFORCE CHECKS
+       │  EVALUATION — Phase 4: ENFORCE CHECKS (gap-fill)
        │════════════════════════════════════════════════════════════════
        │
-       ├─ enforceChecks(ctx)
+       ├─ enforceChecks(ctx)  ◄── evaluation/enforce-checks.ts
        │    ├─ defined = ctx.skill.checks  (from SKILL.md ## Checks)
        │    ├─ existing = ctx.checks.getResults()
        │    ├─ missing = defined - existing (by field name)
@@ -362,7 +356,7 @@ HTTP POST /api/chat
        │         └─ if not found → CheckResult{finding: "not assessed", verdict: "FAIL"}
        │
        ├─═══════════════════════════════════════════════════════════════
-       │  PRESENT — Phase 4: FINALIZE (evaluation + assembly)
+       │  EVALUATION + PRESENT — Phase 5: EVALUATE + FINALIZE
        │════════════════════════════════════════════════════════════════
        │
        └─ finalizePhase(ctx, steps, sessionId)  ◄── present/phases/finalize-phase.ts
@@ -557,7 +551,7 @@ HTTP POST /api/chat
 #### `pipeline/orchestrator-v2.ts`
 | Function | Description |
 |----------|-------------|
-| `orchestratePipeline(message, skillName, sessionId, files?)` | **Top-level entry point.** Async generator coordinating all phases: init → input → skill-gen → step generation → revision detection → step execution loop → enforce checks → finalize. Yields `PipelineEvent` for streaming. |
+| `orchestratePipeline(message, skillName, sessionId, files?)` | **Top-level entry point.** Async generator: init → input → skill-gen → load-refs → step-gen → revision → step-exec → enforce → finalize. Yields `PipelineEvent` for streaming. |
 
 #### `pipeline/pipeline-context.ts`
 | Function | Description |
@@ -569,30 +563,24 @@ HTTP POST /api/chat
 #### `pipeline/step-executor.ts`
 | Function | Description |
 |----------|-------------|
-| `generateStepsFromChecks(checks)` | Generates step list: Step 1 is always `builtin:load-references`, then one `llm+tool` step per check field. |
-| `executeStep(step, ctx, maxRetries?)` | Executes a step with retry logic. Dispatches to `executeBuiltin`, `executeLlmStep`, or `executeLlmToolStep` by step type. |
+| `executeStep(step, ctx, maxRetries?)` | Executes an `llm+tool` step with retry logic. Delegates directly to `executeLlmToolStep`. |
+| `tryExecute(step, ctx, previousError)` | Single attempt — always calls `executeLlmToolStep`. |
 
 #### `pipeline/builtins.ts`
 | Function | Description |
 |----------|-------------|
-| `executeBuiltin(executor, ctx)` | Dispatches named builtin handlers. Currently only `"builtin:load-references"`. |
-| `executeComplianceCheck(input)` | Evaluates numerical checks against operators (`>=`, `<=`, `>`, `<`, `range`). Returns pass/fail for each. Called as a tool handler. |
+| `loadReferences(ctx)` | Loads regulation data into palette by extracting IDs from checks, fetching via API. |
+| `executeComplianceCheck(input)` | Evaluates numerical checks against operators (`>=`, `<=`, `>`, `<`, `range`). Returns pass/fail. Called as a tool handler. |
 
 #### `pipeline/executors/llm-executor.ts`
 | Function | Description |
 |----------|-------------|
-| `executeLlmStep(step, ctx, previousError?)` | Runs a plain LLM step. Builds system prompt, calls `streamText()`, stores output in `ctx.steps`. |
-| `executeLlmToolStep(step, ctx, previousError?)` | Runs LLM step with tool calling. Registers tools (compliance-check, scripts), processes `onStepFinish` to build `CheckResult[]`. |
+| `executeLlmToolStep(step, ctx, previousError?)` | Runs an `llm+tool` step. Registers tools (compliance-check, scripts), streams LLM, processes tool results, stores output. |
 | `buildDomainSchemaGuide(checks)` | Builds schema guide string from `ParsedCheck[]` for LLM prompts. |
 | `buildContextSummary(ctx)` | Builds composite context string: file summary, latest step output, citation summary, check results, domain schema guide, source summary, previous turns. |
 | `buildCitationGuide(ctx)` | Builds citation format instructions for LLM (`[R48.5.11]` and `[SN]` markers). |
 
-#### `pipeline/phases/enforce-checks.ts`
-| Function | Description |
-|----------|-------------|
-| `enforceChecks(ctx)` | Fills missing check results with regex auto-extraction from file text. Found → PASS, not found → FAIL "not assessed". |
-
-#### `pipeline/phases/types.ts`
+#### `pipeline/types.ts`
 | Type | Description |
 |------|-------------|
 | `PipelineEvent` | Discriminated union: `status`, `token`, `tool-result`, `done`, `error`. |
@@ -617,6 +605,11 @@ HTTP POST /api/chat
 ---
 
 ### SEGMENT 5 — Evaluation Layer (`src/lib/agent/evaluation/`)
+
+#### `evaluation/enforce-checks.ts`
+| Function | Description |
+|----------|-------------|
+| `enforceChecks(ctx)` | Gap-fills missing check results via regex extraction from file text. Found → PASS, not found → FAIL "not assessed". |
 
 #### `evaluation/index.ts`
 | Function | Description |
