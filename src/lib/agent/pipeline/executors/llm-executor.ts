@@ -38,7 +38,8 @@ ${retryContext}
 - Use the uploaded files and available context above to complete this step.
 - Extract all relevant information from the files — do not ask the user to provide information that is already in the files.
 - You MUST call the available tools to execute compliance checks. Numerical checks require the tool.
-- Output the final results as structured data.
+- Output a narrative analysis paragraph starting with "### {Field Name}" with citation markers like [S1.c1] and [R48.5.11].
+- Then output a JSON code block with the structured result containing the field value and citations.
 `;
 
     logPipeline(`  [LLM+TOOL] step=${step.number} promptLen=${systemPrompt.length}chars scripts=${scripts.length}`);
@@ -102,7 +103,8 @@ ${retryContext}
       note?: string;
     }[] = [];
 
-    const userMessage = `Execute step ${step.number}: ${step.title}. Use the available data and files. You MUST call the available tools to execute compliance checks. Output the final results as structured data.`;
+    const humanField = step.title.replace("Evaluate: ", "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    const userMessage = `Execute step ${step.number}: ${step.title}. Write a narrative analysis starting with "### ${humanField}". Then output a JSON code block with the structured result.`;
 
     const result = streamText({
       model: createModel(),
@@ -288,7 +290,7 @@ export function buildDomainSchemaGuide(checks: ParsedCheck[]): string {
     if (check.constraint) line += ` — ${check.constraint}`;
     if (check.clause) line += ` — ${check.clause}`;
     if (check.dependsOn) line += ` — conditional on ${check.dependsOn}`;
-    if (check.notes) line += ` — ${check.notes}`;
+    if (check.description) line += ` — ${check.description}`;
     parts.push(line);
   }
   parts.push("");

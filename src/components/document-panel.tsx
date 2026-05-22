@@ -21,7 +21,9 @@ interface DocumentPanelProps {
   clauseTexts?: Record<string, string>;
   pendingComments?: { selectedText: string; comment: string; turnIndex: number; occurrenceIndex: number }[];
   onAddComment?: (turnIndex: number, selectedText: string, comment: string, occurrenceIndex: number) => void;
-  onRevise?: (turnIndex: number) => void;
+  onRevise?: (turnIndex: number, revisionFields: string[]) => void;
+  revisionFlags?: Record<string, boolean>;
+  onToggleFlag?: (turnIndex: number, field: string, flagged: boolean) => void;
 }
 
 export function DocumentPanel({
@@ -33,6 +35,8 @@ export function DocumentPanel({
   pendingComments,
   onAddComment,
   onRevise,
+  revisionFlags,
+  onToggleFlag,
 }: DocumentPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -129,6 +133,8 @@ export function DocumentPanel({
             pendingComments={pendingComments?.filter((c) => c.turnIndex === i)}
             onMouseUp={(e) => handleMouseUp(e, i)}
             onRevise={onRevise}
+            revisionFlags={revisionFlags}
+            onToggleFlag={onToggleFlag}
           />
         ) : null
       )}
@@ -232,6 +238,8 @@ function DocumentCard({
   pendingComments,
   onMouseUp,
   onRevise,
+  revisionFlags,
+  onToggleFlag,
 }: {
   turn: ChatTurn;
   turnIndex: number;
@@ -239,7 +247,9 @@ function DocumentCard({
   clauseTexts?: Record<string, string>;
   pendingComments?: { selectedText: string; comment: string; occurrenceIndex: number }[];
   onMouseUp?: (e: React.MouseEvent) => void;
-  onRevise?: (turnIndex: number) => void;
+  onRevise?: (turnIndex: number, revisionFields: string[]) => void;
+  revisionFlags?: Record<string, boolean>;
+  onToggleFlag?: (turnIndex: number, field: string, flagged: boolean) => void;
 }) {
   const { response } = turn;
   if (!response) return null;
@@ -411,51 +421,59 @@ function DocumentCard({
       <div className="px-6 py-5" data-card-body="true" onClick={handleContentClick}>
         <style>{citationStyles}</style>
 
-        {response.sections ? (
-          <>
-            {/* Fields table — from response.sections.findings */}
-            {response.sections.findings && typeof response.sections.findings === "object" && (
-              <div style={{ marginBottom: 20 }}>
-                <div
-                  className="inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded mb-3"
-                  style={{ color: "var(--color-text-muted)", background: "var(--color-border-default)" }}
-                >
-                  Findings
-                </div>
-                <table className="w-full border-collapse text-xs mt-1 mb-3">
-                  <tbody>
-                    {(Object.entries(response.sections.findings) as [string, string][]).map(([field, value]) => (
-                      <tr key={field} style={{ borderBottom: "1px solid var(--color-border-default)" }}>
-                        <td className="py-2 pr-4" style={{ color: "var(--color-text-muted)", width: 180, whiteSpace: "nowrap" as const }}>
-                          {humanize(field)}
-                        </td>
-                        <td className="py-2" style={{ color: "var(--color-text-body)", fontWeight: 500 }}>
-                          <span dangerouslySetInnerHTML={{ __html: applyHighlights(enhanceCitations(value, response.citations, sourceCitations), pendingComments) }} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div style={{ height: 1, background: "var(--color-border-default)", marginTop: 16 }} />
-              </div>
-            )}
+        {/* Narrative report from LLM analysis */}
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={[rehypeRaw]}
+          components={markdownComponents}
+        >
+          {highlightedContent}
+        </ReactMarkdown>
 
-            {/* Confidence badge only */}
-            {response.confidence && (
-              <div className="flex justify-end mt-4">
-                <ConfidenceBadge confidence={response.confidence} />
-              </div>
-            )}
-          </>
-        ) : (
-          /* No sections — render raw markdown content */
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeRaw]}
-            components={markdownComponents}
-          >
-            {highlightedContent}
-          </ReactMarkdown>
+        {/* Fields table — checkboxes + findings */}
+        {response.sections?.findings && typeof response.sections.findings === "object" && (
+          <div style={{ marginTop: 32, marginBottom: 20 }}>
+            <div
+              className="inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded mb-3"
+              style={{ color: "var(--color-text-muted)", background: "var(--color-border-default)" }}
+            >
+              Findings
+            </div>
+            <table className="w-full border-collapse text-xs mt-1 mb-3">
+              <tbody>
+                {(Object.entries(response.sections.findings) as [string, string][]).map(([field, value]) => {
+                  const flagged = revisionFlags?.[field] ?? false;
+                  return (
+                    <tr key={field} data-check-field={field} style={{ borderBottom: "1px solid var(--color-border-default)" }}>
+                      <td className="py-2 pr-1" style={{ width: 24, textAlign: "center" as const, verticalAlign: "middle" }}>
+                        <input
+                          type="checkbox"
+                          checked={flagged}
+                          onChange={() => onToggleFlag?.(turnIndex, field, !flagged)}
+                          style={{ cursor: "pointer", accentColor: "var(--color-accent-blue)" }}
+                          title={flagged ? "Flagged for revision" : "Field looks correct"}
+                        />
+                      </td>
+                      <td className="py-2 pr-4" style={{ color: "var(--color-text-muted)", width: 180, whiteSpace: "nowrap" as const }}>
+                        {humanize(field)}
+                      </td>
+                      <td className="py-2" style={{ color: "var(--color-text-body)", fontWeight: 500 }}>
+                        <span dangerouslySetInnerHTML={{ __html: applyHighlights(enhanceCitations(value, response.citations, sourceCitations), pendingComments) }} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div style={{ height: 1, background: "var(--color-border-default)", marginTop: 16 }} />
+          </div>
+        )}
+
+        {/* Confidence badge */}
+        {response.confidence && (
+          <div className="flex justify-end mt-4">
+            <ConfidenceBadge confidence={response.confidence} />
+          </div>
         )}
 
         {/* Citation popover */}
@@ -596,7 +614,7 @@ function DocumentCard({
         </div>
       )}
 
-      {/* Actions footer — Revise + Download */}
+      {/* Actions footer — Revise Selected + Download */}
       <div
         className="px-6 py-4 flex gap-2"
         style={{
@@ -607,13 +625,21 @@ function DocumentCard({
         <button
           className="px-3 py-1.5 text-xs rounded-lg cursor-pointer"
           style={{
-            background: "transparent",
+            background: revisionFlags && Object.values(revisionFlags).some((f) => f)
+              ? "var(--color-accent-blue)" : "transparent",
             border: "1px solid var(--color-border-input)",
-            color: "var(--color-text-body)",
+            color: revisionFlags && Object.values(revisionFlags).some((f) => f)
+              ? "white" : "var(--color-text-body)",
           }}
-          onClick={() => onRevise?.(turnIndex)}
+          onClick={() => {
+            if (!revisionFlags) { onRevise?.(turnIndex, []); return; }
+            const flagged = Object.entries(revisionFlags)
+              .filter(([, f]) => f)
+              .map(([field]) => field);
+            onRevise?.(turnIndex, flagged);
+          }}
         >
-          Revise
+          Revise Selected
         </button>
         <DownloadDropdown
           response={response}
@@ -838,9 +864,9 @@ function enhanceCitations(content: string, citations: Citation[], sourceCitation
     return match;
   });
 
-  // 2) Replace [SN] markers with source citation badges
+  // 2) Replace [SN] and [SN.cX] markers with source citation badges
   if (sourceCitations && sourceCitations.length > 0) {
-    content = content.replace(/\[S(\d+)\]/gi, (match, refStr) => {
+    content = content.replace(/\[S(\d+)(?:\.c\d+)?\]/gi, (match, refStr) => {
       const ref = parseInt(refStr, 10);
       const found = sourceCitations.some(sc => sc.ref === ref);
       if (found) {

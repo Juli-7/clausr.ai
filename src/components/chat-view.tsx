@@ -32,6 +32,7 @@ export function ChatView() {
   const [sessionId, setSessionId] = useState(() => "session-" + Date.now());
   const [pendingComments, setPendingComments] = useState<PendingComment[]>([]);
   const [sentFiles, setSentFiles] = useState<{ name: string; size: number; type: string }[]>([]);
+  const [stepConfirmations, setStepConfirmations] = useState<Record<number, Record<string, boolean>>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Session loading from history
@@ -74,6 +75,17 @@ export function ChatView() {
           }
         }
         setTurns(reconstructed);
+        // Initialize flags for loaded turns — all fields start unflagged
+        const initialFlags: Record<number, Record<string, boolean>> = {};
+        for (let idx = 0; idx < reconstructed.length; idx++) {
+          const findings = reconstructed[idx]?.response?.sections?.findings;
+          if (findings && typeof findings === "object") {
+            const flags: Record<string, boolean> = {};
+            for (const field of Object.keys(findings)) flags[field] = false;
+            initialFlags[idx] = flags;
+          }
+        }
+        setStepConfirmations(initialFlags);
         setError(null);
       })
       .catch(() => {
@@ -133,9 +145,7 @@ export function ChatView() {
     setPendingComments((prev) => prev.filter((c) => c.turnIndex !== turnIndex));
   }
 
-  const handleSend = useCallback(async (message: string) => {
-    // Allow sending without a skill — plain chat mode
-
+  const handleSend = useCallback(async (message: string, revisionFields?: string[]) => {
     const pendingTurn: ChatTurn = {
       userMessage: message,
       attachedFiles: [...attachedFiles],
@@ -156,18 +166,23 @@ export function ChatView() {
       const filesToSend = pendingTurn.attachedFiles.length > 0 ? pendingTurn.attachedFiles : undefined;
       if (process.env.NODE_ENV === "development") {
         const fileSummary = filesToSend?.map(f => `${f.name} (${f.size}B, ${f.type})`).join(", ") ?? "none";
-        console.error(`[chat-view] Sending to API — message: ${message.slice(0, 80)}, files: [${fileSummary}], skillName: ${activeSkillId}`);
+        console.log(`[chat-view] Sending to API — message: ${message.slice(0, 80)}, files: [${fileSummary}], skillName: ${activeSkillId}, revisionFields: ${revisionFields?.join(",") ?? "none"}`);
+      }
+
+      const body: Record<string, unknown> = {
+        message,
+        skillName: activeSkillId,
+        sessionId,
+        files: filesToSend,
+      };
+      if (revisionFields && revisionFields.length > 0) {
+        body.revisionFields = revisionFields;
       }
 
       const resp = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message,
-          skillName: activeSkillId,
-          sessionId,
-          files: filesToSend,
-        } satisfies ChatRequest),
+        body: JSON.stringify(body),
       });
 
       if (!resp.ok) {
@@ -246,16 +261,16 @@ export function ChatView() {
             });
           } else if (event.type === "done") {
             const doneEvent = event as { type: "done"; response: AgentResponse };
+            let updatedTurnIdx = -1;
             setTurns((prev) => {
               if (prev.length === 0) return prev;
+              updatedTurnIdx = prev.length - 1;
               return prev.map((t, i) => {
                 if (i !== prev.length - 1) return t;
-                // Preserve reasoning steps (from status events) + mark all complete
                 const steps = t.reasoningSteps.map((s) => ({
                   ...s,
                   body: s.body || "Complete",
                 }));
-                // Ensure tool calls from response are visible
                 return {
                   ...t,
                   response: doneEvent.response,
@@ -263,6 +278,12 @@ export function ChatView() {
                 };
               });
             });
+            if (updatedTurnIdx >= 0) {
+              const findings = doneEvent.response.sections?.findings;
+              if (findings && typeof findings === "object") {
+                initFlags(updatedTurnIdx, findings as Record<string, string>);
+              }
+            }
           } else if (event.type === "status") {
             const statusEvent = event as { type: "status"; phase: string; stepTitle?: string };
             const phase = statusEvent.phase;
@@ -318,6 +339,26 @@ export function ChatView() {
       setLoading(false);
     }
   }, [activeSkillId, sessionId, attachedFiles]);
+
+  // Initialize flags for a turn — all fields start unflagged
+  function initFlags(turnIndex: number, findings: Record<string, string> | Record<string, Record<string, string> | string> | undefined) {
+    if (!findings || typeof findings !== "object") return;
+    setStepConfirmations((prev) => {
+      if (prev[turnIndex]) return prev;
+      const flags: Record<string, boolean> = {};
+      for (const field of Object.keys(findings)) {
+        flags[field] = false;
+      }
+      return { ...prev, [turnIndex]: flags };
+    });
+  }
+
+  function handleToggleFlag(turnIndex: number, field: string, flagged: boolean) {
+    setStepConfirmations((prev) => ({
+      ...prev,
+      [turnIndex]: { ...(prev[turnIndex] ?? {}), [field]: flagged },
+    }));
+  }
 
   function handleApprove(turnIndex: number) {
     const turnResponse = turns[turnIndex]?.response;
@@ -407,18 +448,17 @@ export function ChatView() {
             pendingComments={pendingComments}
             onAddComment={(turnIndex, selectedText, comment, occurrenceIndex) =>
               addComment(turnIndex, selectedText, comment, occurrenceIndex)}
-            onRevise={(turnIndex) => {
+            onRevise={(turnIndex, revisionFields) => {
               const comments = pendingComments.filter((c) => c.turnIndex === turnIndex);
-              if (comments.length > 0) {
-                const feedback = comments
-                  .map((c) => `- Selected: "${c.selectedText.slice(0, 120)}"\n  Comment: ${c.comment}`)
-                  .join("\n");
-                handleSend(`Revise the assessment based on the following feedback:\n${feedback}`);
-                clearCommentsForTurn(turnIndex);
-              } else {
-                handleSend("Please revise the assessment based on the findings above.");
-              }
+              const feedback = comments.length > 0
+                ? "Revise the assessment based on the following feedback:\n" +
+                  comments.map((c) => `- Selected: "${c.selectedText.slice(0, 120)}"\n  Comment: ${c.comment}`).join("\n")
+                : "Please revise the assessment.";
+              clearCommentsForTurn(turnIndex);
+              handleSend(feedback, revisionFields);
             }}
+            revisionFlags={stepConfirmations[turns.length - 1] ?? {}}
+            onToggleFlag={handleToggleFlag}
           />
         </div>
         <div

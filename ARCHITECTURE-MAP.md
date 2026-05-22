@@ -62,11 +62,7 @@
 │  ┌──────────────────────┐         ┌──────────────────────────────────────┐           │
 │  │ loadSkill(id)        │────────►│ parseChecks(skillmd)                 │           │
 │  │ listSkills()         │         │ extractRegulationIds(checks)         │           │
-│  └──────────────────────┘         │ deriveDomainSchema(checks)           │           │
-│                                   │ findCheck(fieldPath, checks)         │           │
-│  loading/extractors/              │ groupFieldsByPrefix(checks)          │           │
-│  skill-generator.ts               │ fieldTypeToZod(check)                │           │
-│  ┌──────────────────────┐         └──────────────────────────────────────┘           │
+│  └──────────────────────┘         └──────────────────────────────────────┘           │
 │  │ generateSkill(msg,   │                                                           │
 │  │   fileTexts)         │         loading/phases/init-phase.ts                       │
 │  │   → LLM generates    │         ┌────────────────────────────────────────┐         │
@@ -108,15 +104,16 @@
 │  │    └─► finalizePhase()            — PRESENT: evaluate + assemble + persist  │    │
 │  └─────────────────────────────────────────────────────────────────────────────┘    │
 │         │               │              │               │              │              │
-│         ▼               ▼              ▼               ▼              ▼              │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐   │
-│  │ step-executor│ │ builtins.ts │ │ errors.ts   │ │ logger.ts   │ │ types.ts    │   │
-│  │ executeStep()│ │ loadRefer-  │ │ PipelineErr │ │ logPipeline │ │ PipelineEv- │   │
-│  │ tryExecute() │ │ ences()     │ │ format...   │ │ truncate()  │ │ ent (type)  │   │
-│  └──────┬──────┘ │ .execute-   │ └─────────────┘ └─────────────┘ └─────────────┘   │
-│         │        │  Compliance │                                                         │
-│         │        │  Check()    │                                                         │
-│         ▼        └─────────────┘                                                         │
+│         │               │             │               │                                 │
+│         ▼               ▼             ▼               ▼                                 │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐                      │
+│  │ builtins.ts │ │ errors.ts   │ │ logger.ts   │ │ types.ts    │                      │
+│  │ loadRefer-  │ │ PipelineErr │ │ logPipeline │ │ PipelineEv- │                      │
+│  │ ences()     │ │ format...   │ │ truncate()  │ │ ent,        │                      │
+│  │ .execute-   │ └─────────────┘ └─────────────┘ │ Executable- │                      │
+│  │  Compliance │                                  │ Step,       │                      │
+│  │  Check()    │                                  │ StepResult  │                      │
+│  └─────────────┘                                  └─────────────┘                      │
 │  ┌────────────────────────────────────────────────────────────────────────────────┐    │
 │  │ executors/llm-executor.ts                                                     │    │
 │  │ executeLlmToolStep(step, ctx, previousError?) — only executor, always llm+tool │    │
@@ -299,11 +296,10 @@ HTTP POST /api/chat
        ├─ identifyRevisionTarget(ctx, userMessage)  ◄── loading/phases/revision-phase.ts
        │    (only on follow-up turns — LLM decides which step to redo)
        │
-       ├─ ┌─ for each step in steps:
+        ├─ ┌─ for each step in steps:
        │  │    │
-       │  │    ├─ executeStep(step, ctx, maxRetries=1)
-       │  │    │    └─ tryExecute(step, ctx, previousError)  [retry loop]
-       │  │    │         └─ [llm+tool] ──► executeLlmToolStep(step, ctx, previousError)
+       │  │    ├─ executeStepWithRetry(step, ctx, maxRetries=1)  [inlined in orchestrator]
+       │  │    │    └─ [retry loop] ──► executeLlmToolStep(step, ctx, previousError)
        │  │    │              ├─ buildContextSummary(ctx)
        │  │    │              │    ├─ ctx.files.buildContextSummary()
        │  │    │              │    ├─ ctx.steps.latest()
@@ -512,12 +508,7 @@ HTTP POST /api/chat
 |----------|-------------|
 | `parseChecks(skillmd)` | Extracts `## Checks` table from SKILL.md, parses rows with regex, converts type strings to `CheckFieldType`. Returns `ParsedCheck[]` or empty array. |
 | `extractRegulationIds(checks)` | Extracts unique regulation IDs from `clause` column via regex `/R(\d+)/`. |
-| `deriveDomainSchema(checks)` | Builds nested Zod object schema from field paths (e.g., `"vehicle.make"` → `{ vehicle: z.object({ make: ... }) }`). |
-| `findCheck(fieldPath, checks)` | Finds a `ParsedCheck` by exact field path match. |
 | `parseFieldType(raw)` | Converts type string to `CheckFieldType`. |
-| `groupFieldsByPrefix(checks)` | Groups fields by top-level prefix, stripping prefix from field names. |
-| `buildNestedShape(fields)` | Builds flat Zod shape from a group of fields. |
-| `fieldTypeToZod(check)` | Maps a `ParsedCheck` to a Zod type with optional modifier. |
 
 #### `loading/extractors/skill-generator.ts`
 | Function | Description |
@@ -556,15 +547,7 @@ HTTP POST /api/chat
 #### `pipeline/pipeline-context.ts`
 | Function | Description |
 |----------|-------------|
-| `createPipelineContext(name, skillmd, checks, sessionId, cid?)` | Factory. Creates `PipelineContext` with all 5 slices: `CheckStore`, `StepMemory`, `FileRegistry`, `PaletteStore`, `ReportAssembler`. |
-| `serializeContext(ctx)` | JSON-serializes context for persistence across turns. |
-| `deserializeContext(json, skill, sessionId)` | Parses JSON back into partial `PipelineContext`. |
-
-#### `pipeline/step-executor.ts`
-| Function | Description |
-|----------|-------------|
-| `executeStep(step, ctx, maxRetries?)` | Executes an `llm+tool` step with retry logic. Delegates directly to `executeLlmToolStep`. |
-| `tryExecute(step, ctx, previousError)` | Single attempt — always calls `executeLlmToolStep`. |
+| `createPipelineContext(name, skillmd, checks, sessionId, cid?, scripts?)` | Factory. Creates `PipelineContext` with all 5 slices: `CheckStore`, `StepMemory`, `FileRegistry`, `PaletteStore`, `ReportAssembler`. |
 
 #### `pipeline/builtins.ts`
 | Function | Description |
@@ -584,6 +567,8 @@ HTTP POST /api/chat
 | Type | Description |
 |------|-------------|
 | `PipelineEvent` | Discriminated union: `status`, `token`, `tool-result`, `done`, `error`. |
+| `ExecutableStep` | Step metadata: `number`, `title`, `type: "llm+tool"`, `instructions`, `temperature?`. |
+| `StepResult` | Step output: `success`, `error?`, `streamedTokens?`, `toolResults?`. |
 
 #### `pipeline/errors.ts`
 | Function | Description |
@@ -785,11 +770,13 @@ HTTP POST /api/chat
 |---------|-------|-----------|
 | **1. Knowledge** | 3 | ~8 |
 | **2. User-Info** | 4 | ~8 |
-| **3. Loading** | 7 | ~10 |
-| **4. Pipeline** | 10 | ~15 |
+| **3. Loading** | 7 | ~7 |
+| **4. Pipeline** | 7 | ~12 |
 | **5. Evaluation** | 5 | ~6 |
 | **6. Present** | 2 | ~8 |
 | **Shared** | 10 | ~35 |
-| **Total** | **41** | **~90** |
+| **Total** | **38** | **~84** |
 
-Plus: `llm/factory.ts`, `evolution/integrator.ts`, `pipeline/executors/script-runner.ts` — utilities not specific to any segment.
+Plus: `llm/factory.ts`, `pipeline/executors/script-runner.ts` — utilities not specific to any segment.
+
+*Updated 2026-05-22: removed dead functions, inlined step-executor and evolution/integrator, renamed phases/types.ts → types.ts*

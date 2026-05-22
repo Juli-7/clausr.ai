@@ -5,6 +5,7 @@ import type { ExecutableStep } from "@/lib/agent/pipeline/types";
 import { logPipeline } from "@/lib/agent/pipeline/logger";
 import type { PipelineContext } from "@/lib/agent/pipeline/pipeline-context";
 import { evaluate } from "@/lib/agent/evaluation";
+import type { ParsedCheck } from "@/lib/agent/loading/skill/check-parser";
 
 export interface FinalizePhaseResult {
   response: AgentResponse;
@@ -54,7 +55,7 @@ export async function finalizePhase(
   }
 
   const responseData: Record<string, unknown> = {
-    content: formatContent(result.findings),
+    content: formatContent(result.findings, ctx.steps.entries(), ctx.skill.checks),
     reasoning: result.reason,
     citations: result.citations,
     sourceCitations: result.sourceCitations.length > 0 ? result.sourceCitations : undefined,
@@ -96,10 +97,35 @@ export async function finalizePhase(
   };
 }
 
-function formatContent(findings: Record<string, string>): string {
+function formatContent(
+  findings: Record<string, string>,
+  stepOutputs: Record<number | string, unknown>,
+  checks: ParsedCheck[]
+): string {
+  const sections: string[] = [];
+
+  for (let i = 0; i < checks.length; i++) {
+    const stepNum = i + 1;
+    const output = stepOutputs[stepNum];
+    if (!output || typeof output !== "string") continue;
+
+    const text = output.trim();
+    const narrative = text.replace(/```[\s\S]*?```/g, "").trim();
+    if (narrative.length > 0) {
+      sections.push(narrative);
+    }
+  }
+
+  const findingsTable = buildFindingsTable(findings);
+  if (findingsTable) sections.push(findingsTable);
+
+  return sections.length > 0 ? sections.join("\n\n") : "Assessment not available.";
+}
+
+function buildFindingsTable(findings: Record<string, string>): string {
   const rows = Object.entries(findings)
     .map(([k, v]) => `| ${k} | ${v} |`)
     .join("\n");
-  if (!rows) return "Assessment not available.";
+  if (!rows) return "";
   return `## Findings\n| Field | Value |\n| --- | --- |\n${rows}`;
 }

@@ -11,20 +11,7 @@ import { logPipeline } from "./logger";
 
 export async function loadReferences(ctx: PipelineContext): Promise<StepResult> {
   try {
-    const regulationIds = ctx.skill.checks.length > 0
-      ? Array.from(new Set(
-          ctx.skill.checks
-            .filter((c) => c.clause)
-            .map((c) => {
-              const rMatch = c.clause!.match(/R(\d+)/);
-              if (rMatch) return `R${rMatch[1]}`;
-              const artMatch = c.clause!.match(/Art\s*(\d+)/i);
-              if (artMatch) return "GDPR";
-              return null;
-            })
-            .filter((id): id is string => id !== null)
-        )).sort()
-      : [];
+    const regulationIds = ctx.skill.regulationIds;
 
     if (regulationIds.length === 0) {
       logPipeline(`  [BUILTIN] load-references: no regulation IDs from checks, skipping`);
@@ -76,11 +63,15 @@ export async function loadReferences(ctx: PipelineContext): Promise<StepResult> 
 
     logPipeline(`  [BUILTIN] loaded ${refTexts.length} regulation texts`);
     ctx.palette.loadReferences(refTexts.map((rt) => {
-      const headerMatch = rt.match(/^--- ([\w-]+) ---\n/);
-      return {
-        filename: headerMatch?.[1] ?? "unknown.md",
-        content: rt,
-      };
+      let code = "unknown.md";
+      const headerStart = rt.indexOf("--- ");
+      if (headerStart !== -1) {
+        const headerEnd = rt.indexOf(" ---\n", headerStart + 4);
+        if (headerEnd !== -1) {
+          code = rt.substring(headerStart + 4, headerEnd);
+        }
+      }
+      return { filename: code, content: rt };
     }));
 
     ctx.palette.loadCitationPalette(palette);

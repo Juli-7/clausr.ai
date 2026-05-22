@@ -6,7 +6,8 @@ export interface ParsedCheck {
   constraint: string | null;
   clause: string | null;
   dependsOn: string | null;
-  notes: string | null;
+  description: string | null;
+  sample: string | null;
 }
 
 export type CheckFieldType =
@@ -16,86 +17,126 @@ export type CheckFieldType =
   | { kind: "enum"; values: string[] };
 
 /**
- * Parse ## Checks table from SKILL.md into an array of ParsedCheck.
+ * Parse ## Checks section from SKILL.md into an array of ParsedCheck.
  *
- * Recognizes a markdown table with columns:
- *   field | type | constraint | clause | depends_on | notes
+ * Expected format:
+ *   ## Checks
  *
- * Only the first two columns (field, type) are required.
+ *   ### field_name
+ *   1. **type**: boolean | string | number | number(0-100) | enum(a, b, c)
+ *   2. **description**: Human-readable description
+ *   3. **clause**: Art 4(7) | R13.5.2 | (none)
+ *   4. **constraint**: >= 50 | <= 95 | range(500-1200) | (none)
+ *   5. **depends_on**: other_field | (none)
+ *   6. **sample**: Example narrative output for this field
+ *
+ * Lines are parsed by matching `**key**: value` pattern on numbered items.
+ * Order does not matter — keys are matched by name.
  */
 export function parseChecks(skillmd: string): ParsedCheck[] {
-  const sectionMatch = skillmd.match(
-    /##\s*Checks\s*\n([\s\S]*?)(?=\n##\s|\n*$)/
-  );
-  if (!sectionMatch) return [];
+  const sectionStart = skillmd.indexOf("## Checks");
+  if (sectionStart === -1) return [];
 
-  const section = sectionMatch[1];
+  let sectionEnd = skillmd.indexOf("\n## ", sectionStart + 1);
+  if (sectionEnd === -1) sectionEnd = skillmd.length;
 
-  const rowRegex = /^\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|$/gm;
+  const section = skillmd.substring(sectionStart, sectionEnd);
   const checks: ParsedCheck[] = [];
 
-  let match;
-  while ((match = rowRegex.exec(section)) !== null) {
-    const field = match[1].trim();
-    const rawType = match[2].trim();
-    const constraint = match[3].trim();
-    const clause = match[4].trim();
-    const dependsOn = match[5].trim();
-    const notes = match[6].trim();
+  const lines = section.split("\n");
+  let current: Record<string, string> | null = null;
 
-    if (!field || rawType === "-") continue;
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
 
-    const fieldType = parseFieldType(rawType);
-    if (!fieldType) continue;
+    if (line.startsWith("### ")) {
+      if (current && current.field) {
+        checks.push(buildCheck(current));
+      }
+      current = { field: line.substring(4).trim() };
+    } else if (current && isNumberedItem(line)) {
+      const parsed = parseNumberedLine(line);
+      if (parsed) {
+        current[parsed.key] = parsed.value;
+      }
+    }
+  }
 
-    checks.push({
-      field,
-      type: fieldType,
-      constraint: constraint && constraint !== "-" ? constraint : null,
-      clause: clause && clause !== "-" ? clause : null,
-      dependsOn: dependsOn && dependsOn !== "-" ? dependsOn : null,
-      notes: notes && notes !== "-" ? notes : null,
-    });
+  if (current && current.field) {
+    checks.push(buildCheck(current));
   }
 
   return checks;
 }
 
-/**
- * Extract unique regulation IDs from the clause column.
- * e.g. "R48 §6.2" → "R48", "R112 §5.5" → "R112", "Art 6" → "GDPR"
- */
-export function extractRegulationIds(checks: ParsedCheck[]): string[] {
-  const ids = new Set<string>();
-  for (const check of checks) {
-    if (check.clause) {
-      const rMatch = check.clause.match(/R(\d+)/);
-      if (rMatch) {
-        ids.add(`R${rMatch[1]}`);
-      } else {
-        const artMatch = check.clause.match(/Art\s*(\d+)/i);
-        if (artMatch) ids.add("GDPR");
-      }
-    }
-  }
-  return [...ids].sort();
+// ── Helpers ──
+
+function isNumberedItem(line: string): boolean {
+  const t = line.trim();
+  if (t.length < 5) return false;
+  const first = t[0];
+  if (first < "1" || first > "9") return false;
+  return t.substring(1, 5) === ". **";
 }
 
-// ── Helpers ──
+function parseNumberedLine(line: string): { key: string; value: string } | null {
+  const colonIdx = line.indexOf("**:");
+  if (colonIdx === -1) return null;
+
+  const starStart = line.indexOf("**");
+  if (starStart === -1 || starStart >= colonIdx) return null;
+
+  const key = line.substring(starStart + 2, colonIdx).trim().toLowerCase().replace(/\s+/g, "_");
+  const value = line.substring(colonIdx + 3).trim();
+
+  if (value === "(none)" || value === "-" || value === "") {
+    return { key, value: "" };
+  }
+  return { key, value };
+}
+
+function buildCheck(raw: Record<string, string>): ParsedCheck {
+  const fieldType = parseFieldType(raw.type ?? "");
+
+  return {
+    field: raw.field,
+    type: fieldType ?? { kind: "string" },
+    constraint: raw.constraint || null,
+    clause: raw.clause || null,
+    dependsOn: raw.depends_on || null,
+    description: raw.description || null,
+    sample: raw.sample || null,
+  };
+}
 
 function parseFieldType(raw: string): CheckFieldType | null {
   const trimmed = raw.trim().toLowerCase();
-  if (trimmed === "string") return { kind: "string" };
-  if (trimmed === "number") return { kind: "number" };
-  if (trimmed === "boolean") return { kind: "boolean" };
 
-  const enumMatch = raw.match(/^enum\s*\(([^)]+)\)/i);
-  if (enumMatch) {
-    const values = enumMatch[1].split(",").map((v) => v.trim()).filter(Boolean);
-    return { kind: "enum", values };
+  if (trimmed === "boolean") return { kind: "boolean" };
+  if (trimmed === "string") return { kind: "string" };
+
+  if (trimmed.startsWith("number")) {
+    const parenStart = trimmed.indexOf("(");
+    if (parenStart !== -1) {
+      const parenEnd = trimmed.indexOf(")", parenStart);
+      if (parenEnd !== -1) {
+        // number(0-100) -> constraint is the range, type is number
+        // but constraint is stored separately; just return number type
+        return { kind: "number" };
+      }
+    }
+    return { kind: "number" };
+  }
+
+  if (trimmed.startsWith("enum")) {
+    const parenStart = trimmed.indexOf("(");
+    const parenEnd = trimmed.lastIndexOf(")");
+    if (parenStart !== -1 && parenEnd !== -1 && parenEnd > parenStart) {
+      const inner = trimmed.substring(parenStart + 1, parenEnd);
+      const values = inner.split(",").map((v) => v.trim()).filter(Boolean);
+      if (values.length > 0) return { kind: "enum", values };
+    }
   }
 
   return null;
 }
-
-

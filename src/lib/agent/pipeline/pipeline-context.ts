@@ -51,6 +51,7 @@ export interface PipelineContext {
     skillmd: string;
     checks: ParsedCheck[];
     scripts: { name: string; path: string; desc: string; params: string }[];
+    regulationIds: string[];
   };
   sessionId: string;
   correlationId: string;
@@ -89,11 +90,12 @@ export function createPipelineContext(
   skillmd: string,
   sessionId: string,
   correlationId: string,
-  checks?: ParsedCheck[],
-  scripts?: { name: string; path: string; desc: string; params: string }[]
+  checks: ParsedCheck[],
+  scripts?: { name: string; path: string; desc: string; params: string }[],
+  regulationIds?: string[]
 ): PipelineContext {
   return {
-    skill: { name: skillName, skillmd, checks: checks ?? [], scripts: scripts ?? [] },
+    skill: { name: skillName, skillmd, checks, scripts: scripts ?? [], regulationIds: regulationIds ?? [] },
     sessionId,
     correlationId,
     checks: new CheckStore(),

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { parseChunkRef } from "@/lib/agent/shared/schemas";
-import { parseChecks, extractRegulationIds } from "@/lib/agent/loading/skill/check-parser";
+import { parseChecks } from "@/lib/agent/loading/skill/check-parser";
 import { executeComplianceCheck } from "@/lib/agent/pipeline/builtins";
 import { computeConfidence } from "@/lib/agent/evaluation/confidence";
 import { createPipelineContext } from "@/lib/agent/pipeline/pipeline-context";
@@ -38,12 +38,23 @@ describe("parseChunkRef", () => {
 // ── parseChecks ──
 
 describe("parseChecks", () => {
-  it("parses checks table from SKILL.md", () => {
+  it("parses checks from SKILL.md paragraph format", () => {
     const md = `## Checks
-| field | type | constraint | clause | depends_on | notes |
-|-------|------|------------|--------|------------|-------|
-| mounting_height | number | >= 500 | R48 §6.2 | - | - |
-| light_source | string | required | R112 §5.5 | - | - |
+
+### mounting_height
+1. **type**: number
+2. **description**: Measured in mm from ground
+3. **clause**: R48 §6.2
+4. **constraint**: >= 500
+5. **depends_on**: (none)
+6. **sample**: The mounting height is 650 mm [S1.c3].
+
+### light_source
+1. **type**: string
+2. **description**: Type of light source
+3. **clause**: R112 §5.5
+4. **depends_on**: (none)
+5. **sample**: The vehicle uses LED headlamps [S1.c1].
 `;
     const checks = parseChecks(md);
     expect(checks).toHaveLength(2);
@@ -51,15 +62,20 @@ describe("parseChecks", () => {
     expect(checks[0].type).toEqual({ kind: "number" });
     expect(checks[0].constraint).toBe(">= 500");
     expect(checks[0].clause).toBe("R48 §6.2");
+    expect(checks[0].description).toBe("Measured in mm from ground");
     expect(checks[1].field).toBe("light_source");
     expect(checks[1].type).toEqual({ kind: "string" });
   });
 
   it("parses enum type", () => {
     const md = `## Checks
-| field | type | constraint | clause | depends_on | notes |
-|-------|------|------------|--------|------------|-------|
-| colour | enum(red, green, blue) | - | - | - | - |
+
+### colour
+1. **type**: enum(red, green, blue)
+2. **description**: Choose a colour
+3. **clause**: (none)
+4. **depends_on**: (none)
+5. **sample**: (none)
 `;
     const checks = parseChecks(md);
     expect(checks).toHaveLength(1);
@@ -70,40 +86,19 @@ describe("parseChecks", () => {
     expect(parseChecks("# Just a heading\nNo checks here")).toEqual([]);
   });
 
-  it("skips rows with separator type column", () => {
+  it("skips entries with missing type", () => {
     const md = `## Checks
-| field | type | constraint | clause | depends_on | notes |
-|-------|------|------------|--------|------------|-------|
-| valid_field | - | - | - | - | - |
-| valid_field | string | - | - | - | - |
+
+### valid_field
+1. **type**: string
+2. **description**: A valid field
+3. **clause**: (none)
+4. **depends_on**: (none)
+5. **sample**: (none)
 `;
     const checks = parseChecks(md);
     expect(checks).toHaveLength(1);
     expect(checks[0].field).toBe("valid_field");
-  });
-});
-
-// ── extractRegulationIds ──
-
-describe("extractRegulationIds", () => {
-  it("extracts unique regulation IDs from checks", () => {
-    const checks = parseChecks(`## Checks
-| field | type | constraint | clause | depends_on | notes |
-|-------|------|------------|--------|------------|-------|
-| a | number | - | R48 §6.2 | - | - |
-| b | string | - | R112 §5.5 | - | - |
-| c | number | - | R48 §8.1 | - | - |
-`);
-    expect(extractRegulationIds(checks)).toEqual(["R112", "R48"]);
-  });
-
-  it("returns empty array when no clause references", () => {
-    const checks = parseChecks(`## Checks
-| field | type | constraint | clause |
-|-------|------|------------|--------|
-| a | number | - | - |
-`);
-    expect(extractRegulationIds(checks)).toEqual([]);
   });
 });
 
@@ -286,7 +281,7 @@ describe("computeConfidence", () => {
 
 describe("createPipelineContext", () => {
   it("creates context with default empty slices", () => {
-    const ctx = createPipelineContext("test-skill", "# Skill body", "sess-1", "corr-1");
+    const ctx = createPipelineContext("test-skill", "# Skill body", "sess-1", "corr-1", []);
     expect(ctx.skill.name).toBe("test-skill");
     expect(ctx.skill.skillmd).toBe("# Skill body");
     expect(ctx.skill.checks).toEqual([]);
@@ -304,9 +299,14 @@ describe("createPipelineContext", () => {
 
   it("passes checks and scripts to context", () => {
     const checks = parseChecks(`## Checks
-| field | type | constraint | clause | depends_on | notes |
-|-------|------|------------|--------|------------|-------|
-| x | number | | | | |
+
+### x
+1. **type**: number
+2. **description**: Test field
+3. **clause**: (none)
+4. **constraint**: (none)
+5. **depends_on**: (none)
+6. **sample**: (none)
 `);
     const scripts = [{ name: "test", path: "/scripts/test.py", desc: "Test", params: "" }];
     const ctx = createPipelineContext("s", "md", "sess-1", "corr-1", checks, scripts);
@@ -549,9 +549,14 @@ describe("ReportAssembler", () => {
 describe("enforceChecks", () => {
   it("fills missing numerical check with auto-extraction", () => {
     const checks = parseChecks(`## Checks
-| field | type | constraint | clause | depends_on | notes |
-|-------|------|------------|--------|------------|-------|
-| mounting_height | number | >= 500 | R48 §6.2 | - | - |
+
+### mounting_height
+1. **type**: number
+2. **description**: Headlamp mounting height
+3. **clause**: R48 §6.2
+4. **constraint**: >= 500
+5. **depends_on**: (none)
+6. **sample**: (none)
 `);
     const ctx = createPipelineContext("test", "", "sess-1", "corr-1", checks);
     ctx.files.addFile({ fileId: "f1", filename: "spec.pdf", extractedText: "Mounting_height: 650mm" });
@@ -566,9 +571,14 @@ describe("enforceChecks", () => {
 
   it("marks missing qualitative check as FAIL", () => {
     const checks = parseChecks(`## Checks
-| field | type | constraint | clause | depends_on | notes |
-|-------|------|------------|--------|------------|-------|
-| light_source | string | required | R112 §5.5 | - | - |
+
+### light_source
+1. **type**: string
+2. **description**: Type of light source
+3. **clause**: R112 §5.5
+4. **constraint**: required
+5. **depends_on**: (none)
+6. **sample**: (none)
 `);
     const ctx = createPipelineContext("test", "", "sess-1", "corr-1", checks);
     enforceChecks(ctx);
@@ -581,9 +591,14 @@ describe("enforceChecks", () => {
 
   it("does nothing when all checks have results", () => {
     const checks = parseChecks(`## Checks
-| field | type | constraint | clause | depends_on | notes |
-|-------|------|------------|--------|------------|-------|
-| x | number | - | - | - | - |
+
+### x
+1. **type**: number
+2. **description**: Test field
+3. **clause**: (none)
+4. **constraint**: (none)
+5. **depends_on**: (none)
+6. **sample**: (none)
 `);
     const ctx = createPipelineContext("test", "", "sess-1", "corr-1", checks);
     ctx.checks.addResults([{
@@ -595,7 +610,7 @@ describe("enforceChecks", () => {
   });
 
   it("skips when no checks defined", () => {
-    const ctx = createPipelineContext("test", "", "sess-1", "corr-1");
+    const ctx = createPipelineContext("test", "", "sess-1", "corr-1", []);
     enforceChecks(ctx);
     expect(ctx.checks.getResults()).toHaveLength(0);
   });

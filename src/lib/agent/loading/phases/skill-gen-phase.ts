@@ -20,6 +20,7 @@ export async function skillGenPhase(
   ctx.skill.name = skill.name;
   ctx.skill.skillmd = skill.skillmd;
   ctx.skill.checks = skill.checks;
+  ctx.skill.regulationIds = skill.regulationIds;
 
   logPipeline(`  ✓ skill generated: "${skill.name}" checks=${skill.checks.length} regulationIds=${skill.regulationIds.join(", ") || "none"}`);
 }

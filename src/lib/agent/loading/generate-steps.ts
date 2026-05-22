@@ -17,10 +17,11 @@ function buildFieldInstructions(c: ParsedCheck): string {
   if (c.constraint) parts.push(`Constraint: ${c.constraint}`);
   if (c.clause) parts.push(`Regulation clause: ${c.clause}`);
   if (c.dependsOn) parts.push(`Conditional on: ${c.dependsOn} — check this field's value first`);
-  if (c.notes) parts.push(`Notes: ${c.notes}`);
+  if (c.description) parts.push(`Description: ${c.description}`);
   if (c.constraint || c.type.kind === "number") {
     parts.push("You MUST call the compliance-check tool to validate numerical constraints.");
   }
-  parts.push("Output the result as structured data with citation markers like [R48.5.11].");
+  if (c.sample) parts.push(`Example output:\n\`\`\`json\n{"${c.field}": {"value": "${c.sample.replace(/"/g, "'")}", "sourceRef": 1, "chunkRef": "S1.c1", "citationRef": "${c.clause || ""}", "verdict": "PASS"}}\n\`\`\``);
+  parts.push("Output your analysis as a narrative paragraph, then output a JSON code block with the structured result.");
   return parts.join("\n");
 }

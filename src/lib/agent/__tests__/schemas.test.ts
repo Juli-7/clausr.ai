@@ -8,27 +8,22 @@ import {
 
 describe("CitationSchema", () => {
   it("accepts a valid citation", () => {
-    const result = CitationSchema.safeParse({ ref: 1, regulation: "R48", clause: "6.1" });
+    const result = CitationSchema.safeParse({ ref: "R48.6.1", regulation: "R48", clause: "6.1" });
     expect(result.success).toBe(true);
   });
 
   it("rejects missing regulation", () => {
-    const result = CitationSchema.safeParse({ ref: 1, regulation: "", clause: "6.1" });
+    const result = CitationSchema.safeParse({ ref: "R48.6.1", regulation: "", clause: "6.1" });
     expect(result.success).toBe(false);
   });
 
   it("rejects missing clause", () => {
-    const result = CitationSchema.safeParse({ ref: 1, regulation: "R48", clause: "" });
+    const result = CitationSchema.safeParse({ ref: "R48.6.1", regulation: "R48", clause: "" });
     expect(result.success).toBe(false);
   });
 
-  it("rejects non-positive ref", () => {
-    const result = CitationSchema.safeParse({ ref: 0, regulation: "R48", clause: "6.1" });
-    expect(result.success).toBe(false);
-  });
-
-  it("rejects non-integer ref", () => {
-    const result = CitationSchema.safeParse({ ref: 1.5, regulation: "R48", clause: "6.1" });
+  it("rejects empty ref", () => {
+    const result = CitationSchema.safeParse({ ref: "", regulation: "R48", clause: "6.1" });
     expect(result.success).toBe(false);
   });
 });
@@ -37,7 +32,7 @@ describe("AgentResponseSchema", () => {
   const validResponse = {
     content: "## Report\nPasses checks.",
     reasoning: "Step 1: Analysis\nBody here.",
-    citations: [{ ref: 1, regulation: "R48", clause: "6.1" }],
+    citations: [{ ref: "R48.6.1", regulation: "R48", clause: "6.1" }],
     round: 1,
     sessionId: "session-abc123",
     verdict: "PASS" as const,
@@ -94,7 +89,7 @@ describe("AgentResponseSchema", () => {
   it("rejects empty citations entry", () => {
     const result = AgentResponseSchema.safeParse({
       ...validResponse,
-      citations: [{ ref: 1, regulation: "", clause: "" }],
+      citations: [{ ref: "R48.6.1", regulation: "", clause: "" }],
     });
     expect(result.success).toBe(false);
   });
@@ -123,7 +118,7 @@ describe("ChatRequestSchema", () => {
       message: "Check compliance",
       skillName: "eu-vwta-lighting",
       sessionId: "session-123",
-      files: [{ name: "test.pdf", size: 1024, type: "application/pdf", dataUrl: "data:..." }],
+      files: [{ name: "test.pdf", size: 1024, type: "application/pdf", dataUrl: "data:application/pdf;base64,JVBERi0xLjcKC" }],
     });
     expect(result.success).toBe(true);
   });

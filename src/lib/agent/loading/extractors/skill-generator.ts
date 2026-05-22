@@ -1,7 +1,7 @@
 import { streamText } from "ai";
 import matter from "gray-matter";
 import { createModel } from "@/lib/agent/llm/factory";
-import { parseChecks, extractRegulationIds } from "@/lib/agent/loading/skill/check-parser";
+import { parseChecks } from "@/lib/agent/loading/skill/check-parser";
 import { SkillLoadError } from "@/lib/agent/pipeline/errors";
 import type { SkillLoader } from "@/lib/agent/loading/skill/loader";
 import { logPipeline } from "@/lib/agent/pipeline/logger";
@@ -14,25 +14,53 @@ The SKILL.md MUST follow this exact format:
 name: "Short descriptive name"
 description: "What this assessment evaluates"
 triggers: []
+regulation_ids:
+  - R48
+  - R112
 ---
 
 ## Checks
 
-A markdown table with columns: Field | Type | Constraint | Clause | Depends On | Notes
+### field_name
+1. **type**: boolean | string | number | number(0-100) | enum(a, b, c)
+2. **description**: Human-readable description of what this check evaluates
+3. **clause**: Art 4(7) | R13.5.2 | (none)
+4. **constraint**: >= 50 | <= 95 | range(500-1200) | (none) — only for numerical checks
+5. **depends_on**: other_field | (none)
+6. **sample**: Example narrative output for this field showing the expected style and citations
 
 Examples:
-| Field | Type | Constraint | Clause | Depends On | Notes |
-| luminous_flux | number(0-200) | >= 150 | R48.5.11 | | Measured in lumens |
-| beam_pattern | enum(symmetric|asymmetric) | | R48.5.7 | | |
-| colour_temperature | number(4000-6000) | range(4000-6000) | R83.7.1 | | Kelvin |
+### luminous_flux
+1. **type**: number(0-200)
+2. **description**: Luminous flux in lumens per lamp
+3. **clause**: R112.5.2
+4. **constraint**: >= 150
+5. **depends_on**: (none)
+6. **sample**: The luminous flux per lamp is 180 lumens [S1.c6], exceeding the 150 lumen minimum under R112.5.2.
+
+### beam_pattern
+1. **type**: enum(symmetric, asymmetric)
+2. **description**: The beam pattern type determines which requirements apply
+3. **clause**: R48.5.7
+4. **depends_on**: (none)
+5. **sample**: The headlamp uses an asymmetric beam pattern [S1.c2], conforming to R48.5.7 requirements.
+
+### colour_temperature
+1. **type**: number(4000-6000)
+2. **description**: Colour temperature in Kelvin
+3. **clause**: R83.7.1
+4. **constraint**: range(4000-6000)
+5. **depends_on**: (none)
+6. **sample**: The colour temperature is 5000 K [S1.c4], within the required range under R83.7.1.
 
 Rules:
 - Field: snake_case, descriptive
-- Type: number(min-max), string, enum(a|b|c), boolean
-- Constraint: >=, <=, >, <, range(a-b), or empty
-- Clause: Regulation reference like R48.5.11 or R112.5.3. Only use real UN ECE regulations.
-- Depends On: another field name if conditional, or empty
-- Notes: extra guidance for the LLM
+- Type: number(min-max), string, boolean, enum(a, b, c)
+- Constraint: >=, <=, >, <, range(a-b), or (none) — only for numerical checks
+- Clause: Regulation reference like R48.5.11 or R112.5.3 or Art 4(7)
+- Depends On: another field name if conditional, or (none)
+- Sample: a realistic example of what the LLM should output as the narrative value
+- regulation_ids: list of regulation codes in YAML frontmatter (e.g., R48, R112, GDPR)
 
 ## Red Lines
 
@@ -92,7 +120,7 @@ export async function generateSkill(
   const skillmd = parsed.content.trim();
 
   const checks = parseChecks(skillmd);
-  const regulationIds = extractRegulationIds(checks);
+  const regulationIds: string[] = parsed.data?.regulation_ids ?? [];
 
   logPipeline(
     `[SKILL-GEN] name="${parsed.data?.name ?? "auto-generated"}" checks=${checks.length} regulationIds=${regulationIds.join(", ") || "none"}`

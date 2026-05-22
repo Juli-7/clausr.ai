@@ -35,8 +35,8 @@ export async function POST(req: NextRequest) {
     }
     dbg("Validation PASSED");
 
-    const { message, skillName, sessionId, files } = parsed.data;
-    dbg("skillName: " + String(skillName ?? "(auto)") + " | message: " + message.slice(0, 80) + " | files: " + (files ? files.map(f => f.name + " (" + f.type + ", dataUrl:" + (f.dataUrl ? f.dataUrl.slice(0, 30) + "..." : "MISSING") + ")" ).join("; ") : "none"));
+    const { message, skillName, sessionId, files, revisionFields } = parsed.data;
+    dbg("skillName: " + String(skillName ?? "(auto)") + " | message: " + message.slice(0, 80) + " | files: " + (files ? files.map(f => f.name + " (" + f.type + ", dataUrl:" + (f.dataUrl ? f.dataUrl.slice(0, 30) + "..." : "MISSING") + ")" ).join("; ") : "none") + " | revisionFields: " + (revisionFields ? revisionFields.join(",") : "none"));
 
     // ── SSE streaming response ──
     const stream = new ReadableStream({
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
         };
 
         try {
-          for await (const event of orchestratePipeline(message, skillName, sessionId, files)) {
+          for await (const event of orchestratePipeline(message, skillName, sessionId, files, revisionFields)) {
             send(event);
           }
         } catch (err) {

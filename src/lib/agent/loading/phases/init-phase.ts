@@ -57,7 +57,8 @@ export async function initPhase(
     sessionId,
     correlationId,
     skill.checks,
-    skill.scripts
+    skill.scripts,
+    skill.regulationIds
   );
 
   // Load previous turns from DB into ctx.previousTurns
