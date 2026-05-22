@@ -558,7 +558,7 @@ describe("enforceChecks", () => {
 5. **depends_on**: (none)
 6. **sample**: (none)
 `);
-    const ctx = createPipelineContext("test", "", "sess-1", "corr-1", checks);
+    const ctx = createPipelineContext("test", "", "sess-1", "corr-1", checks, undefined, ["R48"]);
     ctx.files.addFile({ fileId: "f1", filename: "spec.pdf", extractedText: "Mounting_height: 650mm" });
     enforceChecks(ctx);
     const results = ctx.checks.getResults();
@@ -569,24 +569,20 @@ describe("enforceChecks", () => {
     expect(results[0].regulation).toBe("R48");
   });
 
-  it("marks missing qualitative check as FAIL", () => {
+  it("skips missing qualitative check (narrative only)", () => {
     const checks = parseChecks(`## Checks
 
 ### light_source
 1. **type**: string
 2. **description**: Type of light source
 3. **clause**: R112 §5.5
-4. **constraint**: required
-5. **depends_on**: (none)
-6. **sample**: (none)
+4. **depends_on**: (none)
+5. **sample**: (none)
 `);
     const ctx = createPipelineContext("test", "", "sess-1", "corr-1", checks);
     enforceChecks(ctx);
-    const results = ctx.checks.getResults();
-    expect(results).toHaveLength(1);
-    expect(results[0].name).toBe("light_source");
-    expect(results[0].verdict).toBe("FAIL");
-    expect(results[0].finding).toContain("not assessed");
+    // Qualitative checks are not auto-filled — only narrative from LLM is used
+    expect(ctx.checks.getResults()).toHaveLength(0);
   });
 
   it("does nothing when all checks have results", () => {

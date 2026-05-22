@@ -9,6 +9,7 @@ export function buildFindings(
 ): Record<string, string> {
   const findings: Record<string, string> = {};
   for (const cr of checkResults) {
+    if (cr.verdict !== "FAIL") continue;
     const cite = cr.citationRef ? ` [${cr.citationRef}]` : "";
     const src = cr.sourceRef ? ` [S${cr.sourceRef}]` : "";
     findings[cr.name] = `${cr.finding} → ${cr.verdict}${cite}${src}`;
