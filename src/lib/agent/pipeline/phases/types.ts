@@ -1,4 +1,4 @@
-import type { AgentResponse } from "@/lib/agent/types";
+import type { AgentResponse } from "@/lib/agent/shared/types";
 
 export type PipelineEvent =
   | { type: "status"; phase: string; stepTitle?: string }

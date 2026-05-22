@@ -13,4 +13,4 @@ export type {
   ToolCallRecord,
   ValidationError,
   ReasoningStep,
-} from "@/lib/agent/schemas";
+} from "@/lib/agent/shared/schemas";

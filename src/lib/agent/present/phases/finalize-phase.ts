@@ -1,9 +1,9 @@
-import { getResponseCount, addAssistantResponse } from "@/lib/agent/memory/repository";
-import { AgentResponseSchema } from "@/lib/agent/schemas";
-import type { AgentResponse } from "@/lib/agent/types";
-import type { ExecutableStep } from "../step-executor";
-import { logPipeline } from "../logger";
-import type { PipelineContext } from "../pipeline-context";
+import { getResponseCount, addAssistantResponse } from "@/lib/agent/shared/memory/repository";
+import { AgentResponseSchema } from "@/lib/agent/shared/schemas";
+import type { AgentResponse } from "@/lib/agent/shared/types";
+import type { ExecutableStep } from "@/lib/agent/pipeline/step-executor";
+import { logPipeline } from "@/lib/agent/pipeline/logger";
+import type { PipelineContext } from "@/lib/agent/pipeline/pipeline-context";
 import { evaluate } from "@/lib/agent/evaluation";
 
 export interface FinalizePhaseResult {

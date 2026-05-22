@@ -1,5 +1,5 @@
 import type { PipelineContext } from "./pipeline-context";
-import type { ParsedCheck } from "@/lib/agent/skill/check-parser";
+import type { ParsedCheck } from "@/lib/agent/loading/skill/check-parser";
 import { executeLlmStep, executeLlmToolStep } from "./executors/llm-executor";
 import { executeBuiltin } from "./builtins";
 import { PipelineError } from "./errors";

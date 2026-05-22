@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ChatRequestSchema } from "@/lib/agent/schemas";
+import { ChatRequestSchema } from "@/lib/agent/shared/schemas";
 import { orchestratePipeline } from "@/lib/agent/pipeline/orchestrator-v2";
 import fs from "fs";
 import path from "path";

@@ -1,4 +1,4 @@
-import type { AgentResponse, ChatRequestFile, ToolCallRecord, ReasoningStep } from "@/lib/agent/schemas";
+import type { AgentResponse, ChatRequestFile, ToolCallRecord, ReasoningStep } from "@/lib/agent/shared/schemas";
 
 export type { ReasoningStep };
 

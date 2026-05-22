@@ -1,7 +1,7 @@
 import { streamText } from "ai";
 import { createModel } from "@/lib/agent/llm/factory";
-import { logPipeline } from "../logger";
-import type { PipelineContext } from "../pipeline-context";
+import { logPipeline } from "@/lib/agent/pipeline/logger";
+import type { PipelineContext } from "@/lib/agent/pipeline/pipeline-context";
 
 /**
  * Analyze the user's follow-up message against previous step outputs

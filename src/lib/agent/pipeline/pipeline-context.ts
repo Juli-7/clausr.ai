@@ -1,11 +1,11 @@
-import type { Citation, SourceCitation, Verdict, Claim } from "@/lib/agent/schemas";
-import type { TextChunk } from "@/lib/agent/extractors";
-import type { ParsedCheck } from "@/lib/agent/skill/check-parser";
-import { CheckStore } from "./slices/check-store";
-import { StepMemory } from "./slices/step-memory";
-import { FileRegistry } from "./slices/file-registry";
-import { PaletteStore } from "./slices/palette-store";
-import { ReportAssembler } from "./slices/report-assembler";
+import type { Citation, SourceCitation, Verdict, Claim } from "@/lib/agent/shared/schemas";
+import type { TextChunk } from "@/lib/agent/user-info/extractors";
+import type { ParsedCheck } from "@/lib/agent/loading/skill/check-parser";
+import { CheckStore } from "@/lib/agent/shared/slices/check-store";
+import { StepMemory } from "@/lib/agent/shared/slices/step-memory";
+import { FileRegistry } from "@/lib/agent/shared/slices/file-registry";
+import { PaletteStore } from "@/lib/agent/shared/slices/palette-store";
+import { ReportAssembler } from "@/lib/agent/shared/slices/report-assembler";
 
 // ── Types ──
 

@@ -1,9 +1,9 @@
 import { streamText } from "ai";
 import matter from "gray-matter";
 import { createModel } from "@/lib/agent/llm/factory";
-import { parseChecks, extractRegulationIds } from "@/lib/agent/skill/check-parser";
+import { parseChecks, extractRegulationIds } from "@/lib/agent/loading/skill/check-parser";
 import { SkillLoadError } from "@/lib/agent/pipeline/errors";
-import type { SkillLoader } from "@/lib/agent/skill/loader";
+import type { SkillLoader } from "@/lib/agent/loading/skill/loader";
 import { logPipeline } from "@/lib/agent/pipeline/logger";
 
 const SKILL_GENERATION_PROMPT = `You are a compliance assessment skill designer. Generate a SKILL.md file that configures an AI pipeline to assess uploaded documents.

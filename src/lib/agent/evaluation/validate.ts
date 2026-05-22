@@ -1,4 +1,4 @@
-import type { Claim, Citation, SourceCitation } from "@/lib/agent/schemas";
+import type { Claim, Citation, SourceCitation } from "@/lib/agent/shared/schemas";
 import type { CitationPaletteEntry, SourcePaletteEntry } from "@/lib/agent/pipeline/pipeline-context";
 
 export interface ValidationError {

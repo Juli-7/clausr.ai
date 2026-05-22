@@ -3,8 +3,8 @@ import type {
   SourceCitation,
   Claim,
   Confidence,
-} from "@/lib/agent/schemas";
-import type { ParsedCheck } from "@/lib/agent/skill/check-parser";
+} from "@/lib/agent/shared/schemas";
+import type { ParsedCheck } from "@/lib/agent/loading/skill/check-parser";
 import type { CitationPaletteEntry, SourcePaletteEntry, CheckResult } from "@/lib/agent/pipeline/pipeline-context";
 import type { ValidationError as PipelineValidationError } from "./validate";
 

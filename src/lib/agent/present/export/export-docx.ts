@@ -6,7 +6,7 @@ import {
   HeadingLevel,
   AlignmentType,
 } from "docx";
-import type { AgentResponse } from "@/lib/agent/types";
+import type { AgentResponse } from "@/lib/agent/shared/types";
 
 export async function generateDocx(
   response: AgentResponse,

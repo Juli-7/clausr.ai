@@ -1,8 +1,8 @@
-import { extractFileContent } from "@/lib/agent/extractors";
-import type { TextChunk } from "@/lib/agent/extractors";
-import { saveFileContents, saveFileChunks, getFileChunks } from "@/lib/agent/memory/repository";
-import { logPipeline } from "../logger";
-import type { PipelineContext } from "../pipeline-context";
+import { extractFileContent } from "@/lib/agent/user-info/extractors";
+import type { TextChunk } from "@/lib/agent/user-info/extractors";
+import { saveFileContents, saveFileChunks, getFileChunks } from "@/lib/agent/shared/memory/repository";
+import { logPipeline } from "@/lib/agent/pipeline/logger";
+import type { PipelineContext } from "@/lib/agent/pipeline/pipeline-context";
 
 export interface InputPhaseParams {
   files?: { name: string; size: number; type: string; dataUrl?: string }[];

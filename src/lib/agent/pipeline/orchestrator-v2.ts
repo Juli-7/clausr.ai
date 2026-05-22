@@ -1,13 +1,13 @@
 import { executeStep, generateStepsFromChecks } from "./step-executor";
-import { saveContextSnapshot, getResponseCount } from "@/lib/agent/memory/repository";
+import { saveContextSnapshot, getResponseCount } from "@/lib/agent/shared/memory/repository";
 import { PipelineError, formatPipelineError } from "./errors";
 import { logPipeline, truncate } from "./logger";
-import { initPhase } from "./phases/init-phase";
-import { inputPhase } from "./phases/input-phase";
-import { skillGenPhase } from "./phases/skill-gen-phase";
-import { identifyRevisionTarget } from "./phases/revision-phase";
+import { initPhase } from "@/lib/agent/loading/phases/init-phase";
+import { inputPhase } from "@/lib/agent/loading/phases/input-phase";
+import { skillGenPhase } from "@/lib/agent/loading/phases/skill-gen-phase";
+import { identifyRevisionTarget } from "@/lib/agent/loading/phases/revision-phase";
 import { enforceChecks } from "./phases/enforce-checks";
-import { finalizePhase } from "./phases/finalize-phase";
+import { finalizePhase } from "@/lib/agent/present/phases/finalize-phase";
 import type { PipelineEvent } from "./phases/types";
 
 export async function* orchestratePipeline(

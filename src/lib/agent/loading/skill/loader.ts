@@ -2,8 +2,8 @@ import fs from "fs";
 import path from "path";
 import matter from "gray-matter";
 import { SkillLoadError } from "@/lib/agent/pipeline/errors";
-import { parseChecks, extractRegulationIds } from "@/lib/agent/skill/check-parser";
-import type { ParsedCheck } from "@/lib/agent/skill/check-parser";
+import { parseChecks, extractRegulationIds } from "@/lib/agent/loading/skill/check-parser";
+import type { ParsedCheck } from "@/lib/agent/loading/skill/check-parser";
 
 const SKILLS_DIR = path.join(process.cwd(), "skills");
 

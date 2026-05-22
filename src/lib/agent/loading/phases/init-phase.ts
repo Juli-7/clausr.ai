@@ -1,12 +1,12 @@
-import { loadSkill } from "@/lib/agent/skill/loader";
-import { generateSkill } from "@/lib/agent/extractors/skill-generator";
-import { getOrCreateSession, addUserMessage } from "@/lib/agent/memory/repository";
-import { getResponsesForSession } from "@/lib/agent/memory/repository";
-import { pruneOldSessions } from "@/lib/agent/memory/cleanup";
-import { createPipelineContext } from "../pipeline-context";
-import { PipelineError, generateCorrelationId, formatPipelineError } from "../errors";
-import { logPipeline, truncate } from "../logger";
-import type { PipelineContext, CheckResult } from "../pipeline-context";
+import { loadSkill } from "@/lib/agent/loading/skill/loader";
+import { generateSkill } from "@/lib/agent/loading/extractors/skill-generator";
+import { getOrCreateSession, addUserMessage } from "@/lib/agent/shared/memory/repository";
+import { getResponsesForSession } from "@/lib/agent/shared/memory/repository";
+import { pruneOldSessions } from "@/lib/agent/shared/memory/cleanup";
+import { createPipelineContext } from "@/lib/agent/pipeline/pipeline-context";
+import { PipelineError, generateCorrelationId, formatPipelineError } from "@/lib/agent/pipeline/errors";
+import { logPipeline, truncate } from "@/lib/agent/pipeline/logger";
+import type { PipelineContext, CheckResult } from "@/lib/agent/pipeline/pipeline-context";
 
 export interface InitPhaseResult {
   ctx: PipelineContext;

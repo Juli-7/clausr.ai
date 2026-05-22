@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { ScriptExecutionCard } from "@/components/script-execution-card";
-import type { ChatTurn } from "@/lib/agent/turn-types";
+import type { ChatTurn } from "@/lib/agent/shared/turn-types";
 
 interface ReasoningPanelProps {
   turns: ChatTurn[];

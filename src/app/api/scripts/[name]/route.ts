@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { loadSkill } from "@/lib/agent/skill/loader";
+import { loadSkill } from "@/lib/agent/loading/skill/loader";
 import { runScript } from "@/lib/agent/pipeline/executors/script-runner";
-import { ComplianceCheckSchema } from "@/lib/agent/schemas";
+import { ComplianceCheckSchema } from "@/lib/agent/shared/schemas";
 
 /**
  * POST /api/scripts/<name>

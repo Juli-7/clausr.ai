@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { integrateLesson } from "@/lib/agent/evolution/integrator";
-import { getDb } from "@/lib/agent/memory/database";
+import { getDb } from "@/lib/agent/shared/memory/database";
 
 const RequestSchema = z.object({
   sessionId: z.string().min(1),

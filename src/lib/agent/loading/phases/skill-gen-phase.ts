@@ -1,6 +1,6 @@
-import { generateSkill } from "@/lib/agent/extractors/skill-generator";
-import { logPipeline } from "../logger";
-import type { PipelineContext } from "../pipeline-context";
+import { generateSkill } from "@/lib/agent/loading/extractors/skill-generator";
+import { logPipeline } from "@/lib/agent/pipeline/logger";
+import type { PipelineContext } from "@/lib/agent/pipeline/pipeline-context";
 
 /**
  * Generate a skill from the user's request and uploaded files.

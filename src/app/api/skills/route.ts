@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listSkills, loadSkill } from "@/lib/agent/skill/loader";
+import { listSkills, loadSkill } from "@/lib/agent/loading/skill/loader";
 
 export async function GET() {
   try {

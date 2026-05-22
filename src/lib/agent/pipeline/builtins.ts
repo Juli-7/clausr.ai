@@ -1,6 +1,6 @@
-import { getRegulationApi } from "@/lib/agent/regulation/regulation-api";
-import { getConversationHistory } from "@/lib/agent/memory/repository";
-import type { ComplianceCheckInput } from "@/lib/agent/schemas";
+import { getRegulationApi } from "@/lib/agent/knowledge/regulation-api";
+import { getConversationHistory } from "@/lib/agent/shared/memory/repository";
+import type { ComplianceCheckInput } from "@/lib/agent/shared/schemas";
 import type {
   PipelineContext,
   CitationPaletteEntry,

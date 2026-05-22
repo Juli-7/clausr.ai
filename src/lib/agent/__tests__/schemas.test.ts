@@ -4,7 +4,7 @@ import {
   AgentResponseSchema,
   ChatRequestSchema,
   ComplianceCheckSchema,
-} from "@/lib/agent/schemas";
+} from "@/lib/agent/shared/schemas";
 
 describe("CitationSchema", () => {
   it("accepts a valid citation", () => {

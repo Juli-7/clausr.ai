@@ -1,4 +1,4 @@
-import { getDb, getSetting } from "@/lib/agent/memory/database";
+import { getDb, getSetting } from "@/lib/agent/shared/memory/database";
 import fs from "fs";
 import path from "path";
 

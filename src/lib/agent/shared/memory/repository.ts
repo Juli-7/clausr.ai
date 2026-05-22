@@ -1,6 +1,6 @@
-import { getDb } from "@/lib/agent/memory/database";
-import type { AgentResponse } from "@/lib/agent/types";
-import type { Citation } from "@/lib/agent/schemas";
+import { getDb } from "@/lib/agent/shared/memory/database";
+import type { AgentResponse } from "@/lib/agent/shared/types";
+import type { Citation } from "@/lib/agent/shared/schemas";
 
 function safeJsonParse<T>(json: string, fallback?: T): T {
   try {

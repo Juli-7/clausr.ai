@@ -1,14 +1,14 @@
 import { streamText, tool } from "ai";
 import { createModel } from "@/lib/agent/llm/factory";
-import { loadSkill } from "@/lib/agent/skill/loader";
+import { loadSkill } from "@/lib/agent/loading/skill/loader";
 import { runScript } from "./script-runner";
-import { ComplianceCheckSchema, type ComplianceCheckInput } from "@/lib/agent/schemas";
+import { ComplianceCheckSchema, type ComplianceCheckInput } from "@/lib/agent/shared/schemas";
 import { executeComplianceCheck } from "@/lib/agent/pipeline/builtins";
 import type { ExecutableStep } from "../step-executor";
-import type { ParsedCheck } from "@/lib/agent/skill/check-parser";
+import type { ParsedCheck } from "@/lib/agent/loading/skill/check-parser";
 import type { PipelineContext } from "../pipeline-context";
 import type { StepResult } from "../step-executor";
-import type { ToolCallRecord } from "@/lib/agent/types";
+import type { ToolCallRecord } from "@/lib/agent/shared/types";
 import { logPipeline, truncate } from "../logger";
 
 export async function executeLlmStep(

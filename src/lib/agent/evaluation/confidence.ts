@@ -1,4 +1,4 @@
-import type { Confidence } from "@/lib/agent/schemas";
+import type { Confidence } from "@/lib/agent/shared/schemas";
 import type { EvaluationInput } from "./types";
 
 /**

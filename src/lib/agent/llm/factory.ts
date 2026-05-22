@@ -1,7 +1,7 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import type { LanguageModelV3 } from "@ai-sdk/provider";
-import { getSetting } from "@/lib/agent/memory/database";
+import { getSetting } from "@/lib/agent/shared/memory/database";
 
 export type ProviderName = "openai" | "anthropic" | "deepseek";
 

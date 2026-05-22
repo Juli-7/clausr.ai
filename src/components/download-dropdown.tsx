@@ -2,8 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import type { AgentResponse } from "@/lib/agent/types";
-import { generateDocx } from "@/lib/agent/export/export-docx";
+import type { AgentResponse } from "@/lib/agent/shared/types";
+import { generateDocx } from "@/lib/agent/present/export/export-docx";
 
 interface DownloadDropdownProps {
   response: AgentResponse | null;
