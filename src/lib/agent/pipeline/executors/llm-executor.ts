@@ -129,7 +129,7 @@ ${retryContext}
               return {
                 ...out,
                 clause: inp.clause as string ?? "",
-                regulation: inp.regulation as string ?? extractRegulation(inp),
+                regulation: inp.regulation as string ?? (ctx.skill.regulationIds[0] ?? ""),
               };
             });
             collectedToolRuns.push({ inputs: checksInput, outputs: merged });
@@ -248,20 +248,11 @@ function storeOutput(ctx: PipelineContext, stepNumber: number, text: string): vo
   }
 }
 
-function extractRegulation(result: Record<string, unknown>): string {
-  if (result.regulation && typeof result.regulation === "string") return result.regulation;
-  if (result.clause && typeof result.clause === "string") {
-    const match = result.clause.match(/^([A-Z]+\d+)/);
-    if (match) return match[1];
-  }
-  return "R48";
-}
-
 function findCitationRef(ctx: PipelineContext, result: Record<string, unknown>): string {
-  const regulation = extractRegulation(result);
+  const regulation = (result.regulation as string) ?? (ctx.skill.regulationIds[0] ?? "");
   const clauseStr = (result.clause as string) ?? "";
-  const clauseMatch = clauseStr.match(/§([\d.]+)/);
-  const clauseNum = clauseMatch?.[1] ?? "";
+  const clauseIdx = clauseStr.indexOf("§");
+  const clauseNum = clauseIdx !== -1 ? clauseStr.substring(clauseIdx + 1) : "";
 
   if (clauseNum) {
     for (const entry of ctx.palette.getCitationPalette()) {

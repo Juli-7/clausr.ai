@@ -35,7 +35,7 @@ export async function identifyRevisionTarget(
 ): Promise<number> {
   const entries = ctx.steps.entries();
   const previousSteps = Object.entries(entries)
-    .filter(([k]) => /^\d+$/.test(k))
+    .filter(([k]) => !isNaN(Number(k)))
     .sort(([a], [b]) => Number(a) - Number(b))
     .map(([k, v]) => {
       const body = typeof v === "string" ? v : JSON.stringify(v, null, 2);

@@ -11,7 +11,7 @@ export class StepMemory {
 
   latest(): { stepNumber: number; value: unknown } | null {
     const keys = Object.keys(this.outputs)
-      .filter((k) => /^\d+$/.test(k))
+      .filter((k) => !isNaN(Number(k)))
       .sort((a, b) => Number(a) - Number(b));
     if (keys.length === 0) return null;
     const key = keys[keys.length - 1];

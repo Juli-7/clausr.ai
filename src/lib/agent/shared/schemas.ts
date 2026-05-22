@@ -159,10 +159,11 @@ export type ReasoningStep = z.infer<typeof ReasoningStepSchema>;
 
 // ── Chunk ref parsing utility ──
 
-const CHUNK_REF_RE = /^S(\d+)\.(.+)$/;
-
 export function parseChunkRef(chunkRef: string): { fileRef: number; chunkId: string } | null {
-  const match = chunkRef.match(CHUNK_REF_RE);
-  if (!match) return null;
-  return { fileRef: parseInt(match[1], 10), chunkId: match[2] };
+  if (!chunkRef.startsWith("S")) return null;
+  const dotIdx = chunkRef.indexOf(".");
+  if (dotIdx === -1) return null;
+  const fileRef = parseInt(chunkRef.substring(1, dotIdx), 10);
+  if (isNaN(fileRef)) return null;
+  return { fileRef, chunkId: chunkRef.substring(dotIdx + 1) };
 }

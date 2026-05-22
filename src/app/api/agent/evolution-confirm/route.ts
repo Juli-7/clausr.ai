@@ -34,13 +34,18 @@ export async function POST(request: NextRequest) {
 
       const content = fs.readFileSync(skillMdPath, "utf-8");
       if (!content.includes(`- ${parsed.lessonText}`)) {
-        const sectionHeader = "## 7. Experience Accumulation";
+        const sectionHeader = "## Lessons Learnt";
         if (content.includes(sectionHeader)) {
-          const sectionRegex = new RegExp(`(${escapeRegex(sectionHeader)}[\\s\\S]*?)(?=\n## |\n*$)`);
-          const updated = content.replace(sectionRegex, (match) => `${match.trimEnd()}\n- ${parsed.lessonText}`);
+          const startIdx = content.indexOf(sectionHeader);
+          const afterHeader = content.substring(startIdx + sectionHeader.length).trimStart();
+          const nextSection = content.indexOf("\n## ", startIdx + sectionHeader.length);
+          const sectionEnd = nextSection !== -1 ? nextSection : content.length;
+          const before = content.substring(0, sectionEnd);
+          const after = nextSection !== -1 ? content.substring(sectionEnd) : "";
+          const updated = before.trimEnd() + "\n- " + parsed.lessonText + "\n" + after;
           fs.writeFileSync(skillMdPath, updated, "utf-8");
         } else {
-          const lessonBlock = `\n\n${sectionHeader}\n\n> This section is auto-maintained by system experience, equally important as the initial flow.\n\n- ${parsed.lessonText}\n`;
+          const lessonBlock = `\n\n## Lessons Learnt\n\n(System-maintained area, initially empty.)\n\n- ${parsed.lessonText}\n`;
           fs.writeFileSync(skillMdPath, content.trimEnd() + lessonBlock, "utf-8");
         }
         written = true;
@@ -65,8 +70,4 @@ export async function POST(request: NextRequest) {
     console.error("[api/agent/evolution-confirm]", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
-
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

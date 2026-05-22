@@ -55,7 +55,7 @@ export async function finalizePhase(
   }
 
   const responseData: Record<string, unknown> = {
-    content: formatContent(result.findings, ctx.steps.entries(), ctx.skill.checks),
+    content: formatContent(ctx.steps.entries(), ctx.skill.checks),
     reasoning: result.reason,
     citations: result.citations,
     sourceCitations: result.sourceCitations.length > 0 ? result.sourceCitations : undefined,
@@ -98,7 +98,6 @@ export async function finalizePhase(
 }
 
 function formatContent(
-  findings: Record<string, string>,
   stepOutputs: Record<number | string, unknown>,
   checks: ParsedCheck[]
 ): string {
@@ -116,16 +115,5 @@ function formatContent(
     }
   }
 
-  const findingsTable = buildFindingsTable(findings);
-  if (findingsTable) sections.push(findingsTable);
-
   return sections.length > 0 ? sections.join("\n\n") : "Assessment not available.";
-}
-
-function buildFindingsTable(findings: Record<string, string>): string {
-  const rows = Object.entries(findings)
-    .map(([k, v]) => `| ${k} | ${v} |`)
-    .join("\n");
-  if (!rows) return "";
-  return `## Findings\n| Field | Value |\n| --- | --- |\n${rows}`;
 }

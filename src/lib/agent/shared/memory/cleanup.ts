@@ -4,10 +4,14 @@ import path from "path";
 
 const UPLOADS_DIR = path.join(process.cwd(), "data", "uploads");
 
-const SESSION_ID_RE = /^[a-zA-Z0-9_-]+$/;
-
 function isValidSessionId(id: string): boolean {
-  return SESSION_ID_RE.test(id) && id.length >= 1 && id.length <= 128;
+  if (id.length < 1 || id.length > 128) return false;
+  for (let i = 0; i < id.length; i++) {
+    const c = id[i];
+    if ((c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || (c >= "0" && c <= "9") || c === "_" || c === "-") continue;
+    return false;
+  }
+  return true;
 }
 
 function deleteSessionCascade(db: ReturnType<typeof getDb>, sessionId: string): void {
