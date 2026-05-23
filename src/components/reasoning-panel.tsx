@@ -8,10 +8,9 @@ interface ReasoningPanelProps {
   turns: ChatTurn[];
   loading: boolean;
   stepStatus?: string | null;
-  sentFiles?: { name: string; size: number; type: string }[];
 }
 
-export function ReasoningPanel({ turns, loading, stepStatus, sentFiles }: ReasoningPanelProps) {
+export function ReasoningPanel({ turns, loading, stepStatus }: ReasoningPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const hasContent = turns.length > 0;
 
@@ -34,23 +33,6 @@ export function ReasoningPanel({ turns, loading, stepStatus, sentFiles }: Reason
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      {/* Sent files pinned at top — outside scroll */}
-      {sentFiles && sentFiles.length > 0 && (
-        <div className="flex items-center gap-1.5 flex-wrap px-3 pt-3 pb-2 shrink-0">
-          <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--color-text-muted)" }}>
-            Files:
-          </span>
-          {sentFiles.map((f) => (
-            <span
-              key={f.name}
-              className="text-[10px] px-1.5 py-0.5 rounded"
-              style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border-default)", color: "var(--color-text-body)" }}
-            >
-              {f.name}
-            </span>
-          ))}
-        </div>
-      )}
       <div ref={containerRef} style={{ flex: 1, overflowY: "auto", padding: "0 12px 12px" }}>
         <div
           className="text-[11px] uppercase tracking-wider font-semibold mb-4"

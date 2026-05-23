@@ -105,7 +105,7 @@ ${retryContext}
     }[] = [];
 
     const humanField = step.title.replace("Evaluate: ", "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-    const userMessage = `Execute step ${step.number}: ${step.title}. Write a narrative analysis starting with "### ${humanField}". Then output a JSON code block with this exact structure:\n\`\`\`json\n{"${step.title.replace("Evaluate: ", "")}": {"value": "narrative text with citations", "sourceCitation": ["S1.c1"], "citationRef": ["R48.5.11"], "verdict": "PASS"}}\n\`\`\`\n\nThe JSON MUST include all fields: value, sourceCitation (array), citationRef (array), and verdict. Arrays can be empty but must be present.`;
+    const userMessage = `Execute step ${step.number}: ${step.title}. Write a narrative analysis starting with "### ${humanField}". Then output a JSON code block with this exact structure:\n\`\`\`json\n{"${step.title.replace("Evaluate: ", "")}": {"value": "narrative text with citations", "sourceCitation": ["S1.c1", "S1.c2"], "citationRef": ["R48.5.11"], "verdict": "PASS"}}\n\`\`\`\n\nThe JSON MUST include all fields: value, sourceCitation (array), citationRef (array), and verdict. Arrays can be empty but must be present.`;
 
     const result = streamText({
       model: createModel(),

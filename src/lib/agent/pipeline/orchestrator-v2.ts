@@ -115,6 +115,15 @@ export async function* orchestratePipeline(
         [...ctx.palette.getCitationPalette()],
         ctx.files.getSourcePalette()
       );
+      // Backfill any chunk references in the narrative that the LLM forgot to include in sourceCitation
+      const fullContent = result.streamedTokens?.join("") ?? "";
+      if (fullContent) {
+        ctx.checks.supplementFromContent(
+          fullContent,
+          [...ctx.palette.getCitationPalette()],
+          ctx.files.getSourcePalette()
+        );
+      }
     }
 
     if (result.contextSnapshot) {

@@ -79,7 +79,7 @@ export async function finalizePhase(
     responseData.validationErrors = result.validationErrors;
   }
 
-  logPipeline(`final response: content=${(responseData.content as string).length}chars citations=${result.citations.length} verdict=${verdict}`);
+  logPipeline(`final response: content=${(responseData.content as string).length}chars citations=${result.citations.length} verdict=${responseData.verdict}`);
 
   const agentResponse = AgentResponseSchema.parse(responseData);
   addAssistantResponse(sessionId, agentResponse);

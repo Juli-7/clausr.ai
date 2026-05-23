@@ -101,7 +101,7 @@ export function addAssistantResponse(sessionId: string, response: AgentResponse)
     response.content,
     response.reasoning,
     JSON.stringify(response.citations),
-    response.verdict,
+    response.verdict ?? "",
     response.round,
     response.sections ? JSON.stringify(response.sections) : null,
     response.sourceCitations ? JSON.stringify(response.sourceCitations) : null,
