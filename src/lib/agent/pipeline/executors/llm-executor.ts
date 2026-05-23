@@ -104,7 +104,7 @@ ${retryContext}
     }[] = [];
 
     const humanField = step.title.replace("Evaluate: ", "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-    const userMessage = `Execute step ${step.number}: ${step.title}. Write a narrative analysis starting with "### ${humanField}". Then output a JSON code block with this exact structure:\n\`\`\`json\n{"${step.title.replace("Evaluate: ", "")}": {"value": "narrative text with citations", "sourceRef": 1, "chunkRef": "S1.c1", "citationRef": "R37.1b", "verdict": "PASS"}}\n\`\`\``;
+    const userMessage = `Execute step ${step.number}: ${step.title}. Write a narrative analysis starting with "### ${humanField}". Then output a JSON code block with this exact structure:\n\`\`\`json\n{"${step.title.replace("Evaluate: ", "")}": {"value": "narrative text with citations", "sourceRef": [1], "chunkRef": ["S1.c1"], "citationRef": ["R48.5.11"], "verdict": "PASS"}}\n\`\`\``;
 
     const result = streamText({
       model: createModel(),
@@ -248,14 +248,14 @@ function storeOutput(ctx: PipelineContext, stepNumber: number, text: string): vo
   }
 }
 
-function resolveCitationRef(palette: readonly CitationPaletteEntry[], clause: string): string {
-  if (!clause) return "";
-  if (palette.some(e => e.id === clause)) return clause;
+function resolveCitationRef(palette: readonly CitationPaletteEntry[], clause: string): string[] {
+  if (!clause) return [];
+  if (palette.some(e => e.id === clause)) return [clause];
   const dot = clause.indexOf(".");
   const reg = dot !== -1 ? clause.substring(0, dot) : "";
-  if (!reg) return "";
+  if (!reg) return [];
   const fallback = palette.find(e => e.id.startsWith(reg + "."));
-  return fallback ? fallback.id : `${reg}.0`;
+  return fallback ? [fallback.id] : [`${reg}.0`];
 }
 
 export function buildDomainSchemaGuide(checks: ParsedCheck[]): string {
@@ -302,7 +302,7 @@ function buildContextSummary(ctx: PipelineContext): string {
 
   if (ctx.checks.getResults().length > 0) {
     const summary = ctx.checks.getResults()
-      .map((c) => `${c.name}: ${c.verdict} — ${c.finding} [${c.citationRef}]`)
+      .map((c) => `${c.name}: ${c.verdict} — ${c.finding} [${c.citationRef.join(", ")}]`)
       .join("\n");
     parts.push(`Check Results:\n${summary}`);
   }
@@ -358,7 +358,7 @@ function buildCitationGuide(ctx: PipelineContext): string {
  * Parse the LLM's JSON output and extract a CheckResult for the current step.
  *
  * Expected JSON format (per field):
- *   {"field_name": {"value": "narrative...", "sourceRef": 1, "chunkRef": "S1.c1", "citationRef": "R48.5.11", "verdict": "PASS"}}
+ *   {"field_name": {"value": "narrative...", "sourceRef": [1], "chunkRef": ["S1.c1"], "citationRef": ["R48.5.11"], "verdict": "PASS"}}
  */
 function extractCheckResultsFromText(
   text: string,
@@ -393,10 +393,30 @@ function extractCheckResultsFromText(
   if (!entry || typeof entry !== "object") return [];
 
   const e = entry as Record<string, unknown>;
+
   const value = typeof e.value === "string" ? e.value : "";
-  const sourceRef = typeof e.sourceRef === "number" ? e.sourceRef : undefined;
-  const chunkRef = typeof e.chunkRef === "string" ? e.chunkRef : "";
-  const citationRef = typeof e.citationRef === "string" ? e.citationRef : "";
+
+  const rawCitationRef = e.citationRef;
+  const citationRef = Array.isArray(rawCitationRef)
+    ? rawCitationRef.filter((r): r is string => typeof r === "string")
+    : typeof rawCitationRef === "string" && rawCitationRef
+      ? [rawCitationRef]
+      : [];
+
+  const rawSourceRef = e.sourceRef;
+  const sourceRef = Array.isArray(rawSourceRef)
+    ? rawSourceRef.filter((r): r is number => typeof r === "number")
+    : typeof rawSourceRef === "number"
+      ? [rawSourceRef]
+      : undefined;
+
+  const rawChunkRef = e.chunkRef;
+  const chunkRef = Array.isArray(rawChunkRef)
+    ? rawChunkRef.filter((r): r is string => typeof r === "string")
+    : typeof rawChunkRef === "string" && rawChunkRef
+      ? [rawChunkRef]
+      : undefined;
+
   const verdictRaw = typeof e.verdict === "string" ? e.verdict : "PASS";
   const verdict = verdictRaw.toUpperCase() === "FAIL" ? "FAIL" as const : "PASS" as const;
 

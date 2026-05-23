@@ -95,7 +95,7 @@ export async function initPhase(
         type: checkDef?.type.kind === "number" ? "numerical" : "qualitative",
         finding,
         verdict: finding.startsWith("FAIL") ? "FAIL" : "PASS",
-        citationRef: regMatch?.[1] ?? "",
+        citationRef: regMatch?.[1] ? [regMatch[1]] : [],
       });
     }
     ctx.checks.addResults(restoredResults);

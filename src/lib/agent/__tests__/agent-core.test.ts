@@ -324,7 +324,7 @@ describe("CheckStore", () => {
     const store = new CheckStore();
     store.addResults([{
       name: "mounting_height", type: "numerical",
-      finding: "650", verdict: "PASS", citationRef: "R48.6.2",
+      finding: "650", verdict: "PASS", citationRef: ["R48.6.2"],
     }]);
     expect(store.getResults()).toHaveLength(1);
     expect(store.computeVerdict()).toBe("PASS");
@@ -334,8 +334,8 @@ describe("CheckStore", () => {
   it("computes FAIL when any check fails", () => {
     const store = new CheckStore();
     store.addResults([
-      { name: "a", type: "numerical", finding: "ok", verdict: "PASS", citationRef: "" },
-      { name: "b", type: "numerical", finding: "bad", verdict: "FAIL", citationRef: "" },
+      { name: "a", type: "numerical", finding: "ok", verdict: "PASS", citationRef: [] },
+      { name: "b", type: "numerical", finding: "bad", verdict: "FAIL", citationRef: [] },
     ]);
     expect(store.computeVerdict()).toBe("FAIL");
     expect(store.failureCount).toBe(1);
@@ -344,8 +344,8 @@ describe("CheckStore", () => {
   it("removes results for a field", () => {
     const store = new CheckStore();
     store.addResults([
-      { name: "a", type: "numerical", finding: "1", verdict: "PASS", citationRef: "" },
-      { name: "b", type: "numerical", finding: "2", verdict: "PASS", citationRef: "" },
+      { name: "a", type: "numerical", finding: "1", verdict: "PASS", citationRef: [] },
+      { name: "b", type: "numerical", finding: "2", verdict: "PASS", citationRef: [] },
     ]);
     const removed = store.removeResultsForField("a");
     expect(removed).toHaveLength(1);
@@ -357,7 +357,7 @@ describe("CheckStore", () => {
     const store = new CheckStore();
     store.addResults([{
       name: "mounting_height", type: "numerical",
-      finding: "650", verdict: "PASS", citationRef: "R48.6.2",
+      finding: "650", verdict: "PASS", citationRef: ["R48.6.2"],
     }]);
     store.compileCitations(
       [{ id: "R48.6.2", regulation: "R48", clause: "6.2", text: "Mount at least 500mm" }],
@@ -596,7 +596,7 @@ describe("enforceChecks", () => {
     const ctx = createPipelineContext("test", "", "sess-1", "corr-1", checks);
     ctx.checks.addResults([{
       name: "x", type: "numerical",
-      finding: "10", verdict: "PASS", citationRef: "",
+      finding: "10", verdict: "PASS", citationRef: [],
     }]);
     enforceChecks(ctx);
     expect(ctx.checks.getResults()).toHaveLength(1);

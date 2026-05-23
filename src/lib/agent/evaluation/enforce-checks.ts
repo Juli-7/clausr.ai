@@ -69,7 +69,7 @@ export function enforceChecks(ctx: PipelineContext): void {
         ? `${field}: ${extractedValue} (auto-extracted)`
         : `${field}: not assessed (no file data)`,
       verdict: extractedValue ? "PASS" : "FAIL",
-      citationRef: "",
+      citationRef: [],
     };
 
     ctx.checks.addResults([result]);

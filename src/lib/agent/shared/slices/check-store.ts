@@ -61,29 +61,35 @@ export class CheckStore {
     const sourceMap = new Map<number, SourceCitation>();
 
     for (const check of this.checkResults) {
-      if (!citationMap.has(check.citationRef)) {
-        const entry = citationPalette.find((e) => e.id === check.citationRef);
-        if (entry) {
-          citationMap.set(check.citationRef, {
-            ref: entry.id,
-            regulation: entry.regulation,
-            clause: entry.clause,
-          });
+      for (const ref of check.citationRef) {
+        if (!citationMap.has(ref)) {
+          const entry = citationPalette.find((e) => e.id === ref);
+          if (entry) {
+            citationMap.set(ref, {
+              ref: entry.id,
+              regulation: entry.regulation,
+              clause: entry.clause,
+            });
+          }
         }
       }
 
-      if (check.sourceRef && !sourceMap.has(check.sourceRef)) {
-        const entry = sourcePalette.find((e) => e.id === check.sourceRef);
-        if (entry) {
-          sourceMap.set(check.sourceRef, {
-            ref: entry.id,
-            fileId: entry.fileId,
-            filename: entry.filename,
-            fileUrl: entry.dataUrl,
-            extractedText: entry.extractedText,
-            keyExcerpt: entry.keyExcerpt,
-            pageNumber: entry.pageNumber,
-          });
+      if (check.sourceRef) {
+        for (const ref of check.sourceRef) {
+          if (!sourceMap.has(ref)) {
+            const entry = sourcePalette.find((e) => e.id === ref);
+            if (entry) {
+              sourceMap.set(ref, {
+                ref: entry.id,
+                fileId: entry.fileId,
+                filename: entry.filename,
+                fileUrl: entry.dataUrl,
+                extractedText: entry.extractedText,
+                keyExcerpt: entry.keyExcerpt,
+                pageNumber: entry.pageNumber,
+              });
+            }
+          }
         }
       }
     }

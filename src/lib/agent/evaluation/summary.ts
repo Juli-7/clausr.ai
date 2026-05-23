@@ -10,7 +10,7 @@ export function buildFindings(
   const findings: Record<string, string> = {};
   for (const cr of checkResults) {
     if (cr.verdict !== "FAIL") continue;
-    const src = cr.sourceRef ? ` [S${cr.sourceRef}]` : "";
+    const src = cr.sourceRef?.map(r => ` [S${r}]`).join("") ?? "";
     findings[cr.name] = `${cr.finding} → ${cr.verdict}${src}`;
   }
   return findings;

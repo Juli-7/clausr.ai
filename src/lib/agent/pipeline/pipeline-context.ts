@@ -31,9 +31,9 @@ export interface CheckResult {
   type: "numerical" | "qualitative";
   finding: string;
   verdict: "PASS" | "FAIL";
-  citationRef: string;
-  sourceRef?: number;
-  chunkRef?: string;
+  citationRef: string[];
+  sourceRef?: number[];
+  chunkRef?: string[];
   toolCallId?: string;
   toolResult?: {
     value: number;
