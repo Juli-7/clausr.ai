@@ -312,14 +312,39 @@ function DocumentCard({
         },
       });
     } else {
-      setActiveCitation(null);
-      setActiveSourceCitation(null);
+      const scite = target.closest("cite.source-citation-marker") as HTMLElement | null;
+      if (scite) {
+        const ref = parseInt(scite.getAttribute("data-source-ref") ?? "0", 10);
+        const sc = sourceCitations?.find(r => r.ref === ref);
+        const filename = sc?.filename ?? "Unknown file";
+        const excerpt = sc?.keyExcerpt ?? "";
+        const text = sc?.extractedText ?? "";
+        const rect = scite.getBoundingClientRect();
+        setActiveCitation(null);
+        setActiveSourceCitation({
+          ref,
+          fileId: sc?.fileId,
+          filename,
+          fileUrl: sc?.fileUrl,
+          excerpt,
+          text,
+          pageNumber: sc?.pageNumber,
+          position: {
+            top: rect.bottom + 6,
+            left: Math.max(10, rect.left - 100),
+          },
+        });
+      } else {
+        setActiveCitation(null);
+        setActiveSourceCitation(null);
+      }
     }
   }
 
   return (
     <div
       className="mb-6 rounded-lg overflow-hidden"
+      onClick={handleContentClick}
       onMouseUp={onMouseUp}
       style={{
         border: "1px solid var(--color-border-default)",
@@ -847,6 +872,22 @@ const citationStyles = `
   color: var(--color-accent-blue);
   background: var(--color-accent-blue-bg);
   border: 1px solid var(--color-accent-blue-border);
+  vertical-align: middle;
+}
+.source-citation-marker {
+  display: inline-flex;
+  align-items: center;
+  font-style: normal;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1;
+  padding: 2px 6px;
+  margin: 0 2px;
+  border-radius: 3px;
+  cursor: pointer;
+  color: var(--color-amber);
+  background: var(--color-amber-bg);
+  border: 1px solid var(--color-amber-border);
   vertical-align: middle;
 }
 `;

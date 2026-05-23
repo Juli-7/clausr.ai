@@ -3,7 +3,7 @@ import { AgentResponseSchema } from "@/lib/agent/shared/schemas";
 import type { AgentResponse } from "@/lib/agent/shared/types";
 import type { ExecutableStep } from "@/lib/agent/pipeline/types";
 import { logPipeline } from "@/lib/agent/pipeline/logger";
-import type { PipelineContext } from "@/lib/agent/pipeline/pipeline-context";
+import type { PipelineContext, CheckResult, CitationPaletteEntry } from "@/lib/agent/pipeline/pipeline-context";
 import { evaluate } from "@/lib/agent/evaluation";
 import type { ParsedCheck } from "@/lib/agent/loading/skill/check-parser";
 
@@ -55,7 +55,7 @@ export async function finalizePhase(
   }
 
   const responseData: Record<string, unknown> = {
-    content: formatContent(ctx.steps.entries(), ctx.skill.checks),
+    content: formatContent(ctx.steps.entries(), ctx.skill.checks, ctx.checks.getResults(), ctx.palette.getCitationPalette()),
     reasoning: result.reason,
     citations: result.citations,
     sourceCitations: result.sourceCitations.length > 0 ? result.sourceCitations : undefined,
@@ -99,7 +99,9 @@ export async function finalizePhase(
 
 function formatContent(
   stepOutputs: Record<number | string, unknown>,
-  checks: ParsedCheck[]
+  checks: ParsedCheck[],
+  checkResults: readonly CheckResult[],
+  citationPalette: readonly CitationPaletteEntry[]
 ): string {
   const sections: string[] = [];
 
@@ -109,8 +111,42 @@ function formatContent(
     if (!output || typeof output !== "string") continue;
 
     const text = output.trim();
-    const narrative = text.replace(/```[\s\S]*?```/g, "").trim();
-    if (narrative.length > 0) {
+    let narrative = text.replace(/```[\s\S]*?```/g, "").trim();
+    if (narrative.length === 0) continue;
+
+    const result = checkResults.find(r => r.name === checks[i].field);
+
+    // Strip any lingering [R48.5.11] markers from narrative (now rendered as badges below)
+    if (result) {
+      for (const ref of result.citationRef) {
+        const marker = `[${ref}]`;
+        let idx = narrative.indexOf(marker);
+        while (idx !== -1) {
+          narrative = narrative.substring(0, idx) + narrative.substring(idx + marker.length);
+          idx = narrative.indexOf(marker);
+        }
+      }
+    }
+    narrative = narrative.trim();
+    if (narrative.length === 0) continue;
+
+    const badges: string[] = [];
+
+    if (result) {
+      for (const ref of result.citationRef) {
+        const entry = citationPalette.find(e => e.id === ref);
+        if (entry) {
+          badges.push(`<cite class="citation-marker" role="button" tabindex="0" data-ref="${ref}" data-regulation="${entry.regulation}" data-clause="${entry.clause}">${entry.regulation} §${entry.clause}</cite>`);
+        }
+      }
+      for (const ref of (result.sourceRef ?? [])) {
+        badges.push(`<cite class="source-citation-marker" role="button" tabindex="0" data-source-ref="${ref}">S${ref}</cite>`);
+      }
+    }
+
+    if (badges.length > 0) {
+      sections.push(narrative + "\n\n" + badges.join(" "));
+    } else {
       sections.push(narrative);
     }
   }
