@@ -182,7 +182,7 @@ ${retryContext}
 
     // Always parse narrative from LLM text output
     const textResults = ctx.skill.checks.length > 0
-      ? extractCheckResultsFromText(fullText, ctx.skill.checks, step.number, ctx.skill.regulationIds)
+      ? extractCheckResultsFromText(fullText, ctx.skill.checks, step.number)
       : [];
 
     if (collectedToolRuns.length > 0) {
@@ -249,10 +249,19 @@ function storeOutput(ctx: PipelineContext, stepNumber: number, text: string): vo
 }
 
 function findCitationRef(ctx: PipelineContext, result: Record<string, unknown>): string {
-  const regulation = (result.regulation as string) ?? (ctx.skill.regulationIds[0] ?? "");
   const clauseStr = (result.clause as string) ?? "";
+  const regulation = deriveRegFromClause(clauseStr) || (result.regulation as string) || (ctx.skill.regulationIds[0] ?? "");
+
+  let clauseNum = "";
   const clauseIdx = clauseStr.indexOf("§");
-  const clauseNum = clauseIdx !== -1 ? clauseStr.substring(clauseIdx + 1) : "";
+  if (clauseIdx !== -1) {
+    clauseNum = clauseStr.substring(clauseIdx + 1);
+  } else {
+    const firstDot = clauseStr.indexOf(".");
+    if (firstDot !== -1) {
+      clauseNum = clauseStr.substring(firstDot + 1);
+    }
+  }
 
   if (clauseNum) {
     for (const entry of ctx.palette.getCitationPalette()) {
@@ -268,7 +277,13 @@ function findCitationRef(ctx: PipelineContext, result: Record<string, unknown>):
     }
   }
 
-  return `${regulation}.0`;
+  return regulation ? `${regulation}.0` : "";
+}
+
+function deriveRegFromClause(clause: string): string {
+  if (!clause) return "";
+  const dotIdx = clause.indexOf(".");
+  return dotIdx !== -1 ? clause.substring(0, dotIdx) : "";
 }
 
 export function buildDomainSchemaGuide(checks: ParsedCheck[]): string {
@@ -384,8 +399,7 @@ function buildCitationGuide(ctx: PipelineContext): string {
 function extractCheckResultsFromText(
   text: string,
   checks: ParsedCheck[],
-  stepNumber: number,
-  regulationIds: string[]
+  stepNumber: number
 ): CheckResult[] {
   let cleaned = text.trim();
   const startFence = cleaned.indexOf("```");
@@ -423,7 +437,7 @@ function extractCheckResultsFromText(
   const verdict = verdictRaw.toUpperCase() === "FAIL" ? "FAIL" as const : "PASS" as const;
 
   const clause = checkDef.clause ?? "";
-  const regulation = deriveRegulation(clause, regulationIds);
+  const regulation = deriveRegFromClause(clause);
 
   if (!value) return [];
 
