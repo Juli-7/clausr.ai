@@ -337,12 +337,7 @@ function buildCitationGuide(ctx: PipelineContext): string {
     parts.push("");
     parts.push("# Citation Format");
     parts.push("Use `citationRef` in the JSON schema field to reference applicable regulations (e.g., \"R48.5.11\").");
-    parts.push("Use `[SN]` markers in narrative text for source file citations (e.g., [S1] for the first uploaded file).");
-    parts.push("Place source markers at the end of each claim or value they support.");
-    if (sourcePalette.length > 0) {
-      const available = sourcePalette.map(e => `S${e.id}`).join(", ");
-      parts.push(`Available source citation markers: [${available}].`);
-    }
+    parts.push("Use `sourceRef` in the JSON schema field to reference source files.");
   }
 
   const hasChunks = ctx.files.getFiles().some(f => f.chunks && f.chunks.length > 0);

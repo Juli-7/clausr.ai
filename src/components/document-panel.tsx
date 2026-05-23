@@ -280,13 +280,9 @@ function DocumentCard({
     () => normalizeTables(response.content),
     [response.content]
   );
-  const enhancedContent = useMemo(
-    () => enhanceCitations(normalizedContent, sourceCitations),
-    [normalizedContent, sourceCitations]
-  );
   const highlightedContent = useMemo(
-    () => applyHighlights(enhancedContent, pendingComments),
-    [enhancedContent, pendingComments]
+    () => applyHighlights(normalizedContent, pendingComments),
+    [normalizedContent, pendingComments]
   );
 
   function handleContentClick(e: React.MouseEvent) {
@@ -316,36 +312,8 @@ function DocumentCard({
         },
       });
     } else {
-      const scite = target.closest("cite.source-citation-marker") as HTMLElement | null;
-      if (scite) {
-        const ref = parseInt(scite.getAttribute("data-source-ref") ?? "0", 10);
-        const sc = sourceCitations?.find(r => r.ref === ref);
-        const filename = sc?.filename ?? "Unknown file";
-        const excerpt = sc?.keyExcerpt ?? "";
-        const text = sc?.extractedText ?? "";
-        const rect = scite.getBoundingClientRect();
-
-        const highlightChunk = findHighlightChunk(sc, response?.claims, ref);
-
-        setActiveCitation(null);
-        setActiveSourceCitation({
-          ref,
-          fileId: sc?.fileId,
-          filename,
-          fileUrl: sc?.fileUrl,
-          excerpt,
-          text,
-          pageNumber: sc?.pageNumber,
-          highlightChunk,
-          position: {
-            top: rect.bottom + 6,
-            left: Math.max(10, rect.left - 100),
-          },
-        });
-      } else {
-        setActiveCitation(null);
-        setActiveSourceCitation(null);
-      }
+      setActiveCitation(null);
+      setActiveSourceCitation(null);
     }
   }
 
@@ -457,7 +425,7 @@ function DocumentCard({
                         {humanize(field)}
                       </td>
                       <td className="py-2" style={{ color: "var(--color-text-body)", fontWeight: 500 }}>
-                        <span dangerouslySetInnerHTML={{ __html: applyHighlights(enhanceCitations(value, sourceCitations), pendingComments) }} />
+                        <span dangerouslySetInnerHTML={{ __html: applyHighlights(value, pendingComments) }} />
                       </td>
                     </tr>
                   );
@@ -864,24 +832,6 @@ const markdownComponents: Components = {
   ),
 };
 
-// ── Citation enhancement ──
-
-function enhanceCitations(content: string, sourceCitations?: { ref: number; filename: string; fileUrl?: string; extractedText?: string; keyExcerpt?: string }[]): string {
-  // Replace [SN] and [SN.cX] markers with source citation badges
-  if (sourceCitations && sourceCitations.length > 0) {
-    content = content.replace(/\[S(\d+)(?:\.c\d+)?\]/gi, (match, refStr) => {
-      const ref = parseInt(refStr, 10);
-      const found = sourceCitations.some(sc => sc.ref === ref);
-      if (found) {
-        return `<cite class="source-citation-marker" role="button" tabindex="0" data-source-ref="${ref}">S${ref}</cite>`;
-      }
-      return match;
-    });
-  }
-
-  return content;
-}
-
 const citationStyles = `
 .citation-marker {
   display: inline-flex;
@@ -897,22 +847,6 @@ const citationStyles = `
   color: var(--color-accent-blue);
   background: var(--color-accent-blue-bg);
   border: 1px solid var(--color-accent-blue-border);
-  vertical-align: middle;
-}
-.source-citation-marker {
-  display: inline-flex;
-  align-items: center;
-  font-style: normal;
-  font-size: 0.75rem;
-  font-weight: 500;
-  line-height: 1;
-  padding: 2px 6px;
-  margin: 0 2px;
-  border-radius: 3px;
-  cursor: pointer;
-  color: var(--color-amber);
-  background: var(--color-amber-bg);
-  border: 1px solid var(--color-amber-border);
   vertical-align: middle;
 }
 `;
