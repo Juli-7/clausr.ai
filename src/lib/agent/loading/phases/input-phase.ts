@@ -1,6 +1,7 @@
 import { extractFileContent } from "@/lib/agent/user-info/extractors";
 import type { TextChunk } from "@/lib/agent/user-info/extractors";
-import { saveFileContents, saveFileChunks, getFileChunks } from "@/lib/agent/shared/memory/repository";
+import { summarizeFile } from "@/lib/agent/user-info/summarize-file";
+import { saveFileChunks, getFileChunks, saveChunks, deleteChunksBySession, getChunksByIds } from "@/lib/agent/shared/memory/repository";
 import { logPipeline } from "@/lib/agent/pipeline/logger";
 import type { PipelineContext } from "@/lib/agent/pipeline/pipeline-context";
 
@@ -17,6 +18,7 @@ export async function inputPhase(
 
   if (files && files.length > 0) {
     logPipeline(`processing ${files.length} file(s)`);
+    deleteChunksBySession(sessionId);
 
     for (const f of files) {
       try {
@@ -43,21 +45,39 @@ export async function inputPhase(
       }
     }
 
-    const combinedContent = ctx.files.getFiles()
-      .map((f) => `[File: ${f.filename}]\n${f.extractedText}`)
-      .join("\n\n");
-    saveFileContents(sessionId, combinedContent);
+    const fileData: {
+      fileId: string;
+      filename: string;
+      summary: string;
+      chunkIds: string[];
+      chunks: { id: string; pageNumber?: number }[];
+      dataUrl?: string;
+      pageCount?: number;
+      ocrConfidence?: number;
+      extractorUsed?: string;
+    }[] = [];
 
-    const fileData = ctx.files.getFiles().map(f => ({
-      fileId: f.fileId,
-      filename: f.filename,
-      extractedText: f.extractedText,
-      chunks: f.chunks ?? [],
-      dataUrl: f.dataUrl,
-      pageCount: f.pageCount,
-      ocrConfidence: f.ocrConfidence,
-      extractorUsed: f.extractorUsed,
-    }));
+    for (const f of ctx.files.getFiles()) {
+      const summary = f.extractedText
+        ? await summarizeFile(f.filename, f.extractedText)
+        : "";
+      const chunkIds = f.chunks && f.chunks.length > 0
+        ? saveChunks(sessionId, f.fileId, f.chunks)
+        : [];
+      fileData.push({
+        fileId: f.fileId,
+        filename: f.filename,
+        summary,
+        chunkIds,
+        chunks: (f.chunks ?? []).map((c) => ({ id: c.id, pageNumber: c.pageNumber })),
+        dataUrl: f.dataUrl,
+        pageCount: f.pageCount,
+        ocrConfidence: f.ocrConfidence,
+        extractorUsed: f.extractorUsed,
+      });
+      logPipeline(`  summarized "${f.filename}": summary=${summary.length} chars, chunks=${chunkIds.length}`);
+    }
+
     saveFileChunks(sessionId, JSON.stringify(fileData));
   } else {
     const savedFileDataJson = getFileChunks(sessionId);
@@ -66,26 +86,33 @@ export async function inputPhase(
         const savedFiles: {
           fileId: string;
           filename: string;
-          extractedText: string;
-          chunks: TextChunk[];
+          summary: string;
+          chunkIds: string[];
+          chunks: { id: string; pageNumber?: number }[];
           dataUrl?: string;
           pageCount?: number;
           ocrConfidence?: number;
           extractorUsed?: string;
         }[] = JSON.parse(savedFileDataJson);
         for (const saved of savedFiles) {
+          const fetchedChunks = saved.chunkIds.length > 0 ? getChunksByIds(saved.chunkIds) : [];
+          const rebuiltChunks: TextChunk[] = saved.chunks.map((meta, i) => ({
+            id: meta.id,
+            text: fetchedChunks.find((fc) => fc.id === saved.chunkIds[i])?.text ?? "",
+            pageNumber: meta.pageNumber,
+          }));
           ctx.files.addFile({
             fileId: saved.fileId,
             filename: saved.filename,
-            extractedText: saved.extractedText,
-            chunks: saved.chunks,
+            extractedText: saved.summary,
+            chunks: rebuiltChunks,
             dataUrl: saved.dataUrl,
             pageCount: saved.pageCount,
             ocrConfidence: saved.ocrConfidence,
             extractorUsed: saved.extractorUsed,
           });
         }
-        logPipeline(`restored ${savedFiles.length} file(s) from saved chunks (follow-up turn)`);
+        logPipeline(`restored ${savedFiles.length} file(s) from chunk store (follow-up turn)`);
       } catch (err) {
         logPipeline(`failed to restore saved chunks: ${err}`);
       }

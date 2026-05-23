@@ -23,7 +23,9 @@ export function getDb(): Database.Database {
       id TEXT PRIMARY KEY,
       skill_name TEXT NOT NULL,
       created_at INTEGER NOT NULL,
-      file_contents TEXT NOT NULL DEFAULT ''
+      file_chunks TEXT NOT NULL DEFAULT '[]',
+      starred INTEGER NOT NULL DEFAULT 0,
+      is_setup INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS messages (
@@ -85,26 +87,36 @@ export function getDb(): Database.Database {
       file_registry_json TEXT NOT NULL,
       created_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS chunk_store (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      file_id TEXT NOT NULL,
+      text TEXT NOT NULL,
+      page_number INTEGER,
+      bbox_json TEXT,
+      ocr_confidence REAL,
+      created_at INTEGER NOT NULL
+    );
   `);
 
-  // Migrate: add file_contents column if upgrading from older schema
-  try { db.exec("ALTER TABLE sessions ADD COLUMN file_contents TEXT NOT NULL DEFAULT ''"); } catch { /* column exists */ }
-  // Migrate: add starred column
+  // Migrations for older schemas
+  try { db.exec("ALTER TABLE sessions ADD COLUMN file_chunks TEXT NOT NULL DEFAULT '[]'"); } catch { /* column exists */ }
   try { db.exec("ALTER TABLE sessions ADD COLUMN starred INTEGER NOT NULL DEFAULT 0"); } catch { /* column exists */ }
-  // Migrate: add response metadata columns
+  try { db.exec("ALTER TABLE sessions ADD COLUMN is_setup INTEGER NOT NULL DEFAULT 0"); } catch { /* column exists */ }
   try { db.exec("ALTER TABLE responses ADD COLUMN sections_json TEXT"); } catch { /* column exists */ }
   try { db.exec("ALTER TABLE responses ADD COLUMN source_citations_json TEXT"); } catch { /* column exists */ }
   try { db.exec("ALTER TABLE responses ADD COLUMN clause_texts_json TEXT"); } catch { /* column exists */ }
   try { db.exec("ALTER TABLE responses ADD COLUMN tool_calls_json TEXT"); } catch { /* column exists */ }
   try { db.exec("ALTER TABLE responses ADD COLUMN reasoning_steps_json TEXT"); } catch { /* column exists */ }
   try { db.exec("ALTER TABLE responses ADD COLUMN claims_json TEXT"); } catch { /* column exists */ }
-  try { db.exec("ALTER TABLE sessions ADD COLUMN file_chunks TEXT NOT NULL DEFAULT '[]'"); } catch { /* column exists */ }
   try { db.exec("ALTER TABLE responses ADD COLUMN confidence_json TEXT"); } catch { /* column exists */ }
-  try { db.exec("ALTER TABLE sessions ADD COLUMN is_setup INTEGER NOT NULL DEFAULT 0"); } catch { /* column exists */ }
   // Indexes
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_snapshots_session ON context_snapshots(session_id)"); } catch { /* index exists */ }
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id)"); } catch { /* index exists */ }
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_responses_session ON responses(session_id)"); } catch { /* index exists */ }
+  try { db.exec("CREATE INDEX IF NOT EXISTS idx_chunk_store_session ON chunk_store(session_id)"); } catch { /* index exists */ }
+  try { db.exec("CREATE INDEX IF NOT EXISTS idx_chunk_store_file ON chunk_store(session_id, file_id)"); } catch { /* index exists */ }
   const insertSetting = db.prepare(
     "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)"
   );

@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import path from "path";
 import type {
   Regulation,
   Clause,
@@ -15,14 +16,16 @@ import type { IRegulationApi } from "./regulation-api";
 
 let _db: Database.Database | null = null;
 
+const REG_DB_PATH = process.env.KB_DB_PATH ?? path.join(process.cwd(), "data", "kb.sqlite");
+
 function getDb(): Database.Database {
   if (_db) return _db;
 
-  _db = new Database(":memory:");
+  _db = new Database(REG_DB_PATH);
   _db.pragma("journal_mode = WAL");
 
   _db.exec(`
-    CREATE TABLE regulations (
+    CREATE TABLE IF NOT EXISTS regulations (
       id TEXT PRIMARY KEY,
       code TEXT NOT NULL UNIQUE,
       title TEXT NOT NULL,
@@ -31,12 +34,12 @@ function getDb(): Database.Database {
       cross_references TEXT NOT NULL DEFAULT '[]'
     );
 
-    CREATE TABLE code_aliases (
+    CREATE TABLE IF NOT EXISTS code_aliases (
       alias TEXT PRIMARY KEY,
       code TEXT NOT NULL REFERENCES regulations(code)
     );
 
-    CREATE TABLE regulation_versions (
+    CREATE TABLE IF NOT EXISTS regulation_versions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       regulation_code TEXT NOT NULL REFERENCES regulations(code),
       version TEXT NOT NULL,
@@ -45,7 +48,7 @@ function getDb(): Database.Database {
       changelog TEXT DEFAULT ''
     );
 
-    CREATE TABLE clauses (
+    CREATE TABLE IF NOT EXISTS clauses (
       id TEXT PRIMARY KEY,
       regulation_code TEXT NOT NULL REFERENCES regulations(code),
       number TEXT NOT NULL,
@@ -54,11 +57,15 @@ function getDb(): Database.Database {
       parent_clause_id TEXT
     );
 
-    CREATE INDEX idx_clauses_regulation ON clauses(regulation_code);
-    CREATE INDEX idx_versions_regulation ON regulation_versions(regulation_code);
+    CREATE INDEX IF NOT EXISTS idx_clauses_regulation ON clauses(regulation_code);
+    CREATE INDEX IF NOT EXISTS idx_versions_regulation ON regulation_versions(regulation_code);
   `);
 
-  seedData(_db);
+  const { count } = _db.prepare("SELECT COUNT(*) as count FROM regulations").get() as { count: number };
+  if (count === 0) {
+    seedData(_db);
+  }
+
   return _db;
 }
 
