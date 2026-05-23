@@ -5,6 +5,7 @@ import { StepMemory } from "@/lib/agent/shared/slices/step-memory";
 import { FileRegistry } from "@/lib/agent/shared/slices/file-registry";
 import { PaletteStore } from "@/lib/agent/shared/slices/palette-store";
 import { ReportAssembler } from "@/lib/agent/shared/slices/report-assembler";
+import { loadSessionSetup } from "@/lib/agent/shared/memory/repository";
 
 // ── Types ──
 
@@ -106,4 +107,31 @@ export function createPipelineContext(
   };
 }
 
-// ── (serialization removed — context persistence uses DB snapshots directly) ──
+// ── Restore from DB session_setup ──
+
+export async function restoreContext(
+  sessionId: string,
+  correlationId: string,
+): Promise<{ ctx: PipelineContext; steps: import("@/lib/agent/pipeline/types").ExecutableStep[] } | null> {
+  const setup = loadSessionSetup(sessionId);
+  if (!setup) return null;
+
+  const ctx = createPipelineContext(
+    setup.skillName,
+    setup.skillmd,
+    sessionId,
+    correlationId,
+    setup.checks,
+    setup.scripts,
+    setup.regulationIds,
+  );
+
+  ctx.palette = PaletteStore.fromJSON({
+    references: setup.paletteReferences,
+    citationPalette: setup.paletteCitations,
+  });
+
+  ctx.files = FileRegistry.fromJSON(setup.fileRegistry);
+
+  return { ctx, steps: setup.steps };
+}

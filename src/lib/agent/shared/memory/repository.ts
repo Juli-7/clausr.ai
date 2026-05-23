@@ -1,6 +1,11 @@
 import { getDb } from "@/lib/agent/shared/memory/database";
 import type { AgentResponse } from "@/lib/agent/shared/types";
 import type { Citation } from "@/lib/agent/shared/schemas";
+import type { ParsedCheck } from "@/lib/agent/loading/skill/check-parser";
+import type { ExecutableStep } from "@/lib/agent/pipeline/types";
+import type { CitationPaletteEntry } from "@/lib/agent/pipeline/pipeline-context";
+import type { LoadedReference } from "@/lib/agent/shared/slices/palette-store";
+import type { UploadedFileEntry } from "@/lib/agent/shared/slices/file-registry";
 
 function safeJsonParse<T>(json: string, fallback?: T): T {
   try {
@@ -227,6 +232,76 @@ export function getResponsesForSession(sessionId: string): {
     confidence: r.confidence_json ? safeJsonParse(r.confidence_json) : undefined,
     createdAt: r.created_at,
   }));
+}
+
+// ── Session Setup ──
+
+export interface SessionSetupData {
+  skillName: string;
+  skillmd: string;
+  checks: ParsedCheck[];
+  scripts: { name: string; path: string; desc: string; params: string }[];
+  regulationIds: string[];
+  steps: ExecutableStep[];
+  paletteReferences: LoadedReference[];
+  paletteCitations: CitationPaletteEntry[];
+  fileRegistry: UploadedFileEntry[];
+}
+
+export function saveSessionSetup(sessionId: string, data: SessionSetupData): void {
+  const db = getDb();
+  db.prepare(
+    `INSERT OR REPLACE INTO session_setup
+     (session_id, skill_name, skillmd, checks_json, scripts_json, regulation_ids_json,
+      steps_json, palette_references_json, palette_citations_json, file_registry_json, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    sessionId,
+    data.skillName,
+    data.skillmd,
+    JSON.stringify(data.checks),
+    JSON.stringify(data.scripts),
+    JSON.stringify(data.regulationIds),
+    JSON.stringify(data.steps),
+    JSON.stringify(data.paletteReferences),
+    JSON.stringify(data.paletteCitations),
+    JSON.stringify(data.fileRegistry),
+    Date.now()
+  );
+  db.prepare("UPDATE sessions SET is_setup = 1 WHERE id = ?").run(sessionId);
+}
+
+export function loadSessionSetup(sessionId: string): SessionSetupData | null {
+  const db = getDb();
+  const row = db.prepare("SELECT * FROM session_setup WHERE session_id = ?").get(sessionId) as {
+    skill_name: string;
+    skillmd: string;
+    checks_json: string;
+    scripts_json: string | null;
+    regulation_ids_json: string | null;
+    steps_json: string;
+    palette_references_json: string | null;
+    palette_citations_json: string | null;
+    file_registry_json: string;
+  } | undefined;
+  if (!row) return null;
+  return {
+    skillName: row.skill_name,
+    skillmd: row.skillmd,
+    checks: safeJsonParse(row.checks_json, []),
+    scripts: safeJsonParse(row.scripts_json ?? "[]", []),
+    regulationIds: safeJsonParse(row.regulation_ids_json ?? "[]", []),
+    steps: safeJsonParse(row.steps_json, []),
+    paletteReferences: safeJsonParse(row.palette_references_json ?? "[]", []),
+    paletteCitations: safeJsonParse(row.palette_citations_json ?? "[]", []),
+    fileRegistry: safeJsonParse(row.file_registry_json, []),
+  };
+}
+
+export function hasSessionSetup(sessionId: string): boolean {
+  const db = getDb();
+  const row = db.prepare("SELECT 1 as exists_flag FROM session_setup WHERE session_id = ?").get(sessionId) as { exists_flag: number } | undefined;
+  return !!row;
 }
 
 // ── Context Snapshots ──

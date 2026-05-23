@@ -115,10 +115,17 @@ export const ChatRequestFileSchema = z.object({
 
 export const ChatRequestSchema = z.object({
   message: z.string().min(1, "Message is required"),
+  sessionId: z.string().min(1, "Session ID is required"),
+  revisionFields: z.array(z.string()).optional(),
+});
+
+export const SetupRequestSchema = z.object({
   skillName: z.string().optional(),
   sessionId: z.string().min(1, "Session ID is required"),
   files: z.array(ChatRequestFileSchema).optional(),
-  revisionFields: z.array(z.string()).optional(),
+  message: z.string().optional(),
+}).refine((data) => data.skillName || data.message, {
+  message: "Either 'skillName' (pre-existing) or 'message' (auto-skill) is required",
 });
 
 // ── Script tools ──
@@ -149,6 +156,7 @@ export type Verdict = z.infer<typeof VerdictSchema>;
 export type AgentResponse = z.infer<typeof AgentResponseSchema>;
 export type Confidence = z.infer<typeof ConfidenceSchema>;
 export type ChatRequest = z.infer<typeof ChatRequestSchema>;
+export type SetupRequest = z.infer<typeof SetupRequestSchema>;
 export type ChatRequestFile = z.infer<typeof ChatRequestFileSchema>;
 export type ComplianceCheckInput = z.infer<typeof ComplianceCheckSchema>;
 export type Claim = z.infer<typeof ClaimSchema>;

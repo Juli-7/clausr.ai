@@ -38,6 +38,17 @@ export class PaletteStore {
     return `Available Citations:\n${summary}`;
   }
 
+  toJSON(): { references: LoadedReference[]; citationPalette: CitationPaletteEntry[] } {
+    return { references: [...this.references], citationPalette: [...this.citationPalette] };
+  }
+
+  static fromJSON(data: { references: LoadedReference[]; citationPalette: CitationPaletteEntry[] }): PaletteStore {
+    const store = new PaletteStore();
+    store.loadReferences(data.references);
+    store.loadCitationPalette(data.citationPalette);
+    return store;
+  }
+
   formatSourceSummary(sourcePalette: SourcePaletteEntry[]): string {
     if (sourcePalette.length === 0) return "";
     const summary = sourcePalette

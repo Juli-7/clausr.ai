@@ -1,27 +1,31 @@
 import { loadSkill } from "@/lib/agent/loading/skill/loader";
-import { generateSkill } from "@/lib/agent/loading/extractors/skill-generator";
 import { getOrCreateSession, addUserMessage } from "@/lib/agent/shared/memory/repository";
 import { getResponsesForSession } from "@/lib/agent/shared/memory/repository";
 import { pruneOldSessions } from "@/lib/agent/shared/memory/cleanup";
-import { createPipelineContext } from "@/lib/agent/pipeline/pipeline-context";
-import { PipelineError, generateCorrelationId, formatPipelineError } from "@/lib/agent/pipeline/errors";
+import { PipelineError } from "@/lib/agent/pipeline/errors";
 import { logPipeline, truncate } from "@/lib/agent/pipeline/logger";
 import type { PipelineContext, CheckResult } from "@/lib/agent/pipeline/pipeline-context";
 
-export interface InitPhaseResult {
-  ctx: PipelineContext;
-  correlationId: string;
-  isAutoSkill: boolean;
-}
-
-export async function initPhase(
+/**
+ * Once-per-session: load (or prepare for auto-generation) a skill
+ * and create the DB session row. Does NOT create PipelineContext
+ * or add user messages — those are split across setup and pipeline layers.
+ */
+export async function initSession(
   skillName: string | undefined,
   sessionId: string,
-  message: string,
-): Promise<InitPhaseResult> {
-  const correlationId = generateCorrelationId();
-  logPipeline(`=== PIPELINE START === cid=${correlationId} skill="${skillName ?? "(auto)"}" session="${sessionId}" msg="${truncate(message, 100)}"`);
-
+): Promise<{
+  skill: {
+    name: string;
+    description: string;
+    triggers: string[];
+    skillmd: string;
+    scripts: { name: string; path: string; desc: string; params: string }[];
+    checks: import("@/lib/agent/loading/skill/check-parser").ParsedCheck[];
+    regulationIds: string[];
+  };
+  isAutoSkill: boolean;
+}> {
   const isAutoSkill = !skillName;
   let skill;
 
@@ -30,10 +34,9 @@ export async function initPhase(
     if (!skill) {
       throw new PipelineError("SKILL_NOT_FOUND", `Skill "${skillName}" not found`);
     }
-    logPipeline(`skill loaded: "${skill.name}" scripts=${skill.scripts.length} regulationIds=${skill.regulationIds.length}`);
+    logPipeline(`[INIT-SESSION] skill loaded: "${skill.name}" scripts=${skill.scripts.length} regulationIds=${skill.regulationIds.length}`);
   } else {
-    // Auto-skill: create a minimal placeholder; will be generated after file processing
-    logPipeline("auto-skill mode: no skill chosen, will generate from user request");
+    logPipeline("[INIT-SESSION] auto-skill mode: no skill chosen, will generate after file processing");
     skill = {
       name: "auto-generated",
       description: "",
@@ -46,22 +49,27 @@ export async function initPhase(
   }
 
   getOrCreateSession(sessionId, skill.name);
+  return { skill, isAutoSkill };
+}
+
+/**
+ * Per-pipeline-turn: add user message, prune sessions, and restore
+ * previous step outputs + check results from the last response.
+ * The PipelineContext is already created/restored by the caller.
+ */
+export async function initPipelineTurn(
+  ctx: PipelineContext,
+  sessionId: string,
+  message: string,
+  correlationId: string,
+): Promise<void> {
+  ctx.correlationId = correlationId;
   addUserMessage(sessionId, message);
   try { pruneOldSessions(); } catch (err) {
     logPipeline(`session pruning failed (non-critical): ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  const ctx = createPipelineContext(
-    skill.name,
-    skill.skillmd,
-    sessionId,
-    correlationId,
-    skill.checks,
-    skill.scripts,
-    skill.regulationIds
-  );
-
-  // Load previous turns from DB into ctx.previousTurns
+  // Load previous turns from DB
   const previousResponses = getResponsesForSession(sessionId);
   ctx.previousTurns = previousResponses.map((r) => ({
     turnNumber: r.round,
@@ -71,17 +79,16 @@ export async function initPhase(
   }));
 
   if (ctx.previousTurns.length > 0) {
-    logPipeline(`loaded ${ctx.previousTurns.length} previous turn(s) into context`);
+    logPipeline(`[PIPELINE-TURN] loaded ${ctx.previousTurns.length} previous turn(s)`);
   }
 
-  // Restore previous step outputs from the most recent response
+  // Restore previous step outputs from the most recent response's reasoningSteps
   const lastResponse = previousResponses[previousResponses.length - 1];
   if (lastResponse?.reasoningSteps && lastResponse.reasoningSteps.length > 0) {
     for (const rs of lastResponse.reasoningSteps) {
-      const restored = restoreStepOutput(rs.body);
-      ctx.steps.write(rs.stepNumber, restored);
+      ctx.steps.write(rs.stepNumber, restoreStepOutput(rs.body));
     }
-    logPipeline(`restored ${lastResponse.reasoningSteps.length} step output(s) from previous turn`);
+    logPipeline(`[PIPELINE-TURN] restored ${lastResponse.reasoningSteps.length} step output(s) from previous turn`);
   }
 
   // Restore previous CheckResults from the most recent response's findings
@@ -89,35 +96,25 @@ export async function initPhase(
     const restoredResults: CheckResult[] = [];
     for (const [field, finding] of Object.entries(lastResponse.sections.findings)) {
       const checkDef = ctx.skill.checks.find((c) => c.field === field);
-      const regMatch = finding.match(/\[(R\d+\.\d+(?:\.\d+)*)\]/);
+      const regMatch = String(finding).match(/\[(R\d+\.\d+(?:\.\d+)*)\]/);
       restoredResults.push({
         name: field,
         type: checkDef?.type.kind === "number" ? "numerical" : "qualitative",
-        finding,
-        verdict: finding.startsWith("FAIL") ? "FAIL" : "PASS",
+        finding: String(finding),
+        verdict: String(finding).startsWith("FAIL") ? "FAIL" : "PASS",
         citationRef: regMatch?.[1] ? [regMatch[1]] : [],
         sourceCitation: [],
       });
     }
     ctx.checks.addResults(restoredResults);
-    logPipeline(`restored ${restoredResults.length} CheckResult(s) from previous turn`);
+    logPipeline(`[PIPELINE-TURN] restored ${restoredResults.length} CheckResult(s) from previous turn`);
   }
-
-  return { ctx, correlationId, isAutoSkill };
 }
 
-/**
- * Restore a step output from its string representation.
- * Tries JSON.parse if it looks like JSON, otherwise keeps as string.
- */
 function restoreStepOutput(body: string): unknown {
   const trimmed = body.trim();
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-    try {
-      return JSON.parse(trimmed);
-    } catch {
-      return body;
-    }
+    try { return JSON.parse(trimmed); } catch { return body; }
   }
   return body;
 }

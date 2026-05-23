@@ -71,6 +71,20 @@ export function getDb(): Database.Database {
       step_outputs_json TEXT NOT NULL,
       created_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS session_setup (
+      session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+      skill_name TEXT NOT NULL,
+      skillmd TEXT NOT NULL,
+      checks_json TEXT NOT NULL,
+      scripts_json TEXT,
+      regulation_ids_json TEXT,
+      steps_json TEXT NOT NULL,
+      palette_references_json TEXT,
+      palette_citations_json TEXT,
+      file_registry_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
   `);
 
   // Migrate: add file_contents column if upgrading from older schema
@@ -86,6 +100,7 @@ export function getDb(): Database.Database {
   try { db.exec("ALTER TABLE responses ADD COLUMN claims_json TEXT"); } catch { /* column exists */ }
   try { db.exec("ALTER TABLE sessions ADD COLUMN file_chunks TEXT NOT NULL DEFAULT '[]'"); } catch { /* column exists */ }
   try { db.exec("ALTER TABLE responses ADD COLUMN confidence_json TEXT"); } catch { /* column exists */ }
+  try { db.exec("ALTER TABLE sessions ADD COLUMN is_setup INTEGER NOT NULL DEFAULT 0"); } catch { /* column exists */ }
   // Indexes
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_snapshots_session ON context_snapshots(session_id)"); } catch { /* index exists */ }
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id)"); } catch { /* index exists */ }

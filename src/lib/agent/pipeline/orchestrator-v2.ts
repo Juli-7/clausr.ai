@@ -1,84 +1,55 @@
-import { loadReferences } from "./builtins";
 import { executeLlmToolStep } from "./executors/llm-executor";
-import { generateStepsFromChecks } from "@/lib/agent/loading/generate-steps";
-import { saveContextSnapshot, getResponseCount } from "@/lib/agent/shared/memory/repository";
-import { PipelineError, formatPipelineError } from "./errors";
-import { logPipeline, truncate } from "./logger";
-import { initPhase } from "@/lib/agent/loading/phases/init-phase";
-import { inputPhase } from "@/lib/agent/loading/phases/input-phase";
-import { skillGenPhase } from "@/lib/agent/loading/phases/skill-gen-phase";
+import { restoreContext } from "./pipeline-context";
+import { initPipelineTurn } from "@/lib/agent/loading/phases/init-phase";
 import { identifyRevisionTarget, identifyRevisionTargets } from "@/lib/agent/loading/phases/revision-phase";
-import { enforceChecks } from "@/lib/agent/evaluation/enforce-checks";
+import { saveContextSnapshot, getResponseCount } from "@/lib/agent/shared/memory/repository";
 import { finalizePhase } from "@/lib/agent/present/phases/finalize-phase";
+import { PipelineError, generateCorrelationId, formatPipelineError } from "./errors";
+import { logPipeline, truncate } from "./logger";
 import type { PipelineEvent, ExecutableStep, StepResult } from "./types";
 import type { PipelineContext } from "./pipeline-context";
 
+/**
+ * Pipeline entry point — runs the LLM step-execution loop, evaluation,
+ * and presentation for an already-set-up session.
+ *
+ * Loading phases (skill loading, file extraction, reference loading,
+ * step generation) are handled once by LoadingOrchestrator.setupSession()
+ * and persisted to the session_setup table. This function restores
+ * that state on every call, making it safe to invoke multiple times
+ * per session (human-in-the-loop review).
+ */
 export async function* orchestratePipeline(
-  message: string,
-  skillName: string | undefined,
   sessionId: string,
-  files?: {
-    name: string;
-    size: number;
-    type: string;
-    dataUrl?: string;
-  }[],
+  message: string,
   revisionFields?: string[]
 ): AsyncGenerator<PipelineEvent> {
-  // ── Phase 1: Init ──
-  let ctx;
-  let correlationId: string;
-  let isAutoSkill: boolean;
-  try {
-    const initResult = await initPhase(skillName, sessionId, message);
-    ctx = initResult.ctx;
-    correlationId = initResult.correlationId;
-    isAutoSkill = initResult.isAutoSkill;
-  } catch (err) {
-    yield { type: "error", error: formatPipelineError(err), code: err instanceof PipelineError ? err.code : "SKILL_NOT_FOUND" };
+  const correlationId = generateCorrelationId();
+
+  // ── Restore context from DB (set up by loading layer) ──
+  const restored = await restoreContext(sessionId, correlationId);
+  if (!restored) {
+    yield { type: "error", error: "Session has no setup data. Call POST /api/setup first.", code: "NO_SETUP" };
     return;
   }
 
-  // ── Phase 2: Input ──
-  yield { type: "status", phase: "processing-files" };
-  await inputPhase(ctx, { files, sessionId });
+  const { ctx, steps } = restored;
+  logPipeline(`=== PIPELINE START === cid=${correlationId} session="${sessionId}" msg="${truncate(message, 100)}"`);
 
-  // ── Phase 2.5: Skill Generation (auto-mode only) ──
-  if (isAutoSkill) {
-    yield { type: "status", phase: "generating-skill" };
-    try {
-      await skillGenPhase(ctx, message);
-    } catch (err) {
-      yield {
-        type: "error",
-        error: formatPipelineError(err, correlationId),
-        code: err instanceof PipelineError ? err.code : "SKILL_GENERATION_FAILED",
-        correlationId,
-      };
-      return;
-    }
-  }
+  // ── Per-turn initialization ──
+  await initPipelineTurn(ctx, sessionId, message, correlationId);
+  const turnNumber = getResponseCount(sessionId);
 
-  // ── Phase 3: Load regulation references into palette ──
-  yield { type: "status", phase: "loading-references" };
-  await loadReferences(ctx);
-
-  // ── Phase 4: Generate steps from Checks table ──
-  const steps = generateStepsFromChecks(ctx.skill.checks);
+  // ── Revision identification ──
   yield { type: "status", phase: `executing-${steps.length}-steps` };
-  const turnNumber = getResponseCount(sessionId) + 1;
-
-  // ── Phase 3a: Revision identification (follow-up turns only) ──
   let revisionTargets = new Set<number>();
   if (revisionFields && revisionFields.length > 0) {
-    // Explicit field targets from frontend checkbox selection
     const stepNums = identifyRevisionTargets(revisionFields, ctx.skill.checks);
     revisionTargets = new Set(stepNums);
     if (revisionTargets.size > 0) {
       yield { type: "status", phase: `revising-${revisionTargets.size}-steps` };
     }
   } else if (ctx.previousTurns.length > 0) {
-    // Fallback: LLM guess from message text (original behavior)
     try {
       const target = await identifyRevisionTarget(ctx, message);
       if (target > 0) {
@@ -91,12 +62,11 @@ export async function* orchestratePipeline(
     }
   }
 
-  // ── Phase 3b: Step execution loop ──
+  // ── Step execution loop ──
   for (const step of steps) {
     const existingOutput = ctx.steps.read(step.number);
     const isTarget = revisionTargets.has(step.number);
 
-    // Skip steps that already have output and are NOT a revision target
     if (existingOutput !== undefined && !isTarget) {
       logPipeline(`→ STEP ${step.number}: using previous output (${revisionTargets.size} target(s))`);
       yield { type: "status", phase: `step-${step.number}`, stepTitle: step.title + " (reused)" };
@@ -104,10 +74,8 @@ export async function* orchestratePipeline(
     }
 
     yield { type: "status", phase: `step-${step.number}`, stepTitle: step.title };
-    logPipeline(`→ STEP ${step.number}: "${step.title}" (type=${step.type})${isTarget ? " [REVISION]" : ""}`);
+    logPipeline(`→ STEP ${step.number}: "${step.title}"${isTarget ? " [REVISION]" : ""}`);
 
-    // Save old CheckResults for this step's field before clearing
-    // (restored on failure per clear-after-success pattern)
     const checkField = ctx.skill.checks[step.number - 1]?.field;
     const savedResults = checkField ? ctx.checks.removeResultsForField(checkField) : [];
 
@@ -115,7 +83,6 @@ export async function* orchestratePipeline(
 
     if (!result.success) {
       logPipeline(`✗ STEP ${step.number} FAILED: ${result.error}`);
-      // Restore old results on failure (clear-before pattern)
       if (savedResults.length > 0) {
         ctx.checks.addResults(savedResults);
         logPipeline(`→ STEP ${step.number}: restored ${savedResults.length} previous result(s) after failure`);
@@ -173,15 +140,12 @@ export async function* orchestratePipeline(
           stepOutputsJson: JSON.stringify(ctx.steps.entries()),
         });
       } catch (err) {
-          logPipeline(`context snapshot failed (non-critical): ${err instanceof Error ? err.message : String(err)}`);
-        }
+        logPipeline(`context snapshot failed (non-critical): ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
   }
 
-  // ── Phase 3c: Enforce checks (fill gaps before evaluation) ──
-  enforceChecks(ctx);
-
-  // ── Phase 4: Evaluate ──
+  // ── Evaluate + finalize ──
   yield { type: "status", phase: "evaluating" };
   const result = await finalizePhase(ctx, steps, sessionId);
 
@@ -191,8 +155,6 @@ export async function* orchestratePipeline(
 
   yield { type: "done", response: result.response };
 }
-
-// ── Step execution with retry ──
 
 async function executeStepWithRetry(
   step: ExecutableStep,

@@ -54,62 +54,79 @@
                                    │
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           SEGMENT 3: LOADING LAYER                                   │
+│                           SEGMENT 3: LOADING LAYER (ONCE PER SESSION)                │
 │                                                                                      │
-│  loading/skill/loader.ts          loading/skill/check-parser.ts                       │
-│  ┌──────────────────────┐         ┌──────────────────────────────────────┐           │
-│  │ loadSkill(id)        │────────►│ parseChecks(skillmd)                 │           │
-│  │ listSkills()         │         │ extractRegulationIds(checks)         │           │
-│  └──────────────────────┘         └──────────────────────────────────────┘           │
-│  │ generateSkill(msg,   │                                                           │
-│  │   fileTexts)         │         loading/generate-steps.ts                          │
-│  │   → LLM generates    │         ┌──────────────────────────────────────┐           │
-│  │     SKILL.md         │         │ generateStepsFromChecks(checks)     │           │
-│  └──────────────────────┘         │   → ExecutableStep[] (1:1 from      │           │
-│                                   │     parsed checks)                  │           │
-│  loading/phases/init-phase.ts     │ buildFieldInstructions(c)           │           │
-│  ┌────────────────────────┐       └──────────────────────────────────────┘           │
-│  │ initPhase(name, sid,   │                                                           │
-│  │  message)              │       loading/phases/input-phase.ts                       │
-│  │  → loadSkill, create   │       ┌──────────────────────────────────────┐           │
-│  │    context, restore    │       │ inputPhase(ctx, params)              │           │
-│  └────────────────────────┘       │  → extract files / restore from DB  │           │
-│                                   └──────────────────────────────────────┘           │
-│  loading/phases/skill-gen-phase.ts                                                   │
-│  ┌────────────────────────────────────────────────────┐                              │
-│  │ skillGenPhase(ctx, message)                        │                              │
-│  │  → generateSkill() if isAutoSkill                  │                              │
-│  └────────────────────────────────────────────────────┘                              │
+│  loading/loading-orchestrator.ts — TOP-LEVEL ORCHESTRATOR                            │
+│  ┌────────────────────────────────────────────────────────────────────────────────┐  │
+│  │ setupSession({skillName?, sessionId, files?, message?})                        │  │
+│  │  1. initSession()       → load SKILL.md OR prepare auto placeholder            │  │
+│  │  2. createPipelineContext() → in-memory carrier for ALL session state:         │  │
+│  │                               CheckStore(verdicts), StepMemory(outputs),       │  │
+│  │                               FileRegistry(chunks/x), PaletteStore(regs/refs), │  │
+│  │                               ReportAssembler(sections)                        │  │
+│  │  3. inputPhase()         → calls extractFileContent() in user-info layer       │  │
+│  │     (not chunking —     to parse/chunk files, then stores chunks in DB         │  │
+│  │      that's user-info)                                                          │  │
+│  │  4. skillGenPhase()      → if auto, generate SKILL.md (alternative to step 1)   │  │
+│  │  5. generateStepsFromChecks() → ExecutableStep[] 1:1 from ##Checks              │  │
+│  │  6. loadReferences()     → fetch regulation clauses → PaletteStore.citations   │  │
+│  │  7. saveSessionSetup()   → persist EVERYTHING to session_setup table            │  │
+│  │                                                                                  │  │
+│  │  OUTPUT READY: source file chunks (in FileRegistry), regulation clauses         │  │
+│  │  (in PaletteStore), ExecutableStep[] (each mapped 1:1 to a ##Check field)       │  │
+│  └────────────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                      │
-│  loading/phases/revision-phase.ts                                                    │
-│  ┌────────────────────────────────────────────────────────────┐                      │
-│  │ identifyRevisionTarget(ctx, userMessage)                    │                      │
-│  │  → LLM determines which step to redo on follow-up           │                      │
-│  │ identifyRevisionTargets(revisionFields, checks)              │                      │
-│  │  → maps checkbox fields to step numbers (explicit revision) │                      │
-│  └────────────────────────────────────────────────────────────┘                      │
+│  loading/phases/init-phase.ts        ┌── SKILL SOURCE (parallel branches) ──┐        │
+│  ┌─────────────────────────────┐     │                                      │        │
+│  │ initSession(name?, sid)     │     │ loading/skill/loader.ts              │        │
+│  │  → EITHER loadSkill(id)    │──┬──►│ loadSkill(id)      ← pre-existing   │        │
+│  │    OR placeholder for auto │  │   │   matter(SKILL.md) → frontmatter     │        │
+│  │  → getOrCreateSession()    │  │   └────────────────────────────────────┘         │
+│  │                            │  │   loading/extractors/skill-generator.ts           │
+│  │ initPipelineTurn(ctx, sid, │  └──►│ generateSkill()    ← auto (LLM-gen) │        │
+│  │  msg, cid) — per turn     │      │   streamText() → matter() → checks   │        │
+│  │  → addUserMessage + restore│      └──────────────────────────────────────┘        │
+│  │    previous step outputs   │                                                     │
+│  └─────────────────────────────┘    loading/skill/check-parser.ts                    │
+│                                      ┌──────────────────────────────────────┐        │
+│  loading/generate-steps.ts           │ parseChecks(skillmd)                 │        │
+│  ┌──────────────────────┐            │ extractRegulationIds(checks)         │        │
+│  │ generateStepsFrom-   │            └──────────────────────────────────────┘        │
+│  │  Checks(checks)      │            loading/phases/input-phase.ts                    │
+│  │ buildFieldInstruc-   │            ┌──────────────────────────────────────┐        │
+│  │  tions(c)            │            │ inputPhase(ctx, {files, sessionId}) │        │
+│  └──────────────────────┘            │  → calls extractFileContent()        │        │
+│                                      │    (user-info: OCR/PDF/DOCX parsers) │        │
+│  loading/phases/revision-phase.ts    │  → chunked by user-info, stored here │        │
+│  ┌──────────────────────────────────────┐  └──────────────────────────────────────┘   │
+│  │ identifyRevisionTarget(ctx, msg)   │                                                │
+│  │  → LLM determines which step redo  │                                                │
+│  │ identifyRevisionTargets(fields,    │                                                │
+│  │  checks)                           │                                                │
+│  │  → maps checkbox fields→step nums  │                                                │
+│  └──────────────────────────────────────┘                                                │
 │                                                                                      │
-│  PROVIDES: SkillLoader, ParsedCheck[], ExecutableStep[], PipelineContext               │
-│  CONSIDERS FROM: Knowledge (regulation refs), User-Info (chunks), Shared (DB)         │
+│  PROVIDES: session_setup persistence — fully populated PipelineContext (slices       │
+│    include FileRegistry with chunks, PaletteStore with regulation clauses,           │
+│    StepMemory with step definitions), plus ExecutableStep[]                           │
+│  CONSIDERS FROM: Knowledge (regulation refs), User-Info (chunks via extractFile-     │
+│    Content), Shared (DB persistence)                                                  │
+│  CONSUMED BY: POST /api/setup → setupSession()                                        │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           SEGMENT 4: PIPELINE                                         │
+│                           SEGMENT 4: PIPELINE (PER TURN)                              │
 │                                                                                      │
 │  ┌─────────────────────────────────────────────────────────────────────────────┐    │
 │  │  orchestrator-v2.ts (ENTRY POINT — async generator, yields PipelineEvent)   │    │
-│  │  orchestratePipeline(message, skillName, sessionId, files?, revisionFields?) │    │
-│  │    ├─► initPhase()                 — LOADING: skill load, session, context    │    │
-│  │    ├─► inputPhase()                — LOADING: file extraction / restore       │    │
-│  │    ├─► skillGenPhase()             — LOADING: create skill if auto            │    │
-│  │    ├─► loadReferences()            — load regulation data into palette        │    │
-│  │    ├─► generateStepsFromChecks()   — LOADING: build step list                 │    │
-│  │    ├─► identifyRevisionTarget(s)   — LOADING: which step(s) to redo           │    │
+│  │  orchestratePipeline(sessionId, message, revisionFields?)                   │    │
+│  │    ├─► restoreContext(sessionId)  — load ctx + steps from session_setup DB   │    │
+│  │    ├─► initPipelineTurn()         — addUserMessage + restore previous turns   │    │
+│  │    ├─► identifyRevisionTarget(s)  — which step(s) to redo from fields/LLM   │    │
 │  │    ├─► [loop] executeStepWithRetry — execute each step (llm+tool, retry 1x)  │    │
 │  │    │      └─► executeLlmToolStep() — core LLM+tool executor                  │    │
-│  │    ├─► enforceChecks()             — EVALUATION: gap-fill missing checks     │    │
-│  │    └─► finalizePhase()             — PRESENT: evaluate + assemble + persist  │    │
+│  │    └─► finalizePhase()             — evaluate + assemble + persist          │    │
 │  │                                                                            │    │
 │  │  Key patterns in step loop:                                                │    │
 │  │   • Skip steps with existing output unless revision target                 │    │
@@ -123,8 +140,8 @@
 │  │ loadRefer-  │ │ PipelineErr │ │ logPipeline │ │ PipelineEv- │ │ context.ts    │  │
 │  │ ences()     │ │ format...   │ │ truncate()  │ │ ent,        │ │ createPipe-   │  │
 │  │ .execute-   │ └─────────────┘ └─────────────┘ │ Executable- │ │ lineContext() │  │
-│  │  Compliance │                                  │ Step,       │ │ PipelineCtx   │  │
-│  │  Check()    │                                  │ StepResult  │ │ CheckResult   │  │
+│  │  Compliance │                                  │ Step,       │ │ restoreCtx()  │  │
+│  │  Check()    │                                  │ StepResult  │ │               │  │
 │  └─────────────┘                                  └─────────────┘ └───────────────┘  │
 │  ┌────────────────────────────────────────────────────────────────────────────────┐  │
 │  │ executors/llm-executor.ts                                                     │  │
@@ -138,21 +155,21 @@
 │  └────────────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                      │
 │  PROVIDES: StepResult[], streamed PipelineEvents                                      │
-│  CONSIDERS FROM: Loading (context), Shared (slices), Knowledge (regulation data)      │
+│  CONSIDERS FROM: Shared (slices via restoreContext), session_setup (DB)               │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │                           SEGMENT 5: EVALUATION LAYER                                │
 │                                                                                      │
-│  evaluation/enforce-checks.ts     evaluation/index.ts                                │
-│  ┌────────────────────────────┐   ┌────────────────────────────────────┐             │
-│  │ enforceChecks(ctx)         │──►│ evaluate(input)                    │             │
-│  │  → gap-fill missing checks │   │  → main entry, calls sub-modules   │             │
-│  │  → regex extract from files│   └────────────────────────────────────┘             │
-│  │  → numerical checks only   │              │                                         │
-│  └────────────────────────────┘               ▼                                         │
-│                                               │                                         │
+│  evaluation/index.ts                                                    │
+│  ┌────────────────────────────────────┐                                              │
+│  │ evaluate(input)                    │                                              │
+│  │  → main entry, calls sub-modules   │                                              │
+│  └──────────────┬─────────────────────┘                                              │
+│                 │                                                                      │
+│                 ▼                                                                      │
+│                 │                                                                      │
 │  evaluation/summary.ts          evaluation/confidence.ts                               │
 │  ┌──────────────────────┐      ┌──────────────────────────────────────┐              │
 │  │ buildFindings(checks)│      │ computeConfidence(input)             │              │
@@ -195,7 +212,8 @@
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │                           SEGMENT 7: API ROUTES (Next.js App Router)                  │
 │                                                                                      │
-│  POST /api/chat —— SSE streaming pipeline entry point                                │
+│  POST /api/setup —— once-per-session loading entry point (files, skill gen)          │
+│  POST /api/chat —— per-turn SSE streaming pipeline entry point                       │
 │  GET  /api/settings —— read LLM provider, model, retention config                    │
 │  POST /api/settings —— persist LLM provider, model, retention                        │
 │  GET  /api/sessions —— list all sessions                                              │
@@ -265,20 +283,19 @@
 
 ## Complete Function Call Flow (End-to-End)
 
+The agent is split into two phases: **Setup** (once per session) and **Chat** (per turn).
+
+### Phase 1: Setup — POST /api/setup
+
 ```
-HTTP POST /api/chat
+HTTP POST /api/setup
   │
-  ├─ ChatRequestSchema.safeParse(req.body)   ← validates message, skillName, sessionId,
-  │                                             files, revisionFields
+  ├─ SetupRequestSchema.safeParse(req.body)   ← validates sessionId, skillName?, files?, message?
   │
-  └─ orchestratePipeline(message, skillName, sessionId, files, revisionFields)
-       │  [async generator — yields PipelineEvent to client via SSE]
+  └─ setupSession({skillName?, sessionId, files?, message?})
+       │  [loads everything, persists to session_setup DB]
        │
-       ├─═══════════════════════════════════════════════════════════════
-       │  LOADING — Phase 1: INIT
-       │════════════════════════════════════════════════════════════════
-       │
-       ├─ initPhase(skillName, sessionId, message)
+       ├─ initSession(skillName, sessionId)
        │    ├─ generateCorrelationId()                                    → corr-{ts}-{n}
        │    ├─ loadSkill(skillName)              ◄── loading/skill/loader.ts
        │    │    ├─ matter(SKILL.md)              → frontmatter + body
@@ -289,47 +306,36 @@ HTTP POST /api/chat
        │    │    │    └─ getScriptDescription()   → Python docstring
        │    │    └─ load template.json (optional) → ReportTemplate
        │    ├─ getOrCreateSession(sessionId, skillName)  ◄── shared/memory/repository.ts
-       │    ├─ addUserMessage(sessionId, message)        ◄── shared/memory/repository.ts
        │    ├─ pruneOldSessions()                        ◄── shared/memory/cleanup.ts
        │    │    ├─ getSetting("retention_days")
        │    │    └─ deleteSessionCascade() for expired
-       │    ├─ createPipelineContext(name, skillmd, checks, sessionId, cid)
-       │    │    ├─ new CheckStore()
-       │    │    ├─ new StepMemory()
-       │    │    ├─ new FileRegistry()
-       │    │    ├─ new PaletteStore()
-       │    │    └─ new ReportAssembler()
-       │    └─ getResponsesForSession(sessionId)  → ctx.previousTurns[]
+       │    └─ [skill loaded into memory — no context created yet]
+       │
+       ├─ createPipelineContext(name, skillmd, checks, sessionId, cid)
+       │    ├─ new CheckStore()
+       │    ├─ new StepMemory()
+       │    ├─ new FileRegistry()
+       │    ├─ new PaletteStore()
+       │    └─ new ReportAssembler()
        │
        ├─═══════════════════════════════════════════════════════════════
-       │  LOADING — Phase 2: INPUT
+       │  LOADING — INPUT + SKILL GEN
        │════════════════════════════════════════════════════════════════
        │
        ├─ inputPhase(ctx, {files, sessionId})
-       │    │
-       │    ├─ [if files present]
-       │    │    └─ for each file:
-       │    │         ├─ extractFileContent(file)  ◄── user-info/extractors/index.ts
-       │    │         │    ├─ image/*  → extractImageText(dataUrl)    ◄── ocr.ts
-       │    │         │    │    └─ getTesseractWorker().recognize()
-       │    │         │    │         └─ groupWordsIntoLines() → TextChunk[]
-       │    │         │    ├─ pdf      → extractPdfText(dataUrl)     ◄── pdf-extract.ts
-       │    │         │    │    ├─ Path A: pdfjs-dist → itemToWordBox() → linesToChunks()
-       │    │         │    │    └─ Path B: render + OCR (scanned fallback)
-       │    │         │    └─ docx     → extractDocxText(dataUrl)    ◄── docx-extract.ts
-       │    │         │         └─ mammoth → stripHtml → splitParagraphs()
-       │    │         └─ ctx.files.addFile({fileId, filename, extractedText, chunks, ...})
-       │    │    ├─ saveFileContents(sessionId, combinedContent)     ◄── shared/memory/
-       │    │    └─ saveFileChunks(sessionId, JSON.stringify(fileData))
-       │    │
-       │    └─ [if no files — follow-up turn]
-       │         └─ getFileChunks(sessionId) → JSON.parse → ctx.files.addFile() for each
+       │    └─ for each file:
+       │         ├─ extractFileContent(file)  ◄── user-info/extractors/index.ts
+       │         │    ├─ image/*  → extractImageText(dataUrl)    ◄── ocr.ts
+       │         │    │    └─ getTesseractWorker().recognize()
+       │         │    │         └─ groupWordsIntoLines() → TextChunk[]
+       │         │    ├─ pdf      → extractPdfText(dataUrl)     ◄── pdf-extract.ts
+       │         │    │    ├─ Path A: pdfjs-dist → itemToWordBox() → linesToChunks()
+       │         │    │    └─ Path B: render + OCR (scanned fallback)
+       │         │    └─ docx     → extractDocxText(dataUrl)    ◄── docx-extract.ts
+       │         │         └─ mammoth → stripHtml → splitParagraphs()
+       │         └─ ctx.files.addFile({fileId, filename, extractedText, chunks, ...})
        │
-       ├─═══════════════════════════════════════════════════════════════
-       │  LOADING — Phase 2.5: SKILL GENERATION (auto-mode only)
-       │════════════════════════════════════════════════════════════════
-       │
-       ├─ skillGenPhase(ctx, message)   (only if isAutoSkill)
+       ├─ skillGenPhase(ctx, message)         (only if isAutoSkill)
        │    └─ generateSkill(message, fileTexts)  ◄── loading/extractors/skill-generator.ts
        │         ├─ streamText({model, system: SKILL_GENERATION_PROMPT, messages})
        │         ├─ matter(fullText) → frontmatter + body
@@ -337,7 +343,7 @@ HTTP POST /api/chat
        │         └─ extractRegulationIds(checks)
        │
        ├─═══════════════════════════════════════════════════════════════
-       │  PIPELINE — Phase 3: LOAD REFERENCES + GENERATE STEPS
+       │  LOADING — REFERENCES + STEPS
        │════════════════════════════════════════════════════════════════
        │
        ├─ loadReferences(ctx)  ◄── pipeline/builtins.ts
@@ -352,6 +358,42 @@ HTTP POST /api/chat
        │
        ├─ generateStepsFromChecks(ctx.skill.checks)  ◄── loading/generate-steps.ts
        │    └─ Steps 1..N: llm+tool (one per check field, with field instructions)
+       │
+       └─ saveSessionSetup(sessionId, {ctx, steps, skillName, correlationId})
+            └─ INSERT ctx JSON + steps JSON into session_setup table
+```
+
+### Phase 2: Chat — POST /api/chat (per turn)
+
+```
+HTTP POST /api/chat
+  │
+  ├─ ChatRequestSchema.safeParse(req.body)   ← validates message, sessionId, revisionFields?
+  │
+  ├─ hasSessionSetup(sessionId) → 400 if not set up yet
+  │
+  └─ orchestratePipeline(sessionId, message, revisionFields?)
+       │  [async generator — yields PipelineEvent to client via SSE]
+       │
+       ├─═══════════════════════════════════════════════════════════════
+       │  RESTORE — Load session from DB
+       │════════════════════════════════════════════════════════════════
+       │
+       ├─ restoreContext(sessionId)  ◄── pipeline/pipeline-context.ts
+       │    ├─ loadSessionSetup(sessionId)      ◄── shared/memory/repository.ts
+       │    ├─ PipelineContext.fromJSON(ctxJson) → reconstructed 5 slices
+       │    ├─ ExecutableStep[].fromJSON(stepsJson)
+       │    └─ Returns {ctx, steps, correlationId}
+       │
+       ├─ initPipelineTurn(ctx, sessionId, message, correlationId)
+       │    ├─ addUserMessage(sessionId, message)        ◄── shared/memory/repository.ts
+       │    ├─ restore previous step outputs from DB (file chunks, snapshots)
+       │    ├─ getResponsesForSession(sessionId)  → ctx.previousTurns[]
+       │    └─ [ctx is now fully loaded with previous turn data]
+       │
+       ├─═══════════════════════════════════════════════════════════════
+       │  PIPELINE — REVISION + STEP EXECUTION LOOP
+       │════════════════════════════════════════════════════════════════
        │
        ├─ identifyRevisionTarget(s)  ◄── loading/phases/revision-phase.ts
        │    ├─ [if revisionFields provided] → identifyRevisionTargets(fields, checks)
@@ -407,20 +449,8 @@ HTTP POST /api/chat
        │  │
        │  └─ [after all steps]
        │
-       ├─═══════════════════════════════════════════════════════════════
-       │  EVALUATION — Phase 4: ENFORCE CHECKS (gap-fill)
-       │════════════════════════════════════════════════════════════════
-       │
-       ├─ enforceChecks(ctx)  ◄── evaluation/enforce-checks.ts
-       │    ├─ defined = ctx.skill.checks  (from SKILL.md ## Checks)
-       │    ├─ existing = ctx.checks.getResults()
-       │    ├─ missing = defined - existing (by field name)
-       │    ├─ [numerical only] regex-extract value from file text
-       │    ├─ if found → CheckResult{verdict: "PASS"}
-       │    └─ [qualitative missing] → skipped (narrative only, no auto-fill)
-       │
-       ├─═══════════════════════════════════════════════════════════════
-       │  EVALUATION + PRESENT — Phase 5: EVALUATE + FINALIZE
+        ├─═══════════════════════════════════════════════════════════════
+        │  EVALUATION + PRESENT — EVALUATE + FINALIZE
        │════════════════════════════════════════════════════════════════
        │
        └─ finalizePhase(ctx, steps, sessionId)  ◄── present/phases/finalize-phase.ts
@@ -477,8 +507,8 @@ HTTP POST /api/chat
 |---------|------------|-------------------------------|---------------|
 | **1. Knowledge** | Loading, Pipeline | `IRegulationApi`, `getRegulationApi()` | — |
 | **2. User-Info** | Loading | `extractFileContent()`, `ExtractionResult`, `TextChunk` | — |
-| **3. Loading** | Pipeline | `initPhase()`, `inputPhase()`, `skillGenPhase()`, `identifyRevisionTarget()`, `identifyRevisionTargets()`, `generateStepsFromChecks()`, `SkillLoader`, `ParsedCheck[]`, `ExecutableStep[]` | Knowledge, User-Info, Shared |
-| **4. Pipeline** | Evaluation, Present | `orchestratePipeline()`, `StepResult`, `PipelineEvent` (streaming) | Loading, Shared |
+| **3. Loading** | Pipeline (via session_setup DB) | `setupSession()`, `initSession()`, `inputPhase()`, `skillGenPhase()`, `generateStepsFromChecks()`, `loadReferences()`, `saveSessionSetup()`, `SkillLoader`, `ParsedCheck[]`, `ExecutableStep[]` | Knowledge, User-Info, Shared |
+| **4. Pipeline** | Evaluation, Present | `orchestratePipeline(sessionId, msg, revisionFields?)`, `restoreContext()`, `initPipelineTurn()`, `StepResult`, `PipelineEvent` (streaming) | Shared, session_setup DB |
 | **5. Evaluation** | Present | `evaluate()`, `EvaluationResult` | Pipeline (CheckStore), Shared |
 | **6. Present** | External | `finalizePhase()` → `AgentResponse`, `generateDocx()` → `.docx Blob` | Pipeline, Evaluation, Shared |
 | **7. API Routes** | HTTP clients | 14 route handlers; consumes Pipeline + Shared | Pipeline, Shared |
@@ -489,15 +519,334 @@ HTTP POST /api/chat
 
 2. **User-Info ↔ Loading**: `Loading` calls `extractFileContent()` and receives `ExtractionResult`. Loading never touches file parsing.
 
-3. **Loading ↔ Pipeline**: Loading delivers a fully initialized `PipelineContext` with all 5 slices. Pipeline never loads skills or files.
+3. **Loading ↔ Pipeline**: Loading runs once per session (via `POST /api/setup`) and persists full state (`PipelineContext` + steps) to the `session_setup` DB table. Pipeline restores from DB on each turn via `restoreContext()`. Pipeline never loads skills, files, or refs.
 
 4. **Pipeline internal**: 5 shared slices (`CheckStore`, `StepMemory`, `FileRegistry`, `PaletteStore`, `ReportAssembler`) hold all state. Pipeline orchestrator coordinates execution loop with: skip-reuse, clear-before-execute, context-snapshot patterns.
 
 5. **Pipeline ↔ Evaluation ↔ Present**: Pipeline runs steps and fills CheckStore. Present calls Evaluation to get confidence + findings + validation, then assembles `AgentResponse`.
 
-6. **API Routes ↔ Pipeline**: `/api/chat` wraps `orchestratePipeline` async generator in SSE `ReadableStream`. All other routes are thin wrappers over `shared/memory/repository.ts` or `loading/skill/loader.ts`.
+6. **API Routes ↔ Loading + Pipeline**: `/api/setup` calls `setupSession()` (loading layer). `/api/chat` calls `orchestratePipeline()` (pipeline layer) wrapped in SSE `ReadableStream`. All other routes are thin wrappers over `shared/memory/repository.ts` or `loading/skill/loader.ts`.
 
 7. **Shared**: 5 slices + `memory/` + `schemas.ts` + types live in `shared/` — consumed by every layer but owned by none.
+
+---
+
+## The Journey — Functions in Execution Order
+
+This section traces the complete function call chain from user input to final output, organized by layer. Each function is annotated with its module path. Functions that exist but are not called in this main journey are listed at the end.
+
+---
+
+### 1. User-Info Layer — File Ingestion
+
+Called by `inputPhase(ctx, {files, sessionId})` in the loading layer. For each uploaded file:
+
+```
+extractFileContent(file)
+  └── user-info/extractors/index.ts
+      dispatches by MIME type/extension:
+      ├─ image/*   → extractImageText(dataUrl)       [user-info/extractors/ocr.ts]
+      │                getTesseractWorker().recognize()
+      │                groupWordsIntoLines(words) → TextChunk[]
+      ├─ .pdf       → extractPdfText(dataUrl)         [user-info/extractors/pdf-extract.ts]
+      │                pdfjs-dist → itemToWordBox() → groupItemsIntoLines() → linesToChunks()
+      │                or render+OCR fallback
+      └─ .docx      → extractDocxText(dataUrl)        [user-info/extractors/docx-extract.ts]
+                       mammoth → stripHtml() → splitParagraphs()
+```
+
+Returns `ExtractionResult{text, chunks, ocrConfidence, extractorUsed}`. The **chunking** (splitting into `TextChunk[]`) happens here in user-info. The loading layer merely calls this function and persists the result.
+
+---
+
+### 2. Loading Layer — Once-Per-Session Prep
+
+Entry: `POST /api/setup` → `setupSession(params)` in `loading/loading-orchestrator.ts`
+
+#### Step 2a — Skill: Load OR Generate (parallel branches)
+
+```
+initSession(skillName?, sessionId)        [loading/phases/init-phase.ts]
+  │
+  ├─ [pre-existing skill]  loadSkill(skillId)         [loading/skill/loader.ts]
+  │                           matter(SKILL.md) → frontmatter + body
+  │                           parseChecks(skillmd) → ParsedCheck[]
+  │                             parseFieldType(raw) → CheckFieldType
+  │                           extractRegulationIds(checks) → ["R48", ...]
+  │                           discover scripts/ → [{name, path, desc}]
+  │                           load template.json (optional) → ReportTemplate
+  │
+  └─ [auto-skill]          placeholder (no skillmd yet)
+       (generated after file extraction)
+```
+
+If no `skillName` was sent, `isAutoSkill = true` and the skill is generated later via:
+
+```
+skillGenPhase(ctx, message)                 [loading/phases/skill-gen-phase.ts]
+  └─ generateSkill(message, fileTexts)      [loading/extractors/skill-generator.ts]
+       streamText({model, system: SKILL_GENERATION_PROMPT, messages})
+       matter(fullText) → skillmd + frontmatter
+       parseChecks() + extractRegulationIds()
+```
+
+Both branches produce the same output shape: `{name, skillmd, checks, scripts, regulationIds}`.
+
+#### Step 2b — PipelineContext: the in-memory carrier
+
+```
+createPipelineContext(name, skillmd, sessionId, cid, checks, scripts, regulationIds)
+  └── pipeline/pipeline-context.ts
+      initializes 5 empty slices:
+        CheckStore     — holds CheckResult[] (verdicts per field)
+        StepMemory     — holds step outputs (narratives + tool results)
+        FileRegistry   — holds uploaded files + their chunks
+        PaletteStore   — holds regulation clauses + citation palette
+        ReportAssembler— holds report sections (used by present layer)
+```
+
+`PipelineContext` is the **sole data carrier** between layers. Loading populates its slices, serializes them to `session_setup` DB. Pipeline restores them via `restoreContext()` on every turn.
+
+#### Step 2c — File Extraction
+
+```
+inputPhase(ctx, {files, sessionId})          [loading/phases/input-phase.ts]
+  └─ for each file:
+       extractFileContent(file)              ◄── user-info (chunking happens there)
+       ctx.files.addFile({fileId, filename, extractedText, chunks, ...})
+       saveFileContents(sessionId, text)      ◄── persisted to DB
+       saveFileChunks(sessionId, JSON.stringify(chunks))
+```
+
+#### Step 2d — Build Steps + Load Regulation Clauses
+
+```
+generateStepsFromChecks(checks)              [loading/generate-steps.ts]
+  └─ buildFieldInstructions(c) per check     → ExecutableStep[] (1:1 llm+tool per ##Check)
+
+loadReferences(ctx)                          [pipeline/builtins.ts]
+  ├─ extract regulationIds from ctx.skill.checks
+  ├─ loadRegulations(ids) via getRegulationApi()
+  │    api.resolveCode(id) → api.getRegulation({code}) → RegulationSchema.safeParse()
+  ├─ ctx.palette.loadReferences([{filename, content}])
+  └─ ctx.palette.loadCitationPalette(palette) → CitationPaletteEntry[]
+```
+
+#### End of Loading — Everything Ready
+
+After `saveSessionSetup()` persists to DB, the `session_setup` table contains:
+
+| Asset | Where it lives |
+|---|---|
+| Source file chunks | `FileRegistry` (serialized in `session_setup`) |
+| Regulation clauses | `PaletteStore.citationPalette` (serialized in `session_setup`) |
+| Step definitions | `ExecutableStep[]` (serialized in `session_setup`) |
+| Skill metadata | `PipelineContext.skill` (serialized in `session_setup`) |
+
+The pipeline never re-extracts, re-fetches, or re-generates any of this.
+
+---
+
+### 3. Pipeline Layer — Per-Turn Execution
+
+Entry: `POST /api/chat` → `orchestratePipeline(sessionId, message, revisionFields?)` in `pipeline/orchestrator-v2.ts`
+
+#### Step 3a — Restore + Initialize Turn
+
+```
+restoreContext(sessionId, correlationId)      [pipeline/pipeline-context.ts]
+  ├─ loadSessionSetup(sessionId)  (from session_setup DB)
+  ├─ PipelineContext.fromJSON() → reconstruct 5 slices
+  └─ deserialize steps
+
+initPipelineTurn(ctx, sessionId, message, correlationId)  [loading/phases/init-phase.ts]
+  ├─ addUserMessage(sessionId, message)
+  ├─ pruneOldSessions()
+  ├─ getResponsesForSession(sessionId) → ctx.previousTurns[]
+  └─ restore previous step outputs + CheckResults from last response
+```
+
+#### Step 3b — Revision Identification (follow-up turns only)
+
+```
+identifyRevisionTargets(revisionFields, checks)  → Set<stepNumber>
+  └── loading/phases/revision-phase.ts
+      maps checkbox field names to step indices
+
+identifyRevisionTarget(ctx, userMessage)         → stepNumber | -1
+  └── loading/phases/revision-phase.ts
+      LLM decides which step to redo from message
+```
+
+#### Step 3c — Step Execution Loop
+
+For each step (skip if already has output and not a revision target):
+
+```
+executeStepWithRetry(step, ctx, maxRetries=1)   [pipeline/orchestrator-v2.ts]
+  └─ retry loop → executeLlmToolStep(step, ctx, previousError?)
+                   [pipeline/executors/llm-executor.ts]
+
+       ├─ buildContextSummary(ctx)
+       │    ├─ ctx.files.buildContextSummary()       — file chunks summary
+       │    ├─ ctx.steps.latest()                     — previous step output
+       │    ├─ ctx.palette.formatContextSummary()     — regulation citations
+       │    ├─ ctx.checks.getResults()                — prior check results
+       │    ├─ buildDomainSchemaGuide(ctx.skill.checks) — expected field schema
+       │    └─ ctx.palette.formatSourceSummary(sourcePalette) — source chunks
+       │
+       ├─ buildCitationGuide(ctx)
+       │    (instructions for [R48.5.11] and [S1.c3] markers)
+       │
+       ├─ createModel()                              [shared/llm/factory.ts]
+       │    (reads provider/model from DB or env)
+       │
+       ├─ Register tools:
+       │    ├─ "checkCompliance" → executeComplianceCheck(input)  [pipeline/builtins.ts]
+       │    │    for each check: numerical comparison (>=, <=, >, <, range) → pass/fail
+       │    └─ [custom scripts] → runScript(script.path, input)   [pipeline/executors/script-runner.ts]
+       │                           execFile("python3", [path]) → JSON.parse(stdout)
+       │
+       ├─ streamText({model, system, messages, tools, onStepFinish})
+       │    onStepFinish:
+       │      └─ merge tool results: pass/fail + clause → CheckResult[]
+       │         ctx.checks.addResults(results)
+       │         ctx.steps.setRaw("toolCalls", records)
+       │
+       ├─ extractCheckResultsFromText(fullText, checks, stepNumber)
+       │    CheckFieldEntrySchema.safeParse()   ← Zod validation of LLM JSON output
+       │    verdict = data.verdict === "FAIL" ? "FAIL" : "PASS"   ← SOLE verdict source
+       │
+       ├─ Merge tool + narrative CheckResults into CheckStore
+       │    ctx.checks.compileCitations(citationPalette, sourcePalette)
+       │
+       ├─ storeOutput(ctx, step.number, fullText)
+       │
+       └─ saveContextSnapshot({sessionId, turnNumber, stepNumber, ...})
+```
+
+Every check field gets its verdict from exactly one place: step execution. Numerical checks through the tool → CheckResult path. Qualitative checks through the LLM's JSON schema → CheckResult path. Both converge to the same `CheckResult[]` structure.
+
+---
+
+### 4. Evaluation Layer — After All Steps
+
+```
+finalizePhase(ctx, steps, sessionId) calls:
+
+evaluate({checkResults, citationPalette, sourcePalette, files, stepOutputs,
+           stepTitles, claims, citations, sourceCitations, checks, toolCalls})
+  └── evaluation/index.ts
+
+       ├─ computeConfidence(input)                   [evaluation/confidence.ts]
+       │    formula: baseScore = 100 - ocrPenalty - pdfPenalty
+       │    ocrPenalty = (1 - avgOcr/100) * 30
+       │    pdfPenalty: pdf-parse=5, fallback=10
+       │    llmMultiplier from step outputs (clamped 0.5-1.0)
+       │    finalScore = baseScore * llmMultiplier
+       │    needsExpert = finalScore < 50
+       │    → Confidence{score, ocrConfidence, llmMultiplier, needsExpert, ...}
+       │
+       ├─ buildFindings(checkResults)                [evaluation/summary.ts]
+       │    FAIL-only: field → "finding → VERDICT [citation]"
+       │
+       └─ validate({claims, citations, ...})          [evaluation/validate.ts]
+            ├─ citation refs exist in citationPalette?
+            ├─ validateClaimChunks(claims, sourcePalette)
+            │    ~25% word overlap check
+            └─ auto-supplement missing citations from sourcePalette
+```
+
+---
+
+### 5. Present Layer — Response Assembly
+
+Back in `finalizePhase`, after `evaluate()` returns:
+
+```
+verdict = ctx.checks.getResults().some(c => c.verdict === "FAIL") ? "FAIL" : "PASS"
+
+formatContent(stepOutputs, checks, checkResults, citationPalette)
+  └── present/phases/finalize-phase.ts
+      per-step: strip ```json blocks, strip [R48.5.11] markers,
+                inject <cite> badges with regulation/clause data
+      → single markdown string
+
+AgentResponseSchema.parse(responseData)   ← Zod validation of full response shape
+addAssistantResponse(sessionId, agentResponse)   ← persist to DB
+
+yield {type: "done", response}
+```
+
+Optionally (user-initiated):
+```
+generateDocx(response, skillName?)        [present/export/export-docx.ts]
+  ├─ fillTemplateDocx(response, skillName)    — replaces {placeholders} in .docx XML
+  └─ buildFallbackDocx(response, skillName?)  — builds from scratch via docx library
+```
+
+---
+
+### Functions NOT in the Journey
+
+#### API Route Handlers (thin wrappers, not part of core flow)
+
+| Route | Module |
+|-------|--------|
+| `GET /api/sessions` | `api/sessions/route.ts` |
+| `GET/DELETE /api/sessions/[id]` | `api/sessions/[id]/route.ts` |
+| `POST /api/sessions/[id]/star` | `api/sessions/[id]/star/route.ts` |
+| `GET/POST /api/settings` | `api/settings/route.ts` |
+| `GET /api/skills` | `api/skills/route.ts` |
+| `GET/POST /api/skills/[name]/template` | `api/skills/[name]/template/route.ts` |
+| `GET /api/scripts` | `api/scripts/route.ts` |
+| `POST /api/scripts/[name]` | `api/scripts/[name]/route.ts` |
+| `GET /api/files/[sessionId]/[filename]` | `api/files/[sessionId]/[filename]/route.ts` |
+| `POST /api/agent/evolution-confirm` | `api/agent/evolution-confirm/route.ts` |
+
+#### Mock Layer (development stand-in for Knowledge)
+
+| Function | Module |
+|----------|--------|
+| `MockRegulationApi` (class + all methods) | `knowledge/mock-regulation-api.ts` |
+| `getRegulationApi()` / `setRegulationApi()` | `knowledge/regulation-api.ts` |
+
+#### Shared/Memory Utilities (called internally, not in main flow)
+
+| Function | Module |
+|----------|--------|
+| `getDb()` / `getSetting()` / `setSetting()` | `shared/memory/database.ts` |
+| `getConversationHistory()` / `getFileContents()` / `getFileChunks()` | `shared/memory/repository.ts` |
+| `deleteSession()` / `removeUploadDir()` | `shared/memory/repository.ts`, `cleanup.ts` |
+| `isValidSessionId()` | `shared/memory/cleanup.ts` |
+| `hasSessionSetup()` (gate in `/api/chat`) | `shared/memory/repository.ts` |
+| `saveContextSnapshot()` / `getContextSnapshots()` | `shared/memory/repository.ts` |
+| `toggleStar()` | `shared/memory/repository.ts` |
+
+#### Internal Helpers (called inside journey functions, not independently)
+
+| Function | Module |
+|----------|--------|
+| `getScriptDescription()` | `loading/skill/loader.ts` |
+| `parseFieldType(raw)` | `loading/skill/check-parser.ts` |
+| `mergeWordBoxes()` | `user-info/extractors/index.ts` |
+| `getTesseractWorker()` / `collectWords()` / `toWordBox()` | `user-info/extractors/ocr.ts` |
+| `groupWordsIntoLines()` / `groupItemsIntoLines()` | `ocr.ts` / `pdf-extract.ts` |
+| `itemToWordBox()` / `linesToChunks()` | `pdf-extract.ts` |
+| `stripHtml()` / `splitParagraphs()` | `docx-extract.ts` |
+| `storeOutput()` / `resolveCitationRef()` / `deriveRegulation()` | `pipeline/executors/llm-executor.ts` |
+| `averageOcrConfidence()` | `evaluation/confidence.ts` |
+| `validateClaimChunks()` | `evaluation/validate.ts` |
+| `buildPlaceholderMap()` / `normalizeConsecutiveRuns()` / `escapeXml()` / `stripMarkdown()` | `present/export/export-docx.ts` |
+| `formatPipelineError()` / `generateCorrelationId()` | `pipeline/errors.ts` |
+| `truncate()` / `logPipeline()` / `logInfo()` / `logError()` | `pipeline/logger.ts` |
+| `parseChunkRef()` | `shared/schemas.ts` |
+| `restoreStepOutput()` (internal to `initPipelineTurn`) | `loading/phases/init-phase.ts` |
+| All `.toJSON()` / `.fromJSON()` on slices | serialization helpers |
+| All `CheckStore` internals (`supplementFromContent`, `buildCitationsFromClaims`, `computeVerdict`) | `shared/slices/check-store.ts` |
+| All `ReportAssembler` methods | `shared/slices/report-assembler.ts` |
+| All Zod schemas | `shared/schemas.ts` |
+| All type re-exports | `shared/types.ts` |
 
 ---
 
@@ -589,6 +938,11 @@ HTTP POST /api/chat
 |----------|-------------|
 | `generateSkill(message, fileTexts)` | Calls LLM to generate a SKILL.md from user request + uploaded file contents. Parses result with `gray-matter`, extracts frontmatter + Checks. Returns `SkillLoader`. |
 
+#### `loading/loading-orchestrator.ts`
+| Function | Description |
+|----------|-------------|
+| `setupSession({skillName?, sessionId, files?, message?})` | **Once-per-session orchestrator.** Runs `initSession()`, `createPipelineContext()`, `inputPhase()`, `skillGenPhase()` (if auto), `generateStepsFromChecks()`, `loadReferences()`, then `saveSessionSetup()`. Called from `POST /api/setup`. |
+
 #### `loading/generate-steps.ts`
 | Function | Description |
 |----------|-------------|
@@ -598,7 +952,8 @@ HTTP POST /api/chat
 #### `loading/phases/init-phase.ts`
 | Function | Description |
 |----------|-------------|
-| `initPhase(skillName, sessionId, message)` | Generates correlation ID, loads skill (or sets auto-skill flag), creates/gets session, adds user message, prunes old sessions, creates `PipelineContext`, loads previous turns. Returns `{ctx, correlationId, isAutoSkill}`. |
+| `initSession(skillName?, sessionId)` | **Once-per-session.** Generates correlation ID, loads skill (or sets auto-skill flag), creates/gets session, prunes old sessions. Returns `{correlationId, isAutoSkill}`. (Does NOT create context — that happens in setupSession.) |
+| `initPipelineTurn(ctx, sessionId, message, correlationId)` | **Per-turn.** Adds user message to DB, restores previous step outputs from DB (file chunks, snapshots), loads previous turns. Used by pipeline on every POST /api/chat. |
 
 #### `loading/phases/input-phase.ts`
 | Function | Description |
@@ -623,14 +978,16 @@ HTTP POST /api/chat
 #### `pipeline/orchestrator-v2.ts`
 | Function | Description |
 |----------|-------------|
-| `orchestratePipeline(message, skillName, sessionId, files?, revisionFields?)` | **Top-level entry point.** Async generator: init → input → skill-gen → load-refs → step-gen → revision → step-exec → enforce → finalize. Yields `PipelineEvent` for SSE streaming. Handles skip-reuse, clear-before-execute, context snapshots. |
+| `orchestratePipeline(sessionId, message, revisionFields?)` | **Top-level entry point (per turn).** Async generator: restoreContext → initPipelineTurn → revision → step-exec → enforce → finalize. Yields `PipelineEvent` for SSE streaming. All loading imports removed — state comes from `session_setup` DB. |
 | `executeStepWithRetry(step, ctx, maxRetries)` | Wraps `executeLlmToolStep()` with retry loop (default 1 retry). Returns `StepResult`. |
 
 #### `pipeline/pipeline-context.ts`
 | Function / Type | Description |
 |-----------------|-------------|
-| `createPipelineContext(name, skillmd, checks, sessionId, cid?, scripts?)` | Factory. Creates `PipelineContext` with all 5 slices. |
+| `createPipelineContext(name, skillmd, checks, sessionId, cid?, scripts?)` | Factory. Creates `PipelineContext` with all 5 slices. Used during loading phase. |
+| `restoreContext(sessionId)` | **Factory for per-turn use.** Loads session setup from DB via `loadSessionSetup()`, calls `PipelineContext.fromJSON()` to reconstruct 5 slices, deserializes steps. Called as first step in `orchestratePipeline()`. |
 | `PipelineContext` | Core context: `skill` metadata, `sessionId`, `correlationId`, slices (`checks`, `steps`, `files`, `palette`, `report`), `previousTurns[]`, `uploadedFiles[]`. |
+| `.toJSON()` / `PipelineContext.fromJSON()` | Serialize/deserialize the full context (including all 5 slices) for DB persistence. |
 | `CheckResult` | `{name, type, finding, verdict, citationRef, sourceCitation, toolCallId?, toolResult?}` |
 | `CitationPaletteEntry` | `{id, regulation, clause, text}` |
 | `SourcePaletteEntry` | `{id, fileId, filename, extractedText, keyExcerpt, chunks?, ...}` |
@@ -681,11 +1038,6 @@ HTTP POST /api/chat
 ---
 
 ### SEGMENT 5 — Evaluation Layer (`src/lib/agent/evaluation/`)
-
-#### `evaluation/enforce-checks.ts`
-| Function | Description |
-|----------|-------------|
-| `enforceChecks(ctx)` | Gap-fills missing numerical check results via regex extraction from file text. Qualitative checks skipped (narrative-only). Found → PASS, not found → FAIL "not assessed". |
 
 #### `evaluation/index.ts`
 | Function | Description |
@@ -739,10 +1091,15 @@ HTTP POST /api/chat
 
 ### SEGMENT 7 — API Routes (`src/app/api/`)
 
+#### `api/setup/route.ts`
+| Route | Description |
+|-------|-------------|
+| `POST /api/setup` | Validates body with `SetupRequestSchema`, calls `setupSession()` (loading orchestrator). Returns `{sessionId, skillName, correlationId}`. Runs once per session before first chat. |
+
 #### `api/chat/route.ts`
 | Route | Description |
 |-------|-------------|
-| `POST /api/chat` | Validates body with `ChatRequestSchema`, wraps `orchestratePipeline()` async generator in SSE `ReadableStream`. Yields `PipelineEvent` as SSE data frames. Returns `text/event-stream`. |
+| `POST /api/chat` | Validates body with `ChatRequestSchema`, checks `hasSessionSetup()` gate, wraps `orchestratePipeline()` async generator in SSE `ReadableStream`. Yields `PipelineEvent` as SSE data frames. Returns `text/event-stream`. |
 
 #### `api/sessions/route.ts`
 | Route | Description |
@@ -840,6 +1197,7 @@ HTTP POST /api/chat
 | `.getSourcePalette()` | Convert files to `SourcePaletteEntry[]` with excerpts. |
 | `.buildContextSummary()` | Build LLM context string from files with chunk annotations. |
 | `.averageOcrConfidence()` | Average OCR confidence across files. |
+| `.toJSON()` / `FileRegistry.fromJSON()` | Serialize/deserialize registry state for session persistence. |
 
 #### `shared/slices/palette-store.ts`
 | Function | Description |
@@ -852,6 +1210,7 @@ HTTP POST /api/chat
 | `.findCitation(ref)` | Lookup citation entry by ID. |
 | `.formatContextSummary()` | Format citations as LLM context string. |
 | `.formatSourceSummary(sourcePalette)` | Format source files as LLM context string. |
+| `.toJSON()` / `PaletteStore.fromJSON()` | Serialize/deserialize palette state for session persistence. |
 
 #### `shared/slices/report-assembler.ts`
 | Function | Description |
@@ -868,7 +1227,7 @@ HTTP POST /api/chat
 #### `shared/memory/database.ts`
 | Function | Description |
 |----------|-------------|
-| `getDb()` | Singleton SQLite instance. Creates DB, runs DDL (5 tables), migrations, seeds defaults. |
+| `getDb()` | Singleton SQLite instance. Creates DB, runs DDL (6 tables: sessions, messages, responses, context_snapshots, settings, session_setup), migrations, seeds defaults. |
 | `getSetting(key)` | Read from `settings` table. |
 | `setSetting(key, value)` | Upsert into `settings` table. |
 
@@ -887,6 +1246,9 @@ HTTP POST /api/chat
 | `deleteSession(sessionId)` | CASCADE delete session + all related records. |
 | `getAllSessions()` | SELECT all sessions with metadata. |
 | `getResponsesForSession(sessionId)` | SELECT all responses with parsed JSON fields. |
+| `saveSessionSetup(sessionId, data)` | INSERT/REPLACE into `session_setup` table — persists ctx JSON, steps JSON, skill name, correlation ID. |
+| `loadSessionSetup(sessionId)` | SELECT from `session_setup` — returns full setup data including reconstructed ctx + steps. |
+| `hasSessionSetup(sessionId)` | SELECT EXISTS from `session_setup` — used as gate in `/api/chat`. |
 | `saveContextSnapshot(snapshot)` | INSERT step state snapshot (system prompt, context summary, skillmd, references, uploaded files, step outputs). |
 | `getContextSnapshots(sessionId)` | SELECT all snapshots. |
 | `toggleStar(sessionId, starred)` | UPDATE `sessions.starred`. |
@@ -902,7 +1264,8 @@ HTTP POST /api/chat
 #### `shared/schemas.ts`
 | Schema | Description |
 |--------|-------------|
-| `ChatRequestSchema` | Validates chat payload: `message`, `skillName?`, `sessionId`, `files?`, `revisionFields?`. |
+| `SetupRequestSchema` | Validates setup payload: `skillName?`, `sessionId`, `files?`, `message?` (required for auto-skill). |
+| `ChatRequestSchema` | Validates chat payload: `message`, `sessionId`, `revisionFields?`. (No `skillName` or `files` — loading is done.) |
 | `ChatRequestFileSchema` | Validates file: `name`, `size`, `type`, `dataUrl?` (base64 data URL). |
 | `AgentResponseSchema` | Validates full agent response: `content`, `reasoning`, `citations`, `sourceCitations?`, `round`, `sessionId`, `verdict`, `lesson?`, `clauseTexts?`, `toolCalls?`, `reasoningSteps?`, `claims?`, `confidence?`, `validationErrors?`, `sections?`. |
 | `CitationSchema` | `{ref, regulation, clause}` — regulation citation. |
@@ -951,14 +1314,14 @@ HTTP POST /api/chat
 |---------|-------|-----------|
 | **1. Knowledge** | 3 | ~8 |
 | **2. User-Info** | 4 | ~10 |
-| **3. Loading** | 8 | ~9 |
-| **4. Pipeline** | 8 | ~14 |
-| **5. Evaluation** | 6 | ~8 |
+| **3. Loading** | 9 | ~12 |
+| **4. Pipeline** | 8 | ~15 |
+| **5. Evaluation** | 5 | ~7 |
 | **6. Present** | 3 | ~8 |
-| **7. API Routes** | 11 | ~14 |
-| **Shared** | 12 | ~40 |
+| **7. API Routes** | 12 | ~15 |
+| **Shared** | 12 | ~43 |
 | **LLM (shared/llm)** | 1 | ~3 |
-| **Total (agent engine)** | **45** | **~98** |
-| **Total (all source)** | **56** | **~114** |
+| **Total (agent engine)** | **46** | **~104** |
+| **Total (all source)** | **57** | **~120** |
 
-*Updated 2026-05-23: added missing modules (generate-steps, script-runner, llm/factory, shared types), added API Routes segment, updated pipeline flow for revisionFields + clear-before-execute + context snapshots, fixed file counts throughout.*
+*Updated 2026-05-23: added loading-orchestrator, /api/setup route, refactored init-phase into initSession+initPipelineTurn, pipeline now restores from DB via restoreContext, added session_setup table, split Chat/Setup schemas, added Journey section, removed enforceChecks (gap-fill was duplicate verdict source).*

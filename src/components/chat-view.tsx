@@ -166,23 +166,36 @@ export function ChatView() {
       const filesToSend = pendingTurn.attachedFiles.length > 0 ? pendingTurn.attachedFiles : undefined;
       if (process.env.NODE_ENV === "development") {
         const fileSummary = filesToSend?.map(f => `${f.name} (${f.size}B, ${f.type})`).join(", ") ?? "none";
-        console.log(`[chat-view] Sending to API — message: ${message.slice(0, 80)}, files: [${fileSummary}], skillName: ${activeSkillId}, revisionFields: ${revisionFields?.join(",") ?? "none"}`);
+        console.log(`[chat-view] message: ${message.slice(0, 80)}, files: [${fileSummary}], skill: ${activeSkillId || "(none)"}, revisionFields: ${revisionFields?.join(",") ?? "none"}`);
       }
 
-      const body: Record<string, unknown> = {
-        message,
-        skillName: activeSkillId,
-        sessionId,
-        files: filesToSend,
-      };
+      // Phase 1: Setup the session if needed (files or skill selection)
+      if (filesToSend || activeSkillId) {
+        const setupBody: Record<string, unknown> = { sessionId };
+        if (activeSkillId) setupBody.skillName = activeSkillId;
+        if (filesToSend) setupBody.files = filesToSend;
+
+        const setupResp = await fetch("/api/setup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(setupBody),
+        });
+        if (!setupResp.ok) {
+          const err = await setupResp.json().catch(() => ({ error: "Setup failed" }));
+          throw new Error(err.error || `Setup HTTP ${setupResp.status}`);
+        }
+      }
+
+      // Phase 2: Run the pipeline
+      const chatBody: Record<string, unknown> = { message, sessionId };
       if (revisionFields && revisionFields.length > 0) {
-        body.revisionFields = revisionFields;
+        chatBody.revisionFields = revisionFields;
       }
 
       const resp = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(chatBody),
       });
 
       if (!resp.ok) {

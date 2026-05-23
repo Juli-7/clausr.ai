@@ -9,7 +9,6 @@ import { StepMemory } from "@/lib/agent/shared/slices/step-memory";
 import { PaletteStore } from "@/lib/agent/shared/slices/palette-store";
 import { FileRegistry } from "@/lib/agent/shared/slices/file-registry";
 import { ReportAssembler } from "@/lib/agent/shared/slices/report-assembler";
-import { enforceChecks } from "@/lib/agent/evaluation/enforce-checks";
 
 // ── parseChunkRef ──
 
@@ -545,69 +544,4 @@ describe("ReportAssembler", () => {
   });
 });
 
-// ── enforceChecks ──
-
-describe("enforceChecks", () => {
-  it("fills missing numerical check with auto-extraction", () => {
-    const checks = parseChecks(`## Checks
-
-### mounting_height
-1. **type**: number
-2. **description**: Headlamp mounting height
-3. **clause**: R48 §6.2
-4. **constraint**: >= 500
-5. **depends_on**: (none)
-6. **sample**: (none)
-`);
-    const ctx = createPipelineContext("test", "", "sess-1", "corr-1", checks, undefined, ["R48"]);
-    ctx.files.addFile({ fileId: "f1", filename: "spec.pdf", extractedText: "Mounting_height: 650mm" });
-    enforceChecks(ctx);
-    const results = ctx.checks.getResults();
-    expect(results).toHaveLength(1);
-    expect(results[0].name).toBe("mounting_height");
-    expect(results[0].verdict).toBe("PASS");
-    expect(results[0].finding).toContain("auto-extracted");
-  });
-
-  it("skips missing qualitative check (narrative only)", () => {
-    const checks = parseChecks(`## Checks
-
-### light_source
-1. **type**: string
-2. **description**: Type of light source
-3. **clause**: R112 §5.5
-4. **depends_on**: (none)
-5. **sample**: (none)
-`);
-    const ctx = createPipelineContext("test", "", "sess-1", "corr-1", checks);
-    enforceChecks(ctx);
-    // Qualitative checks are not auto-filled — only narrative from LLM is used
-    expect(ctx.checks.getResults()).toHaveLength(0);
-  });
-
-  it("does nothing when all checks have results", () => {
-    const checks = parseChecks(`## Checks
-
-### x
-1. **type**: number
-2. **description**: Test field
-3. **clause**: (none)
-4. **constraint**: (none)
-5. **depends_on**: (none)
-6. **sample**: (none)
-`);
-    const ctx = createPipelineContext("test", "", "sess-1", "corr-1", checks);
-    ctx.checks.addResults([{
-      name: "x", type: "numerical",
-      finding: "10", verdict: "PASS", citationRef: [], sourceCitation: [],
-    }]);
-    enforceChecks(ctx);
-    expect(ctx.checks.getResults()).toHaveLength(1);
-  });
-
-  it("skips when no checks defined", () => {
-    const ctx = createPipelineContext("test", "", "sess-1", "corr-1", []);
-    enforceChecks(ctx);
-    expect(ctx.checks.getResults()).toHaveLength(0);
-  });
-});
+// ── (enforceChecks removed — step execution loop is the sole verdict source) ──

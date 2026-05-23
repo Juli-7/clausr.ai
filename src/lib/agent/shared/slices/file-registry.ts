@@ -74,6 +74,16 @@ export class FileRegistry {
     return `Uploaded Files:\n${fileBlocks.join("\n\n")}`;
   }
 
+  toJSON(): UploadedFileEntry[] {
+    return this.files.map(f => ({ ...f }));
+  }
+
+  static fromJSON(data: UploadedFileEntry[]): FileRegistry {
+    const registry = new FileRegistry();
+    for (const f of data) registry.addFile(f);
+    return registry;
+  }
+
   averageOcrConfidence(): number {
     const withOcr = this.files.filter((f) => f.ocrConfidence !== undefined);
     if (withOcr.length === 0) return 100;

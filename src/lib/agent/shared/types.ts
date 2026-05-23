@@ -9,6 +9,7 @@ export type {
   AgentResponse,
   Confidence,
   ChatRequest,
+  SetupRequest,
   ComplianceCheckInput,
   ToolCallRecord,
   ValidationError,

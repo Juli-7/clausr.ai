@@ -104,21 +104,19 @@ describe("AgentResponseSchema", () => {
 });
 
 describe("ChatRequestSchema", () => {
-  it("accepts a valid chat request without files", () => {
+  it("accepts a valid chat request", () => {
     const result = ChatRequestSchema.safeParse({
       message: "Check compliance",
-      skillName: "eu-vwta-lighting",
       sessionId: "session-123",
     });
     expect(result.success).toBe(true);
   });
 
-  it("accepts a valid chat request with files", () => {
+  it("accepts a chat request with revision fields", () => {
     const result = ChatRequestSchema.safeParse({
       message: "Check compliance",
-      skillName: "eu-vwta-lighting",
       sessionId: "session-123",
-      files: [{ name: "test.pdf", size: 1024, type: "application/pdf", dataUrl: "data:application/pdf;base64,JVBERi0xLjcKC" }],
+      revisionFields: ["mounting-height", "beam-pattern"],
     });
     expect(result.success).toBe(true);
   });
@@ -126,26 +124,22 @@ describe("ChatRequestSchema", () => {
   it("rejects empty message", () => {
     const result = ChatRequestSchema.safeParse({
       message: "",
-      skillName: "eu-vwta-lighting",
       sessionId: "session-123",
     });
     expect(result.success).toBe(false);
   });
 
-  it("allows empty skill name for no-skill chat mode", () => {
-    const result = ChatRequestSchema.safeParse({
-      message: "Check compliance",
-      skillName: "",
-      sessionId: "session-123",
-    });
-    expect(result.success).toBe(true);
-  });
-
   it("rejects missing session ID", () => {
     const result = ChatRequestSchema.safeParse({
       message: "Check compliance",
-      skillName: "eu-vwta-lighting",
       sessionId: "",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects missing session ID entirely", () => {
+    const result = ChatRequestSchema.safeParse({
+      message: "Check compliance",
     });
     expect(result.success).toBe(false);
   });
