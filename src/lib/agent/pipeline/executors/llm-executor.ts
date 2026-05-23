@@ -105,7 +105,7 @@ ${retryContext}
     }[] = [];
 
     const humanField = step.title.replace("Evaluate: ", "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-    const userMessage = `Execute step ${step.number}: ${step.title}. Write a narrative analysis starting with "### ${humanField}". Then output a JSON code block with this exact structure:\n\`\`\`json\n{"${step.title.replace("Evaluate: ", "")}": {"value": "narrative text with citations", "sourceRef": [1], "chunkRef": ["S1.c1"], "citationRef": ["R48.5.11"], "verdict": "PASS"}}\n\`\`\``;
+    const userMessage = `Execute step ${step.number}: ${step.title}. Write a narrative analysis starting with "### ${humanField}". Then output a JSON code block with this exact structure:\n\`\`\`json\n{"${step.title.replace("Evaluate: ", "")}": {"value": "narrative text with citations", "sourceRef": [1], "chunkRef": ["S1.c1"], "citationRef": ["R48.5.11"], "verdict": "PASS"}}\n\`\`\`\n\nThe JSON MUST include all fields: value, sourceRef (array), chunkRef (array), citationRef (array), and verdict. Arrays can be empty but must be present.`;
 
     const result = streamText({
       model: createModel(),
@@ -281,6 +281,7 @@ export function buildDomainSchemaGuide(checks: ParsedCheck[]): string {
   parts.push("");
   parts.push("For numerical checks, use the compliance-check tool to validate. Include the tool result.");
   parts.push("For conditional checks, evaluate the condition first before including the result.");
+  parts.push("Every field entry MUST include citationRef (regulation reference), sourceRef (file reference), and chunkRef (source chunk).");
   return parts.join("\n");
 }
 
@@ -337,8 +338,11 @@ function buildCitationGuide(ctx: PipelineContext): string {
   if (citationPalette.length > 0 || sourcePalette.length > 0) {
     parts.push("");
     parts.push("# Citation Format");
-    parts.push("Use `citationRef` in the JSON schema field to reference applicable regulations (e.g., \"R48.5.11\").");
-    parts.push("Use `sourceRef` in the JSON schema field to reference source files.");
+    parts.push("Every field entry in the JSON block MUST include these three arrays:");
+    parts.push("- `citationRef`: regulation references (e.g., [\"R48.5.11\", \"R112.5.3\"])");
+    parts.push("- `sourceRef`: source file references (e.g., [1, 2])");
+    parts.push("- `chunkRef`: source chunk references (e.g., [\"S1.c3\", \"S2.c1\"])");
+    parts.push("Arrays can be empty if not applicable, but must be present.");
   }
 
   const hasChunks = ctx.files.getFiles().some(f => f.chunks && f.chunks.length > 0);
@@ -363,10 +367,10 @@ function buildCitationGuide(ctx: PipelineContext): string {
  */
 const CheckFieldEntrySchema = z.object({
   value: z.string().min(1),
-  sourceRef: z.union([z.number(), z.array(z.number())]).optional(),
-  chunkRef: z.union([z.string(), z.array(z.string())]).optional(),
-  citationRef: z.union([z.string(), z.array(z.string())]).optional(),
-  verdict: z.string().optional(),
+  sourceRef: z.array(z.number()),
+  chunkRef: z.array(z.string()),
+  citationRef: z.array(z.string()),
+  verdict: z.string(),
 });
 
 function extractCheckResultsFromText(
@@ -408,42 +412,19 @@ function extractCheckResultsFromText(
     return [];
   }
 
-  const value = typeof e.value === "string" ? e.value : "";
+  const data = validation.data;
+  const verdict = data.verdict.toUpperCase() === "FAIL" ? "FAIL" as const : "PASS" as const;
 
-  const rawCitationRef = e.citationRef;
-  const citationRef = Array.isArray(rawCitationRef)
-    ? rawCitationRef.filter((r): r is string => typeof r === "string")
-    : typeof rawCitationRef === "string" && rawCitationRef
-      ? [rawCitationRef]
-      : [];
-
-  const rawSourceRef = e.sourceRef;
-  const sourceRef = Array.isArray(rawSourceRef)
-    ? rawSourceRef.filter((r): r is number => typeof r === "number")
-    : typeof rawSourceRef === "number"
-      ? [rawSourceRef]
-      : undefined;
-
-  const rawChunkRef = e.chunkRef;
-  const chunkRef = Array.isArray(rawChunkRef)
-    ? rawChunkRef.filter((r): r is string => typeof r === "string")
-    : typeof rawChunkRef === "string" && rawChunkRef
-      ? [rawChunkRef]
-      : undefined;
-
-  const verdictRaw = typeof e.verdict === "string" ? e.verdict : "PASS";
-  const verdict = verdictRaw.toUpperCase() === "FAIL" ? "FAIL" as const : "PASS" as const;
-
-  if (!value) return [];
+  if (!data.value) return [];
 
   return [{
     name: field,
     type: checkDef.type.kind === "number" ? "numerical" as const : "qualitative" as const,
-    finding: value,
+    finding: data.value,
     verdict,
-    citationRef,
-    sourceRef,
-    chunkRef,
+    citationRef: data.citationRef,
+    sourceRef: data.sourceRef.length > 0 ? data.sourceRef : undefined,
+    chunkRef: data.chunkRef.length > 0 ? data.chunkRef : undefined,
   }];
 }
 
