@@ -278,7 +278,6 @@ export function buildDomainSchemaGuide(checks: ParsedCheck[]): string {
     parts.push(line);
   }
   parts.push("");
-  parts.push("Every factual value MUST end with citation markers like [R48.5.11] or [S1].");
   parts.push("For numerical checks, use the compliance-check tool to validate. Include the tool result.");
   parts.push("For conditional checks, evaluate the condition first before including the result.");
   return parts.join("\n");
@@ -337,14 +336,12 @@ function buildCitationGuide(ctx: PipelineContext): string {
   if (citationPalette.length > 0 || sourcePalette.length > 0) {
     parts.push("");
     parts.push("# Citation Format");
-    parts.push("When referencing regulations in your output, use the following format:");
-    parts.push("- `[R48.5.11]` for regulation citations (regulation + clause, e.g., [R48.5.11], [R112.5.3])");
-    parts.push("- `[SN]` for source file citations (e.g., [S1] for the first uploaded file)");
-    parts.push("Place these markers at the end of each claim or value they support.");
-    parts.push("Every factual claim MUST end with the appropriate citation marker.");
-    if (citationPalette.length > 0) {
-      const available = citationPalette.map(e => `[${e.id}]`).join(", ");
-      parts.push(`Available regulation markers: ${available}`);
+    parts.push("Use `citationRef` in the JSON schema field to reference applicable regulations (e.g., \"R48.5.11\").");
+    parts.push("Use `[SN]` markers in narrative text for source file citations (e.g., [S1] for the first uploaded file).");
+    parts.push("Place source markers at the end of each claim or value they support.");
+    if (sourcePalette.length > 0) {
+      const available = sourcePalette.map(e => `S${e.id}`).join(", ");
+      parts.push(`Available source citation markers: [${available}].`);
     }
   }
 
@@ -355,7 +352,7 @@ function buildCitationGuide(ctx: PipelineContext): string {
     parts.push("Source text above is annotated with chunk IDs like [S1.c3]. Use these in claims:");
     parts.push("- `chunkRef` field: the specific source chunk that backs this claim (e.g., \"S1.c3\")");
     parts.push("- `sourceRef` field: the source file number (e.g., 1 for S1)");
-    parts.push("- `citationRef` field: the regulation marker only (e.g., \"R48.5.11\") — do NOT put source refs here");
+    parts.push("- `citationRef` field: the regulation reference (e.g., \"R48.5.11\")");
     parts.push("Every factual claim MUST include a chunkRef pointing to the source chunk that supports it.");
   }
 
@@ -366,7 +363,7 @@ function buildCitationGuide(ctx: PipelineContext): string {
  * Parse the LLM's JSON output and extract a CheckResult for the current step.
  *
  * Expected JSON format (per field):
- *   {"field_name": {"value": "narrative...", "sourceRef": 1, "chunkRef": "S1.c1", "citationRef": "R37.1b", "verdict": "PASS"}}
+ *   {"field_name": {"value": "narrative...", "sourceRef": 1, "chunkRef": "S1.c1", "citationRef": "R48.5.11", "verdict": "PASS"}}
  */
 function extractCheckResultsFromText(
   text: string,

@@ -9,7 +9,6 @@ import { SourceCitationCard } from "@/components/source-citation-card";
 import type { HighlightChunk } from "@/components/source-citation-card";
 import { InlineCommentThread } from "@/components/inline-comment";
 import { CommentPopover } from "@/components/comment-popover";
-import type { Citation } from "@/lib/agent/shared/types";
 import type { ChatTurn } from "@/lib/agent/shared/turn-types";
 import { DownloadDropdown } from "@/components/download-dropdown";
 
@@ -282,8 +281,8 @@ function DocumentCard({
     [response.content]
   );
   const enhancedContent = useMemo(
-    () => enhanceCitations(normalizedContent, response.citations, sourceCitations),
-    [normalizedContent, response.citations, sourceCitations]
+    () => enhanceCitations(normalizedContent, sourceCitations),
+    [normalizedContent, sourceCitations]
   );
   const highlightedContent = useMemo(
     () => applyHighlights(enhancedContent, pendingComments),
@@ -458,7 +457,7 @@ function DocumentCard({
                         {humanize(field)}
                       </td>
                       <td className="py-2" style={{ color: "var(--color-text-body)", fontWeight: 500 }}>
-                        <span dangerouslySetInnerHTML={{ __html: applyHighlights(enhanceCitations(value, response.citations, sourceCitations), pendingComments) }} />
+                        <span dangerouslySetInnerHTML={{ __html: applyHighlights(enhanceCitations(value, sourceCitations), pendingComments) }} />
                       </td>
                     </tr>
                   );
@@ -466,6 +465,30 @@ function DocumentCard({
               </tbody>
             </table>
             <div style={{ height: 1, background: "var(--color-border-default)", marginTop: 16 }} />
+          </div>
+        )}
+
+        {/* Regulatory References */}
+        {response.citations.length > 0 && (
+          <div className="px-4 pb-2">
+            <div className="text-xs font-semibold mb-2" style={{ color: "var(--color-text-muted)" }}>
+              Regulatory References
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {response.citations.map((c) => (
+                <cite
+                  key={c.ref}
+                  className="citation-marker"
+                  role="button"
+                  tabIndex={0}
+                  data-ref={c.ref}
+                  data-regulation={c.regulation}
+                  data-clause={c.clause}
+                >
+                  {c.regulation} §{c.clause}
+                </cite>
+              ))}
+            </div>
           </div>
         )}
 
@@ -843,28 +866,8 @@ const markdownComponents: Components = {
 
 // ── Citation enhancement ──
 
-function enhanceCitations(content: string, citations: Citation[], sourceCitations?: { ref: number; filename: string; fileUrl?: string; extractedText?: string; keyExcerpt?: string }[]): string {
-  const map = new Map<string, Citation>();
-  for (const c of citations) map.set(c.ref, c);
-
-  // Escape HTML entities for safe attribute insertion
-  const escapeAttr = (s: string) =>
-    s.replace(/["'&<>]/g, (c) =>
-      ({ '"': "&quot;", "'": "&#39;", "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] ?? c
-    );
-
-  // 1) Replace [R48.5.11] markers FIRST
-  content = content.replace(/\[(R\d+\.\d+(?:\.\d+)*)\]/g, (match, refStr) => {
-    const c = map.get(refStr);
-    if (c) {
-      const reg = escapeAttr(c.regulation);
-      const clause = escapeAttr(c.clause);
-      return `<cite class="citation-marker" role="button" tabindex="0" data-ref="${escapeAttr(refStr)}" data-regulation="${reg}" data-clause="${clause}">${reg} §${clause}</cite>`;
-    }
-    return match;
-  });
-
-  // 2) Replace [SN] and [SN.cX] markers with source citation badges
+function enhanceCitations(content: string, sourceCitations?: { ref: number; filename: string; fileUrl?: string; extractedText?: string; keyExcerpt?: string }[]): string {
+  // Replace [SN] and [SN.cX] markers with source citation badges
   if (sourceCitations && sourceCitations.length > 0) {
     content = content.replace(/\[S(\d+)(?:\.c\d+)?\]/gi, (match, refStr) => {
       const ref = parseInt(refStr, 10);
