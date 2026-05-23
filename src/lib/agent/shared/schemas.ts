@@ -17,7 +17,7 @@ export const SourceChunkSchema = z.object({
 });
 
 export const SourceCitationSchema = z.object({
-  ref: z.number().int().positive(),
+  ref: z.string().min(1),
   fileId: z.string(),
   filename: z.string(),
   fileUrl: z.string().optional(),
@@ -62,8 +62,7 @@ export const LessonSchema = z.object({
 export const ClaimSchema = z.object({
   statement: z.string().min(1),
   citationRef: z.string().min(1),
-  chunkRef: z.string().optional(),
-  sourceRef: z.number().int().positive().optional(),
+  sourceCitation: z.string().optional(),
 });
 
 export const ToolCallRecordSchema = z.object({

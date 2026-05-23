@@ -201,32 +201,21 @@ function formatLoadingMessage(stepStatus?: string | null): string {
 
 function findHighlightChunk(
   sourceCitation: { chunks?: { id: string; text: string; bbox?: HighlightChunk["bbox"]; wordBoxes?: HighlightChunk["wordBoxes"]; pageNumber?: number }[] } | undefined,
-  claims: { chunkRef?: string; sourceRef?: number }[] | undefined,
-  ref: number,
+  claims: { sourceCitation?: string }[] | undefined,
+  ref: string,
 ): HighlightChunk | undefined {
-  if (!claims || !sourceCitation?.chunks) return undefined;
-  const matchingClaim = claims.find(c => {
-    if (c.chunkRef) {
-      const m = c.chunkRef.match(/^S(\d+)\.(.+)$/);
-      return m && parseInt(m[1], 10) === ref;
-    }
-    return c.sourceRef === ref;
-  });
-  if (matchingClaim?.chunkRef) {
-    const chunkMatch = matchingClaim.chunkRef.match(/^S\d+\.(.+)$/);
-    const chunkId = chunkMatch?.[1];
-    const chunk = chunkId ? sourceCitation.chunks.find(ch => ch.id === chunkId) : undefined;
-    if (chunk) {
-      return {
-        id: chunk.id,
-        text: chunk.text,
-        bbox: chunk.bbox,
-        wordBoxes: chunk.wordBoxes,
-        pageNumber: chunk.pageNumber,
-      };
-    }
-  }
-  return undefined;
+  if (!sourceCitation?.chunks) return undefined;
+  const chunkId = ref.includes(".") ? ref.split(".")[1] : undefined;
+  if (!chunkId) return undefined;
+  const chunk = sourceCitation.chunks.find(ch => ch.id === chunkId);
+  if (!chunk) return undefined;
+  return {
+    id: chunk.id,
+    text: chunk.text,
+    bbox: chunk.bbox,
+    wordBoxes: chunk.wordBoxes,
+    pageNumber: chunk.pageNumber,
+  };
 }
 
 function DocumentCard({
@@ -264,7 +253,7 @@ function DocumentCard({
   } | null>(null);
 
   const [activeSourceCitation, setActiveSourceCitation] = useState<{
-    ref: number;
+    ref: string;
     fileId?: string;
     filename: string;
     fileUrl?: string;
@@ -314,7 +303,7 @@ function DocumentCard({
     } else {
       const scite = target.closest("cite.source-citation-marker") as HTMLElement | null;
       if (scite) {
-        const ref = parseInt(scite.getAttribute("data-source-ref") ?? "0", 10);
+        const ref = scite.getAttribute("data-source-citation") ?? "";
         const sc = sourceCitations?.find(r => r.ref === ref);
         const filename = sc?.filename ?? "Unknown file";
         const excerpt = sc?.keyExcerpt ?? "";

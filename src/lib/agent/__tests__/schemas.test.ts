@@ -73,7 +73,7 @@ describe("AgentResponseSchema", () => {
     const result = AgentResponseSchema.safeParse({
       ...validResponse,
       sourceCitations: [{
-        ref: 1, fileId: "test.pdf", filename: "test.pdf",
+        ref: "S1.c1", fileId: "test.pdf", filename: "test.pdf",
         extractedText: "Some text", keyExcerpt: "Key excerpt",
       }],
     });

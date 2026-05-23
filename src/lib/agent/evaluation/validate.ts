@@ -1,4 +1,3 @@
-import { parseChunkRef } from "@/lib/agent/shared/schemas";
 import type { Claim, Citation, SourceCitation } from "@/lib/agent/shared/schemas";
 import type { CitationPaletteEntry, SourcePaletteEntry } from "@/lib/agent/pipeline/pipeline-context";
 
@@ -57,12 +56,21 @@ export function validate({
             }
           }
         } else if (part.startsWith("S")) {
-          const num = parseInt(part.slice(1), 10);
-          if (!isNaN(num) && !sourceRefs.has(num)) {
-            const entry = sourcePalette.find((e) => e.id === num);
+          if (!sourceRefs.has(part)) {
+            const entry = sourcePalette.find((e) => e.id === part);
             if (entry) {
-              mutableSourceCitations.push(entry as any);
-              sourceRefs.add(entry.id);
+              mutableSourceCitations.push({
+                ref: entry.id,
+                fileId: entry.fileId,
+                filename: entry.filename,
+                fileUrl: entry.dataUrl,
+                extractedText: entry.extractedText,
+                keyExcerpt: entry.keyExcerpt,
+                chunks: entry.chunks,
+                boundingBox: entry.chunks?.[0]?.bbox,
+                pageNumber: entry.pageNumber,
+              } as any);
+              sourceRefs.add(part);
             }
           }
         }
@@ -85,12 +93,12 @@ export function validate({
     }
   }
 
-  const sourceMarkers = [...reportContent.matchAll(/\[S(\d+)\]/g)].map((m) => parseInt(m[1], 10));
+  const sourceMarkers = [...reportContent.matchAll(/\[(S\d+\.\S+?)\]/g)].map((m) => m[1]);
   for (const marker of [...new Set(sourceMarkers)]) {
     if (!sourceRefs.has(marker)) {
       errors.push({
         type: "source-mismatch",
-        message: `[S${marker}] appears in content but not in compiledSourceCitations`,
+        message: `[${marker}] appears in content but not in compiledSourceCitations`,
       });
     }
   }
@@ -106,36 +114,21 @@ function validateClaimChunks(
   if (claims.length === 0) return errors;
 
   for (const claim of claims) {
-    if (!claim.chunkRef) continue;
-    const parsed = parseChunkRef(claim.chunkRef);
-    if (!parsed) {
-      errors.push({
-        type: "chunk-mismatch",
-        message: `Claim "${claim.statement.slice(0, 80)}" has invalid chunkRef "${claim.chunkRef}"`,
-      });
-      continue;
-    }
-    const { fileRef, chunkId } = parsed;
-    const sourceEntry = sourcePalette.find((e) => e.id === fileRef);
+    if (!claim.sourceCitation) continue;
+    const sourceEntry = sourcePalette.find((e) => e.id === claim.sourceCitation);
     if (!sourceEntry) {
-      errors.push({ type: "chunk-missing", message: `Claim references S${fileRef} not in source palette` });
+      errors.push({ type: "chunk-missing", message: `Claim references ${claim.sourceCitation} not in source palette` });
       continue;
     }
-    if (!sourceEntry.chunks) continue;
-
-    const chunk = sourceEntry.chunks.find((c) => c.id === chunkId);
-    if (!chunk) {
-      errors.push({ type: "chunk-missing", message: `Claim references chunk ${claim.chunkRef} which does not exist` });
-      continue;
-    }
-    // Word overlap check
+    const chunkText = sourceEntry.keyExcerpt;
+    if (!chunkText) continue;
     const claimWords = claim.statement.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter((w) => w.length > 2);
-    const chunkLower = chunk.text.toLowerCase();
+    const chunkLower = chunkText.toLowerCase();
     const matchCount = claimWords.filter((w) => chunkLower.includes(w)).length;
     if (claimWords.length >= 3 && matchCount < Math.ceil(claimWords.length * 0.25)) {
       errors.push({
         type: "chunk-mismatch",
-        message: `Claim "${claim.statement.slice(0, 80)}" may not match chunk ${claim.chunkRef}`,
+        message: `Claim "${claim.statement.slice(0, 80)}" may not match chunk ${claim.sourceCitation}`,
       });
     }
   }

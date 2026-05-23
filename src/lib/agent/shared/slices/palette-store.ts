@@ -40,7 +40,12 @@ export class PaletteStore {
 
   formatSourceSummary(sourcePalette: SourcePaletteEntry[]): string {
     if (sourcePalette.length === 0) return "";
-    const summary = sourcePalette.map((s) => `[S${s.id}] ${s.filename}`).join("\n");
-    return `Source Files:\n${summary}`;
+    const summary = sourcePalette
+      .flatMap((s) => {
+        const chunks = s.chunks?.map((c) => `[S${s.id}.${c.id}] ${s.filename} — ${c.text.slice(0, 80)}`) ?? [];
+        return chunks.length > 0 ? chunks : [`[S${s.id}] ${s.filename}`];
+      })
+      .join("\n");
+    return `Source Chunks:\n${summary}`;
   }
 }

@@ -139,8 +139,8 @@ function formatContent(
           badges.push(`<cite class="citation-marker" role="button" tabindex="0" data-ref="${ref}" data-regulation="${entry.regulation}" data-clause="${entry.clause}">${entry.regulation} §${entry.clause}</cite>`);
         }
       }
-      for (const ref of (result.sourceRef ?? [])) {
-        badges.push(`<cite class="source-citation-marker" role="button" tabindex="0" data-source-ref="${ref}">S${ref}</cite>`);
+      for (const ref of result.sourceCitation) {
+        badges.push(`<cite class="source-citation-marker" role="button" tabindex="0" data-source-citation="${ref}">${ref}</cite>`);
       }
     }
 

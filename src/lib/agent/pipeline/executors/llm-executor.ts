@@ -105,7 +105,7 @@ ${retryContext}
     }[] = [];
 
     const humanField = step.title.replace("Evaluate: ", "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-    const userMessage = `Execute step ${step.number}: ${step.title}. Write a narrative analysis starting with "### ${humanField}". Then output a JSON code block with this exact structure:\n\`\`\`json\n{"${step.title.replace("Evaluate: ", "")}": {"value": "narrative text with citations", "sourceRef": [1], "chunkRef": ["S1.c1"], "citationRef": ["R48.5.11"], "verdict": "PASS"}}\n\`\`\`\n\nThe JSON MUST include all fields: value, sourceRef (array), chunkRef (array), citationRef (array), and verdict. Arrays can be empty but must be present.`;
+    const userMessage = `Execute step ${step.number}: ${step.title}. Write a narrative analysis starting with "### ${humanField}". Then output a JSON code block with this exact structure:\n\`\`\`json\n{"${step.title.replace("Evaluate: ", "")}": {"value": "narrative text with citations", "sourceCitation": ["S1.c1"], "citationRef": ["R48.5.11"], "verdict": "PASS"}}\n\`\`\`\n\nThe JSON MUST include all fields: value, sourceCitation (array), citationRef (array), and verdict. Arrays can be empty but must be present.`;
 
     const result = streamText({
       model: createModel(),
@@ -200,8 +200,7 @@ ${retryContext}
           finding: narrative?.finding ?? `${r.name}: ${r.value} ${r.comparison} → ${r.status}`,
           verdict: r.status === "pass" ? ("PASS" as const) : ("FAIL" as const),
           citationRef: narrative?.citationRef ?? resolveCitationRef(palette, clause),
-          sourceRef: narrative?.sourceRef,
-          chunkRef: narrative?.chunkRef,
+          sourceCitation: narrative?.sourceCitation ?? [],
           toolResult: {
             value: r.value as number,
             limit: r.limit as number,
@@ -281,7 +280,7 @@ export function buildDomainSchemaGuide(checks: ParsedCheck[]): string {
   parts.push("");
   parts.push("For numerical checks, use the compliance-check tool to validate. Include the tool result.");
   parts.push("For conditional checks, evaluate the condition first before including the result.");
-  parts.push("Every field entry MUST include citationRef (regulation reference), sourceRef (file reference), and chunkRef (source chunk).");
+  parts.push("Every field entry MUST include citationRef (regulation reference) and sourceCitation (source chunk ID).");
   return parts.join("\n");
 }
 
@@ -338,22 +337,20 @@ function buildCitationGuide(ctx: PipelineContext): string {
   if (citationPalette.length > 0 || sourcePalette.length > 0) {
     parts.push("");
     parts.push("# Citation Format");
-    parts.push("Every field entry in the JSON block MUST include these three arrays:");
-    parts.push("- `citationRef`: regulation references — use the EXACT IDs from Available Citations (e.g., \"R48.5.11\"), not the clause text like \"Art 15\"");
-    parts.push("- `sourceRef`: source file numbers (e.g., [1, 2])");
-    parts.push("- `chunkRef`: source chunk IDs (e.g., [\"S1.c3\", \"S2.c1\"])");
+    parts.push("Every field entry in the JSON block MUST include these two arrays:");
+    parts.push("- `citationRef`: regulation references — use the EXACT IDs from Available Citations (e.g., \"R48.5.11\")");
+    parts.push("- `sourceCitation`: source chunk IDs — use the EXACT chunk IDs from source palette (e.g., [\"S1.c3\", \"S2.c1\"])");
     parts.push("Arrays can be empty if not applicable, but must be present.");
   }
 
   const hasChunks = ctx.files.getFiles().some(f => f.chunks && f.chunks.length > 0);
   if (hasChunks) {
     parts.push("");
-    parts.push("# Source Chunk References (chunkRef)");
+    parts.push("# Source Chunk References (sourceCitation)");
     parts.push("Source text above is annotated with chunk IDs like [S1.c3]. Use these in claims:");
-    parts.push("- `chunkRef` field: the specific source chunk that backs this claim (e.g., \"S1.c3\")");
-    parts.push("- `sourceRef` field: the source file number (e.g., 1 for S1)");
+    parts.push("- `sourceCitation` field: the source chunk ID that backs this claim (e.g., \"S1.c3\")");
     parts.push("- `citationRef` field: the regulation reference (e.g., \"R48.5.11\")");
-    parts.push("Every factual claim MUST include a chunkRef pointing to the source chunk that supports it.");
+    parts.push("Every factual claim MUST include a sourceCitation pointing to the source chunk that supports it.");
   }
 
   return parts.join("\n");
@@ -363,12 +360,11 @@ function buildCitationGuide(ctx: PipelineContext): string {
  * Parse the LLM's JSON output and extract a CheckResult for the current step.
  *
  * Expected JSON format (per field):
- *   {"field_name": {"value": "narrative...", "sourceRef": [1], "chunkRef": ["S1.c1"], "citationRef": ["R48.5.11"], "verdict": "PASS"}}
+ *   {"field_name": {"value": "narrative...", "sourceCitation": ["S1.c1"], "citationRef": ["R48.5.11"], "verdict": "PASS"}}
  */
 const CheckFieldEntrySchema = z.object({
   value: z.string().min(1),
-  sourceRef: z.array(z.number()),
-  chunkRef: z.array(z.string()),
+  sourceCitation: z.array(z.string()),
   citationRef: z.array(z.string()),
   verdict: z.string(),
 });
@@ -412,7 +408,7 @@ function extractCheckResultsFromText(
     return [];
   }
 
-  const data = validation.data;
+    const data = validation.data;
   const verdict = data.verdict.toUpperCase() === "FAIL" ? "FAIL" as const : "PASS" as const;
 
   if (!data.value) return [];
@@ -423,8 +419,7 @@ function extractCheckResultsFromText(
     finding: data.value,
     verdict,
     citationRef: data.citationRef,
-    sourceRef: data.sourceRef.length > 0 ? data.sourceRef : undefined,
-    chunkRef: data.chunkRef.length > 0 ? data.chunkRef : undefined,
+    sourceCitation: data.sourceCitation,
   }];
 }
 

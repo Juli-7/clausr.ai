@@ -324,7 +324,7 @@ describe("CheckStore", () => {
     const store = new CheckStore();
     store.addResults([{
       name: "mounting_height", type: "numerical",
-      finding: "650", verdict: "PASS", citationRef: ["R48.6.2"],
+      finding: "650",       verdict: "PASS", citationRef: ["R48.6.2"], sourceCitation: [],
     }]);
     expect(store.getResults()).toHaveLength(1);
     expect(store.computeVerdict()).toBe("PASS");
@@ -334,8 +334,8 @@ describe("CheckStore", () => {
   it("computes FAIL when any check fails", () => {
     const store = new CheckStore();
     store.addResults([
-      { name: "a", type: "numerical", finding: "ok", verdict: "PASS", citationRef: [] },
-      { name: "b", type: "numerical", finding: "bad", verdict: "FAIL", citationRef: [] },
+      { name: "a", type: "numerical", finding: "ok", verdict: "PASS", citationRef: [], sourceCitation: [] },
+      { name: "b", type: "numerical", finding: "bad", verdict: "FAIL", citationRef: [], sourceCitation: [] },
     ]);
     expect(store.computeVerdict()).toBe("FAIL");
     expect(store.failureCount).toBe(1);
@@ -344,8 +344,8 @@ describe("CheckStore", () => {
   it("removes results for a field", () => {
     const store = new CheckStore();
     store.addResults([
-      { name: "a", type: "numerical", finding: "1", verdict: "PASS", citationRef: [] },
-      { name: "b", type: "numerical", finding: "2", verdict: "PASS", citationRef: [] },
+      { name: "a", type: "numerical", finding: "1", verdict: "PASS", citationRef: [], sourceCitation: [] },
+      { name: "b", type: "numerical", finding: "2", verdict: "PASS", citationRef: [], sourceCitation: [] },
     ]);
     const removed = store.removeResultsForField("a");
     expect(removed).toHaveLength(1);
@@ -357,7 +357,7 @@ describe("CheckStore", () => {
     const store = new CheckStore();
     store.addResults([{
       name: "mounting_height", type: "numerical",
-      finding: "650", verdict: "PASS", citationRef: ["R48.6.2"],
+      finding: "650",       verdict: "PASS", citationRef: ["R48.6.2"], sourceCitation: [],
     }]);
     store.compileCitations(
       [{ id: "R48.6.2", regulation: "R48", clause: "6.2", text: "Mount at least 500mm" }],
@@ -374,7 +374,7 @@ describe("CheckStore", () => {
 
   it("adds and retrieves claims", () => {
     const store = new CheckStore();
-    store.addClaims([{ statement: "Height is 650mm", citationRef: "R48.6.2", sourceRef: 1 }]);
+    store.addClaims([{ statement: "Height is 650mm", citationRef: "R48.6.2", sourceCitation: "S1.c1" }]);
     expect(store.getClaims()).toHaveLength(1);
     expect(store.getClaims()[0].statement).toBe("Height is 650mm");
   });
@@ -470,14 +470,17 @@ describe("FileRegistry", () => {
     expect(new FileRegistry().hasFiles()).toBe(false);
   });
 
-  it("generates source palette with 1-indexed ids", () => {
+  it("generates source palette with chunk-level ids", () => {
     const reg = new FileRegistry();
     reg.addFile({ fileId: "f1", filename: "a.pdf", extractedText: "hello world" });
-    reg.addFile({ fileId: "f2", filename: "b.pdf", extractedText: "foo bar" });
+    reg.addFile({
+      fileId: "f2", filename: "b.pdf", extractedText: "foo bar baz",
+      chunks: [{ id: "c1", text: "chunk one" }],
+    });
     const palette = reg.getSourcePalette();
     expect(palette).toHaveLength(2);
-    expect(palette[0].id).toBe(1);
-    expect(palette[1].id).toBe(2);
+    expect(palette[0].id).toBe("S1");
+    expect(palette[1].id).toBe("S2.c1");
     expect(palette[0].filename).toBe("a.pdf");
   });
 
@@ -596,7 +599,7 @@ describe("enforceChecks", () => {
     const ctx = createPipelineContext("test", "", "sess-1", "corr-1", checks);
     ctx.checks.addResults([{
       name: "x", type: "numerical",
-      finding: "10", verdict: "PASS", citationRef: [],
+      finding: "10", verdict: "PASS", citationRef: [], sourceCitation: [],
     }]);
     enforceChecks(ctx);
     expect(ctx.checks.getResults()).toHaveLength(1);

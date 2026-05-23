@@ -21,7 +21,7 @@ function SourceCitationBadge({
   refNumber,
   onClick,
 }: {
-  refNumber: number;
+  refNumber: string;
   onClick: (e: React.MouseEvent) => void;
 }) {
   return (
@@ -34,13 +34,13 @@ function SourceCitationBadge({
         border: "1px solid var(--color-amber-border)",
       }}
     >
-      S{refNumber}
+      {refNumber}
     </button>
   );
 }
 
 interface SourceCitationCardProps {
-  refNumber: number;
+  refNumber: string;
   fileId?: string;
   filename: string;
   fileUrl?: string;

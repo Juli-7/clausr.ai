@@ -16,7 +16,7 @@ export interface CitationPaletteEntry {
 }
 
 export interface SourcePaletteEntry {
-  id: number;
+  id: string;
   fileId: string;
   filename: string;
   extractedText: string;
@@ -32,8 +32,7 @@ export interface CheckResult {
   finding: string;
   verdict: "PASS" | "FAIL";
   citationRef: string[];
-  sourceRef?: number[];
-  chunkRef?: string[];
+  sourceCitation: string[];
   toolCallId?: string;
   toolResult?: {
     value: number;

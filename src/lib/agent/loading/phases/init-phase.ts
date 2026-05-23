@@ -96,6 +96,7 @@ export async function initPhase(
         finding,
         verdict: finding.startsWith("FAIL") ? "FAIL" : "PASS",
         citationRef: regMatch?.[1] ? [regMatch[1]] : [],
+        sourceCitation: [],
       });
     }
     ctx.checks.addResults(restoredResults);

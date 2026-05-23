@@ -28,16 +28,31 @@ export class FileRegistry {
   }
 
   getSourcePalette(): SourcePaletteEntry[] {
-    return this.files.map((f, i) => ({
-      id: i + 1,
-      fileId: f.fileId,
-      filename: f.filename,
-      extractedText: f.extractedText,
-      keyExcerpt: f.extractedText.slice(0, 200),
-      chunks: f.chunks,
-      dataUrl: f.dataUrl,
-      pageNumber: f.pageCount,
-    }));
+    return this.files.flatMap((f, i) => {
+      const fileNum = i + 1;
+      const chunks = f.chunks ?? [];
+      if (chunks.length === 0) {
+        return [{
+          id: `S${fileNum}`,
+          fileId: f.fileId,
+          filename: f.filename,
+          extractedText: f.extractedText,
+          keyExcerpt: f.extractedText.slice(0, 200),
+          dataUrl: f.dataUrl,
+          pageNumber: f.pageCount,
+        }];
+      }
+      return chunks.map(c => ({
+        id: `S${fileNum}.${c.id}`,
+        fileId: f.fileId,
+        filename: f.filename,
+        extractedText: f.extractedText,
+        keyExcerpt: c.text,
+        chunks: [c],
+        dataUrl: f.dataUrl,
+        pageNumber: c.pageNumber ?? f.pageCount,
+      }));
+    });
   }
 
   /**

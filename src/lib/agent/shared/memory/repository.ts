@@ -188,7 +188,7 @@ export function getResponsesForSession(sessionId: string): {
   clauseTexts?: Record<string, string>;
   toolCalls?: { step: number; toolName: string; summary: string; status: string }[];
   reasoningSteps?: { stepNumber: number; title: string; body: string; subStep?: number }[];
-  claims?: { statement: string; citationRef: string; sourceRef?: number; chunkRef?: string }[];
+  claims?: { statement: string; citationRef: string; sourceCitation?: string }[];
   confidence?: { score: number; ocrConfidence: number; dataCompleteness?: number; llmMultiplier: number; llmReasoning: string; needsExpert: boolean };
   createdAt: number;
 }[] {

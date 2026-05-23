@@ -1,4 +1,3 @@
-import { parseChunkRef } from "@/lib/agent/shared/schemas";
 import type { Citation, Claim, SourceCitation } from "@/lib/agent/shared/schemas";
 import type { CheckResult, CitationPaletteEntry, SourcePaletteEntry } from "@/lib/agent/pipeline/pipeline-context";
 import { logPipeline } from "@/lib/agent/pipeline/logger";
@@ -58,7 +57,7 @@ export class CheckStore {
     sourcePalette: SourcePaletteEntry[]
   ): void {
     const citationMap = new Map<string, Citation>();
-    const sourceMap = new Map<number, SourceCitation>();
+    const sourceMap = new Map<string, SourceCitation>();
 
     for (const check of this.checkResults) {
       for (const ref of check.citationRef) {
@@ -74,21 +73,21 @@ export class CheckStore {
         }
       }
 
-      if (check.sourceRef) {
-        for (const ref of check.sourceRef) {
-          if (!sourceMap.has(ref)) {
-            const entry = sourcePalette.find((e) => e.id === ref);
-            if (entry) {
-              sourceMap.set(ref, {
-                ref: entry.id,
-                fileId: entry.fileId,
-                filename: entry.filename,
-                fileUrl: entry.dataUrl,
-                extractedText: entry.extractedText,
-                keyExcerpt: entry.keyExcerpt,
-                pageNumber: entry.pageNumber,
-              });
-            }
+      for (const ref of check.sourceCitation) {
+        if (!sourceMap.has(ref)) {
+          const entry = sourcePalette.find((e) => e.id === ref);
+          if (entry) {
+            sourceMap.set(ref, {
+              ref,
+              fileId: entry.fileId,
+              filename: entry.filename,
+              fileUrl: entry.dataUrl,
+              extractedText: entry.extractedText,
+              keyExcerpt: entry.keyExcerpt,
+              chunks: entry.chunks,
+              boundingBox: entry.chunks?.[0]?.bbox,
+              pageNumber: entry.pageNumber,
+            });
           }
         }
       }
@@ -96,15 +95,19 @@ export class CheckStore {
 
     if (sourceMap.size === 0 && sourcePalette.length > 0) {
       for (const entry of sourcePalette) {
-        sourceMap.set(entry.id, {
-          ref: entry.id,
-          fileId: entry.fileId,
-          filename: entry.filename,
-          fileUrl: entry.dataUrl,
-          extractedText: entry.extractedText,
-          keyExcerpt: entry.keyExcerpt,
-          pageNumber: entry.pageNumber,
-        });
+        if (!sourceMap.has(entry.id)) {
+          sourceMap.set(entry.id, {
+            ref: entry.id,
+            fileId: entry.fileId,
+            filename: entry.filename,
+            fileUrl: entry.dataUrl,
+            extractedText: entry.extractedText,
+            keyExcerpt: entry.keyExcerpt,
+            chunks: entry.chunks,
+            boundingBox: entry.chunks?.[0]?.bbox,
+            pageNumber: entry.pageNumber,
+          });
+        }
       }
     }
 
@@ -112,7 +115,7 @@ export class CheckStore {
       a.ref.localeCompare(b.ref)
     );
     this.compiledSourceCitations = Array.from(sourceMap.values()).sort((a, b) =>
-      a.ref - b.ref
+      a.ref.localeCompare(b.ref)
     );
 
     if (this.compiledCitations.length > 0 || this.compiledSourceCitations.length > 0) {
@@ -135,9 +138,6 @@ export class CheckStore {
     const citationMap = new Map(this.compiledCitations.map((c) => [c.ref, c]));
     const sourceMap = new Map(this.compiledSourceCitations.map((s) => [s.ref, s]));
 
-    const referencedChunks = new Map<number, Set<string>>();
-    const firstChunkPerFile = new Map<number, string>();
-
     for (const claim of this.claims) {
       if (claim.citationRef.startsWith("R") && !citationMap.has(claim.citationRef)) {
         const entry = citationPalette.find((e) => e.id === claim.citationRef);
@@ -150,52 +150,20 @@ export class CheckStore {
           logPipeline(`  [CHECK-STORE] added citation ${claim.citationRef} from claims`);
         }
       }
-      if (claim.sourceRef && !sourceMap.has(claim.sourceRef)) {
-        const entry = sourcePalette.find((e) => e.id === claim.sourceRef);
+      if (claim.sourceCitation && !sourceMap.has(claim.sourceCitation)) {
+        const entry = sourcePalette.find((e) => e.id === claim.sourceCitation);
         if (entry) {
-          sourceMap.set(claim.sourceRef, {
-            ref: entry.id,
+          sourceMap.set(claim.sourceCitation, {
+            ref: claim.sourceCitation,
             fileId: entry.fileId,
             filename: entry.filename,
             fileUrl: entry.dataUrl,
             extractedText: entry.extractedText,
             keyExcerpt: entry.keyExcerpt,
+            chunks: entry.chunks,
+            boundingBox: entry.chunks?.[0]?.bbox,
             pageNumber: entry.pageNumber,
           });
-        }
-      }
-      if (claim.chunkRef) {
-        const parsed = parseChunkRef(claim.chunkRef);
-        if (parsed) {
-          const { fileRef, chunkId } = parsed;
-          if (!referencedChunks.has(fileRef)) referencedChunks.set(fileRef, new Set());
-          referencedChunks.get(fileRef)!.add(chunkId);
-          if (!firstChunkPerFile.has(fileRef)) {
-            firstChunkPerFile.set(fileRef, chunkId);
-          }
-        }
-      } else if (claim.sourceRef && !referencedChunks.has(claim.sourceRef)) {
-        const refMatch = claim.citationRef.match(/S(\d+)\.?(\S+)?/);
-        if (refMatch) {
-          const fileRef = parseInt(refMatch[1], 10);
-          const chunkId = refMatch[2] || undefined;
-          if (!referencedChunks.has(fileRef)) referencedChunks.set(fileRef, new Set());
-          if (chunkId) referencedChunks.get(fileRef)!.add(chunkId);
-        }
-      }
-    }
-
-    for (const [ref, source] of sourceMap) {
-      const paletteEntry = sourcePalette.find((e) => e.id === ref);
-      if (!paletteEntry?.chunks) continue;
-      const refIds = referencedChunks.get(ref);
-      if (refIds && refIds.size > 0) {
-        const filteredChunks = paletteEntry.chunks.filter((c) => refIds.has(c.id));
-        source.chunks = filteredChunks;
-        const firstId = firstChunkPerFile.get(ref);
-        const firstChunk = firstId ? filteredChunks.find((c) => c.id === firstId) : filteredChunks[0];
-        if (firstChunk) {
-          source.keyExcerpt = firstChunk.text;
         }
       }
     }
@@ -204,7 +172,7 @@ export class CheckStore {
       a.ref.localeCompare(b.ref)
     );
     this.compiledSourceCitations = Array.from(sourceMap.values()).sort((a, b) =>
-      a.ref - b.ref
+      a.ref.localeCompare(b.ref)
     );
   }
 
@@ -235,19 +203,21 @@ export class CheckStore {
     }
 
     const sourceRefs = new Set(this.compiledSourceCitations.map((c) => c.ref));
-    const sourceMarkers = [...content.matchAll(/\[S(\d+)\]/g)].map((m) => parseInt(m[1], 10));
+    const sourceMarkers = [...content.matchAll(/\[(S\d+\.\S+?)\]/g)].map((m) => m[1]);
 
     for (const marker of [...new Set(sourceMarkers)]) {
       if (!sourceRefs.has(marker)) {
         const entry = sourcePalette.find((e) => e.id === marker);
         if (entry) {
           this.compiledSourceCitations.push({
-            ref: entry.id,
+            ref: marker,
             fileId: entry.fileId,
             filename: entry.filename,
             fileUrl: entry.dataUrl,
             extractedText: entry.extractedText,
             keyExcerpt: entry.keyExcerpt,
+            chunks: entry.chunks,
+            boundingBox: entry.chunks?.[0]?.bbox,
             pageNumber: entry.pageNumber,
           });
         }

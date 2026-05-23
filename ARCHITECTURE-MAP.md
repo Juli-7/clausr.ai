@@ -19,8 +19,6 @@
 │  │ Zod schemas          │                                                           │
 │  └──────────────────────┘                                                           │
 │                                                                                      │
-│  (Future: skill management APIs)                                                    │
-│                                                                                      │
 │  CONSIDERS FROM: nothing (passive data source)                                       │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                    │
@@ -35,22 +33,22 @@
 │  │   → Image → OCR      ├──       │ getTesseractWorker() │                          │
 │  │   → PDF → pdf-extract│ │       │ groupWordsIntoLines() │                          │
 │  │   → DOCX → docx-ext  │ │       └──────────────────────┘                          │
-│  └──────────────────────┘ │                                                          │
-│                            │  user-info/extractors/pdf-extract.ts                     │
-│                            ├──►┌──────────────────────┐                              │
-│                            │   │ extractPdfText()     │                              │
-│                            │   │   Path A: pdfjs-dist │                              │
-│                            │   │   Path B: OCR fallback│                              │
-│                            │   │ itemToWordBox()      │                              │
-│                            │   │ linesToChunks()      │                              │
-│                            │   └──────────────────────┘                              │
-│                            │  user-info/extractors/docx-extract.ts                    │
-│                            └──►┌──────────────────────┐                              │
-│                                │ extractDocxText()    │                              │
-│                                │   → mammoth + strip  │                              │
-│                                └──────────────────────┘                              │
+│  │ ExtractionResult     │ │                                                          │
+│  │ TextChunk, WordBox   │ │  user-info/extractors/pdf-extract.ts                     │
+│  └──────────────────────┘ │  ┌──────────────────────┐                              │
+│                           ├──►│ extractPdfText()     │                              │
+│                           │   │   Path A: pdfjs-dist │                              │
+│                           │   │   Path B: OCR fallback│                              │
+│                           │   │ itemToWordBox()      │                              │
+│                           │   │ linesToChunks()      │                              │
+│                           │   └──────────────────────┘                              │
+│                           │  user-info/extractors/docx-extract.ts                    │
+│                           └──►┌──────────────────────┐                              │
+│                               │ extractDocxText()    │                              │
+│                               │   → mammoth + strip  │                              │
+│                               └──────────────────────┘                              │
 │                                                                                      │
-│  PROVIDES: ExtractionResult, TextChunk                                                │
+│  PROVIDES: ExtractionResult, TextChunk, WordBox                                       │
 │  CONSIDERS FROM: nothing (pure file I/O)                                              │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                    │
@@ -64,26 +62,35 @@
 │  │ listSkills()         │         │ extractRegulationIds(checks)         │           │
 │  └──────────────────────┘         └──────────────────────────────────────┘           │
 │  │ generateSkill(msg,   │                                                           │
-│  │   fileTexts)         │         loading/phases/init-phase.ts                       │
-│  │   → LLM generates    │         ┌────────────────────────────────────────┐         │
-│  │     SKILL.md         │         │ initPhase(skillName, sessionId, msg)   │         │
-│  └──────────────────────┘         │  → loadSkill, create context, restore  │         │
-│                                   └────────────────────────────────────────┘         │
-│  loading/phases/input-phase.ts    loading/phases/skill-gen-phase.ts                   │
-│  ┌────────────────────────┐       ┌──────────────────────────────────────┐           │
-│  │ inputPhase(ctx, params)│       │ skillGenPhase(ctx, message)          │           │
-│  │  → extract files /     │       │  → generateSkill if no skill exists  │           │
-│  │    restore from DB     │       └──────────────────────────────────────┘           │
-│  └────────────────────────┘                                                           │
+│  │   fileTexts)         │         loading/generate-steps.ts                          │
+│  │   → LLM generates    │         ┌──────────────────────────────────────┐           │
+│  │     SKILL.md         │         │ generateStepsFromChecks(checks)     │           │
+│  └──────────────────────┘         │   → ExecutableStep[] (1:1 from      │           │
+│                                   │     parsed checks)                  │           │
+│  loading/phases/init-phase.ts     │ buildFieldInstructions(c)           │           │
+│  ┌────────────────────────┐       └──────────────────────────────────────┘           │
+│  │ initPhase(name, sid,   │                                                           │
+│  │  message)              │       loading/phases/input-phase.ts                       │
+│  │  → loadSkill, create   │       ┌──────────────────────────────────────┐           │
+│  │    context, restore    │       │ inputPhase(ctx, params)              │           │
+│  └────────────────────────┘       │  → extract files / restore from DB  │           │
+│                                   └──────────────────────────────────────┘           │
+│  loading/phases/skill-gen-phase.ts                                                   │
+│  ┌────────────────────────────────────────────────────┐                              │
+│  │ skillGenPhase(ctx, message)                        │                              │
+│  │  → generateSkill() if isAutoSkill                  │                              │
+│  └────────────────────────────────────────────────────┘                              │
 │                                                                                      │
 │  loading/phases/revision-phase.ts                                                    │
 │  ┌────────────────────────────────────────────────────────────┐                      │
 │  │ identifyRevisionTarget(ctx, userMessage)                    │                      │
 │  │  → LLM determines which step to redo on follow-up           │                      │
+│  │ identifyRevisionTargets(revisionFields, checks)              │                      │
+│  │  → maps checkbox fields to step numbers (explicit revision) │                      │
 │  └────────────────────────────────────────────────────────────┘                      │
 │                                                                                      │
-│  PROVIDES: SkillLoader, ParsedCheck[], loaded PipelineContext                          │
-│  CONSIDERS FROM: Knowledge (regulation refs), User-Info (chunks)                      │
+│  PROVIDES: SkillLoader, ParsedCheck[], ExecutableStep[], PipelineContext               │
+│  CONSIDERS FROM: Knowledge (regulation refs), User-Info (chunks), Shared (DB)         │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
@@ -92,33 +99,43 @@
 │                                                                                      │
 │  ┌─────────────────────────────────────────────────────────────────────────────┐    │
 │  │  orchestrator-v2.ts (ENTRY POINT — async generator, yields PipelineEvent)   │    │
-│  │  orchestratePipeline(message, skillName, sessionId, files?)                  │    │
-│  │    ├─► initPhase()                — LOADING: skill load, session, context    │    │
-│  │    ├─► inputPhase()               — LOADING: file extraction / restore       │    │
-│  │    ├─► skillGenPhase()            — LOADING: create skill if none            │    │
-│  │    ├─► loadReferences()           — load regulation data into palette        │    │
-│  │    ├─► generateStepsFromChecks()  — LOADING: build step list                 │    │
-│  │    ├─► identifyRevisionTarget()   — LOADING: which step to redo              │    │
-│  │    ├─► [loop] executeStep()       — execute each step (llm+tool)            │    │
-│  │    ├─► enforceChecks()            — EVALUATION: gap-fill missing checks     │    │
-│  │    └─► finalizePhase()            — PRESENT: evaluate + assemble + persist  │    │
+│  │  orchestratePipeline(message, skillName, sessionId, files?, revisionFields?) │    │
+│  │    ├─► initPhase()                 — LOADING: skill load, session, context    │    │
+│  │    ├─► inputPhase()                — LOADING: file extraction / restore       │    │
+│  │    ├─► skillGenPhase()             — LOADING: create skill if auto            │    │
+│  │    ├─► loadReferences()            — load regulation data into palette        │    │
+│  │    ├─► generateStepsFromChecks()   — LOADING: build step list                 │    │
+│  │    ├─► identifyRevisionTarget(s)   — LOADING: which step(s) to redo           │    │
+│  │    ├─► [loop] executeStepWithRetry — execute each step (llm+tool, retry 1x)  │    │
+│  │    │      └─► executeLlmToolStep() — core LLM+tool executor                  │    │
+│  │    ├─► enforceChecks()             — EVALUATION: gap-fill missing checks     │    │
+│  │    └─► finalizePhase()             — PRESENT: evaluate + assemble + persist  │    │
+│  │                                                                            │    │
+│  │  Key patterns in step loop:                                                │    │
+│  │   • Skip steps with existing output unless revision target                 │    │
+│  │   • Clear-before-execute: remove old CheckResult, restore on failure       │    │
+│  │   • Save context snapshot after each step                                  │    │
 │  └─────────────────────────────────────────────────────────────────────────────┘    │
 │         │               │              │               │              │              │
-│         │               │             │               │                                 │
-│         ▼               ▼             ▼               ▼                                 │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐                      │
-│  │ builtins.ts │ │ errors.ts   │ │ logger.ts   │ │ types.ts    │                      │
-│  │ loadRefer-  │ │ PipelineErr │ │ logPipeline │ │ PipelineEv- │                      │
-│  │ ences()     │ │ format...   │ │ truncate()  │ │ ent,        │                      │
-│  │ .execute-   │ └─────────────┘ └─────────────┘ │ Executable- │                      │
-│  │  Compliance │                                  │ Step,       │                      │
-│  │  Check()    │                                  │ StepResult  │                      │
-│  └─────────────┘                                  └─────────────┘                      │
-│  ┌────────────────────────────────────────────────────────────────────────────────┐    │
-│  │ executors/llm-executor.ts                                                     │    │
-│  │ executeLlmToolStep(step, ctx, previousError?) — only executor, always llm+tool │    │
-│  │ buildDomainSchemaGuide(checks), buildContextSummary(ctx), buildCitationGuide() │    │
-│  └────────────────────────────────────────────────────────────────────────────────┘    │
+│         ▼               ▼              ▼               ▼              ▼              │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌───────────────┐  │
+│  │ builtins.ts │ │ errors.ts   │ │ logger.ts   │ │ types.ts    │ │ pipeline-     │  │
+│  │ loadRefer-  │ │ PipelineErr │ │ logPipeline │ │ PipelineEv- │ │ context.ts    │  │
+│  │ ences()     │ │ format...   │ │ truncate()  │ │ ent,        │ │ createPipe-   │  │
+│  │ .execute-   │ └─────────────┘ └─────────────┘ │ Executable- │ │ lineContext() │  │
+│  │  Compliance │                                  │ Step,       │ │ PipelineCtx   │  │
+│  │  Check()    │                                  │ StepResult  │ │ CheckResult   │  │
+│  └─────────────┘                                  └─────────────┘ └───────────────┘  │
+│  ┌────────────────────────────────────────────────────────────────────────────────┐  │
+│  │ executors/llm-executor.ts                                                     │  │
+│  │ executeLlmToolStep(step, ctx, previousError?) — LLM+tool executor with retry  │  │
+│  │ buildDomainSchemaGuide(checks), buildContextSummary(ctx), buildCitationGuide()│  │
+│  └────────────────────────────────────────────────────────────────────────────────┘  │
+│  ┌────────────────────────────────────────────────────────────────────────────────┐  │
+│  │ executors/script-runner.ts                                                     │  │
+│  │ runScript(scriptPath, input, timeoutMs) — spawns python3 subprocess            │  │
+│  │   → used for compliance-check scripts defined in SKILL.md                      │  │
+│  └────────────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                      │
 │  PROVIDES: StepResult[], streamed PipelineEvents                                      │
 │  CONSIDERS FROM: Loading (context), Shared (slices), Knowledge (regulation data)      │
@@ -133,27 +150,28 @@
 │  │ enforceChecks(ctx)         │──►│ evaluate(input)                    │             │
 │  │  → gap-fill missing checks │   │  → main entry, calls sub-modules   │             │
 │  │  → regex extract from files│   └────────────────────────────────────┘             │
-│  └────────────────────────────┘              │                                         │
-│                                               ▼                                         │
+│  │  → numerical checks only   │              │                                         │
+│  └────────────────────────────┘               ▼                                         │
+│                                               │                                         │
 │  evaluation/summary.ts          evaluation/confidence.ts                               │
 │  ┌──────────────────────┐      ┌──────────────────────────────────────┐              │
 │  │ buildFindings(checks)│      │ computeConfidence(input)             │              │
-│  │  → per-check map      │      │  → OCR penalty + PDF + LLM mult.   │              │
+│  │  → failed-checks map  │      │  → OCR penalty + PDF + LLM mult.   │              │
 │  └──────────────────────┘      └──────────────────────────────────────┘              │
 │                                                                                      │
 │  evaluation/validate.ts                                                              │
 │  ┌──────────────────────────────────────────────────────────────────────┐           │
 │  │ validate({claims, citations, sourceCitations, ...})                   │           │
-│  │  → citation/chunk consistency, verdict alignment, claim validation   │           │
+│  │  → citation/chunk consistency, source palette lookup, word overlap   │           │
 │  └──────────────────────────────────────────────────────────────────────┘           │
 │                                                                                      │
-│  PROVIDES: EvaluationResult {confidence, findings, validationErrors}                  │
+│  PROVIDES: EvaluationResult {confidence, findings, validationErrors, reason}          │
 │  CONSIDERS FROM: Pipeline (CheckStore, PipelineContext), Shared (slices)               │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           SEGMENT 6: PRESENT LAYER                                    │
+│                           SEGMENT 6: PRESENT LAYER                                   │
 │                                                                                      │
 │  present/phases/finalize-phase.ts    present/export/export-docx.ts                    │
 │  ┌─────────────────────────────────────────┐  ┌──────────────────────────────────┐   │
@@ -166,22 +184,46 @@
 │  │  → returns {response, validation        │  │  └─ buildFallbackDocx()          │   │
 │  │       Errors, confidence}               │  └──────────────────────────────────┘   │
 │  └─────────────────────────────────────────┘                                         │
+│  │ formatContent(stepOutputs, checks, ..)                                            │
+│  │  → assembles step narratives + citation badges into markdown                     │
 │                                                                                      │
-│  PROVIDES: AgentResponse, .docx Blob, document-panel data                             │
+│  PROVIDES: AgentResponse, .docx Blob                                                  │
 │  CONSIDERS FROM: Pipeline (step output), Evaluation (verdict/confidence)               │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                           SEGMENT 7: API ROUTES (Next.js App Router)                  │
+│                                                                                      │
+│  POST /api/chat —— SSE streaming pipeline entry point                                │
+│  GET  /api/settings —— read LLM provider, model, retention config                    │
+│  POST /api/settings —— persist LLM provider, model, retention                        │
+│  GET  /api/sessions —— list all sessions                                              │
+│  GET  /api/sessions/[id] —— conversation history + responses                         │
+│  DELETE /api/sessions/[id] —— delete session cascade                                  │
+│  POST /api/sessions/[id]/star —— toggle starred flag                                  │
+│  GET  /api/skills —— list all skills with metadata                                   │
+│  GET  /api/skills/[name]/template —— download skill .docx template                   │
+│  POST /api/skills/[name]/template —— upload skill .docx template                     │
+│  GET  /api/scripts?skillId= —— list scripts for a skill                               │
+│  POST /api/scripts/[name] —— execute a named script for a skill                      │
+│  GET  /api/files/[sessionId]/[filename] —— serve uploaded file                       │
+│  POST /api/agent/evolution-confirm —— confirm/dismiss evolution lesson               │
+│                                                                                      │
+│  PROVIDES: HTTP responses; consumes Pipeline (chat), Shared/repository (sessions)    │
+│  CONSIDERS FROM: Pipeline (orchestratePipeline), Shared/memory (DB queries)           │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────────────┐
 │                           SHARED (cross-layer)                                        │
 │                                                                                      │
 │  shared/slices/                     shared/memory/                                    │
 │  ┌────────────────────────┐        ┌─────────────────────────────┐                   │
-│  │ CheckStore             │        │ database.ts                  │                   │
-│  │ StepMemory             │        │  getDb(), getSetting()       │                   │
-│  │ FileRegistry           │        │  setSetting()                │                   │
-│  │ PaletteStore           │        ├──────────────────────────────┤                   │
-│  │ ReportAssembler        │        │ repository.ts                │                   │
+│  │ CheckStore (class)     │        │ database.ts                  │                   │
+│  │ StepMemory (class)     │        │  getDb(), getSetting()       │                   │
+│  │ FileRegistry (class)   │        │  setSetting()                │                   │
+│  │ PaletteStore (class)   │        ├──────────────────────────────┤                   │
+│  │ ReportAssembler (class)│        │ repository.ts                │                   │
 │  └────────────────────────┘        │  getOrCreateSession()        │                   │
 │                                    │  addUserMessage()            │                   │
 │  shared/schemas.ts                 │  addAssistantResponse()      │                   │
@@ -191,14 +233,31 @@
 │  │ AgentResponseSchema    │        │  deleteSession()             │                   │
 │  │ CitationSchema         │        │  getContextSnapshots()       │                   │
 │  │ ConfidenceSchema       │        │  toggleStar()                │                   │
-│  │ ComplianceCheckSchema  │        ├──────────────────────────────┤                   │
-│  │ ...                    │        │ cleanup.ts                   │                   │
-│  └────────────────────────┘        │  pruneOldSessions()          │                   │
-│                                    └──────────────────────────────┘                   │
-│  shared/types.ts                    shared/turn-types.ts                               │
-│  shared/template-types.ts                                                             │
+│  │ ComplianceCheckSchema  │        │  saveContextSnapshot()        │                   │
+│  │ LessonSchema           │        ├──────────────────────────────┤                   │
+│  │ ReferenceMapSchema     │        │ cleanup.ts                   │                   │
+│  │ ClaimSchema            │        │  pruneOldSessions()          │                   │
+│  │ ToolCallRecordSchema   │        │  deleteSessionCascade()      │                   │
+│  │ ReasoningStepSchema    │        │  removeUploadDir()           │                   │
+│  │ ValidationErrorSchema  │        └──────────────────────────────┘                   │
+│  │ parseChunkRef()        │                                                           │
+│  └────────────────────────┘        shared/template-types.ts                           │
+│                                    ┌────────────────────────────────┐                │
+│  shared/types.ts                  │ ReportTemplate, SectionType     │                │
+│  ┌────────────────────────┐        │ TemplateSection, TemplateField  │                │
+│  │ Re-exports all types   │        └────────────────────────────────┘                │
+│  │ from schemas.ts        │                                                           │
+│  └────────────────────────┘        shared/turn-types.ts                               │
+│                                    ┌────────────────────────────────┐                │
+│  shared/llm/factory.ts            │ ChatTurn interface             │                │
+│  ┌────────────────────────┐        └────────────────────────────────┘                │
+│  │ createModel()          │                                                           │
+│  │ createOpenAI / Anthropic│         (Future: evolution/ directory)                    │
+│  │ DeepSeek reasoning_    │                                                           │
+│  │  content wrapper       │                                                           │
+│  └────────────────────────┘                                                           │
 │                                                                                      │
-│  CONSUMED BY: Loading, Pipeline, Evaluation, Present + external components            │
+│  CONSUMED BY: Loading, Pipeline, Evaluation, Present, API Routes                      │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -209,10 +268,11 @@
 ```
 HTTP POST /api/chat
   │
-  ├─ ChatRequestSchema.safeParse(req.body)
+  ├─ ChatRequestSchema.safeParse(req.body)   ← validates message, skillName, sessionId,
+  │                                             files, revisionFields
   │
-  └─ orchestratePipeline(message, skillName, sessionId, files)
-       │  [async generator — yields PipelineEvent to client via streaming]
+  └─ orchestratePipeline(message, skillName, sessionId, files, revisionFields)
+       │  [async generator — yields PipelineEvent to client via SSE]
        │
        ├─═══════════════════════════════════════════════════════════════
        │  LOADING — Phase 1: INIT
@@ -276,8 +336,8 @@ HTTP POST /api/chat
        │         ├─ parseChecks(skillmd)
        │         └─ extractRegulationIds(checks)
        │
-        ├─═══════════════════════════════════════════════════════════════
-       │  LOADING/PIPELINE — Phase 3: LOAD REFERENCES + GENERATE STEPS
+       ├─═══════════════════════════════════════════════════════════════
+       │  PIPELINE — Phase 3: LOAD REFERENCES + GENERATE STEPS
        │════════════════════════════════════════════════════════════════
        │
        ├─ loadReferences(ctx)  ◄── pipeline/builtins.ts
@@ -291,14 +351,21 @@ HTTP POST /api/chat
        │    └─ ctx.palette.loadCitationPalette(palette)
        │
        ├─ generateStepsFromChecks(ctx.skill.checks)  ◄── loading/generate-steps.ts
-       │    └─ Steps 1..N: llm+tool (one per check field)
+       │    └─ Steps 1..N: llm+tool (one per check field, with field instructions)
        │
-       ├─ identifyRevisionTarget(ctx, userMessage)  ◄── loading/phases/revision-phase.ts
-       │    (only on follow-up turns — LLM decides which step to redo)
+       ├─ identifyRevisionTarget(s)  ◄── loading/phases/revision-phase.ts
+       │    ├─ [if revisionFields provided] → identifyRevisionTargets(fields, checks)
+       │    │    └─ maps field names to step numbers for targeted re-execution
+       │    └─ [if follow-up turn, no explicit fields] → identifyRevisionTarget(ctx, msg)
+       │         └─ LLM determines which step to redo from message analysis
        │
-        ├─ ┌─ for each step in steps:
+       ├─ ┌─ for each step in steps:
        │  │    │
-       │  │    ├─ executeStepWithRetry(step, ctx, maxRetries=1)  [inlined in orchestrator]
+       │  │    ├─ SKIP if step has output AND is not a revision target (reuse)
+       │  │    │
+       │  │    ├─ CLEAR check results for this step's field (save for restore)
+       │  │    │
+       │  │    ├─ executeStepWithRetry(step, ctx, maxRetries=1)  [orchestrator-v2]
        │  │    │    └─ [retry loop] ──► executeLlmToolStep(step, ctx, previousError)
        │  │    │              ├─ buildContextSummary(ctx)
        │  │    │              │    ├─ ctx.files.buildContextSummary()
@@ -326,15 +393,17 @@ HTTP POST /api/chat
        │  │    │              └─ storeOutput(ctx, step.number, fullText)
        │  │    │                   └─ ctx.steps.write(stepNumber, parsed-or-raw)
        │  │    │
-       │  │    ├─ yield {type: "token", text, stepNumber}  for each streamedToken
-       │  │    ├─ yield {type: "tool-result", stepNumber, results}  if toolResults
-       │  │    ├─ ctx.steps.read(step.number)  → log output
+       │  │    ├─ [on failure] RestORE saved check results for field
+       │  │    │    └─ yield {type: "error", ...}
        │  │    │
-       │  │    ├─ if ctx.checks.getResults().length > 0:
-       │  │    │    └─ ctx.checks.compileCitations(citationPalette, sourcePalette)
-       │  │    │         └─ lookup + deduplicate + sort
-       │  │    │
-       │  │    └─ saveContextSnapshot({sessionId, turnNumber, stepNumber, ...})
+       │  │    ├─ [on success]
+       │  │    │    ├─ yield {type: "token", text, stepNumber}  for each streamedToken
+       │  │    │    ├─ yield {type: "tool-result", stepNumber, results}
+       │  │    │    ├─ if ctx.checks.getResults().length > 0:
+       │  │    │    │    └─ ctx.checks.compileCitations(citationPalette, sourcePalette)
+       │  │    │    │         └─ lookup + deduplicate + sort
+       │  │    │    └─ saveContextSnapshot({sessionId, turnNumber, stepNumber, ...})
+       │  │    │         └─ saves full context state for debugging
        │  │
        │  └─ [after all steps]
        │
@@ -346,10 +415,9 @@ HTTP POST /api/chat
        │    ├─ defined = ctx.skill.checks  (from SKILL.md ## Checks)
        │    ├─ existing = ctx.checks.getResults()
        │    ├─ missing = defined - existing (by field name)
-       │    └─ for each missing check:
-       │         ├─ regex-extract value from file text
-       │         ├─ if found → CheckResult{name, value, verdict: "PASS"}
-       │         └─ if not found → CheckResult{finding: "not assessed", verdict: "FAIL"}
+       │    ├─ [numerical only] regex-extract value from file text
+       │    ├─ if found → CheckResult{verdict: "PASS"}
+       │    └─ [qualitative missing] → skipped (narrative only, no auto-fill)
        │
        ├─═══════════════════════════════════════════════════════════════
        │  EVALUATION + PRESENT — Phase 5: EVALUATE + FINALIZE
@@ -360,35 +428,36 @@ HTTP POST /api/chat
             ├─ evaluate({checkResults, citationPalette, sourcePalette,
             │    files, steps, skill})
             │    ├─ buildFindings(checkResults)    ◄── evaluation/summary.ts
-            │    │    └─ map per check: "field → finding → VERDICT [citation]"
+            │    │    └─ map per check (FAIL only): "field → finding → VERDICT [citation]"
             │    ├─ computeConfidence(input)       ◄── evaluation/confidence.ts
-            │    │    ├─ avgOcr = ctx.files.averageOcrConfidence()
+            │    │    ├─ avgOcr = average of file ocrConfidence
             │    │    ├─ ocrPenalty = (1 - avgOcr/100) * 30
-            │    │    ├─ pdfPenalty = 5 or 10
+            │    │    ├─ pdfPenalty from extractorUsed (pdf-parse=5, fallback=10)
             │    │    ├─ baseScore = 100 - ocrPenalty - pdfPenalty
             │    │    ├─ llmMultiplier from step outputs
             │    │    └─ finalScore = baseScore * llmMultiplier
-            │    │         → {score, ocrConfidence, llmMultiplier, needsExpert}
+            │    │         → Confidence{score, ocrConfidence, llmMultiplier, needsExpert}
             │    └─ validate({claims, citations, sourceCitations, ...})
             │         ◄── evaluation/validate.ts
-            │         ├─ validateClaimChunks(claims, sourcePalette)
-            │         │    └─ verify chunkRef exists, ~25% word overlap
-            │         ├─ citation/source marker consistency
-            │         └─ verdict consistency
+            │         ├─ [for each claim] validate citation refs in palette
+            │         ├─ [for each chunk ref] ~25% word overlap check
+            │         ├─ content markers match compiled citations
+            │         └─ auto-supplement missing citations from sourcePalette
             │
             ├─ verdict = ctx.checks.computeVerdict()  → PASS | FAIL
-            ├─ ctx.report.setVerdict(verdict)
             │
             ├─ Build responseData:
-            │    ├─ content = formatContent(ctx, steps)
-            │    │    └─ sections as markdown tables OR last LLM step output
-            │    ├─ reasoning = buildReasoningFromSteps(ctx, steps)
+            │    ├─ content = formatContent(stepOutputs, checks, results, palette)
+            │    │    └─ per-check: narrative stripped of JSON + [R...] markers,
+            │    │       citation badges injected (<cite> tags)
+            │    ├─ reasoning = concatenated step bodies
             │    ├─ citations = ctx.checks.getCitations()
             │    ├─ sourceCitations = ctx.checks.getSourceCitations()
-            │    ├─ sections = ctx.report.getSections()
+            │    ├─ sections = {findings: result.findings}
             │    ├─ toolCalls = ctx.steps.getRaw("toolCalls")
-            │    ├─ reasoningSteps = buildReasoningSteps(ctx, steps)
+            │    ├─ reasoningSteps = result.reasoningSteps
             │    ├─ claims = ctx.checks.getClaims()
+            │    ├─ clauseTexts = citation lookup map for popovers
             │    ├─ confidence
             │    └─ validationErrors
             │
@@ -408,11 +477,11 @@ HTTP POST /api/chat
 |---------|------------|-------------------------------|---------------|
 | **1. Knowledge** | Loading, Pipeline | `IRegulationApi`, `getRegulationApi()` | — |
 | **2. User-Info** | Loading | `extractFileContent()`, `ExtractionResult`, `TextChunk` | — |
-| **3. Loading** | Pipeline | `initPhase()`, `inputPhase()`, `skillGenPhase()`, `identifyRevisionTarget()`, `SkillLoader`, `ParsedCheck[]` | Knowledge, User-Info, Shared |
+| **3. Loading** | Pipeline | `initPhase()`, `inputPhase()`, `skillGenPhase()`, `identifyRevisionTarget()`, `identifyRevisionTargets()`, `generateStepsFromChecks()`, `SkillLoader`, `ParsedCheck[]`, `ExecutableStep[]` | Knowledge, User-Info, Shared |
 | **4. Pipeline** | Evaluation, Present | `orchestratePipeline()`, `StepResult`, `PipelineEvent` (streaming) | Loading, Shared |
 | **5. Evaluation** | Present | `evaluate()`, `EvaluationResult` | Pipeline (CheckStore), Shared |
 | **6. Present** | External | `finalizePhase()` → `AgentResponse`, `generateDocx()` → `.docx Blob` | Pipeline, Evaluation, Shared |
-| **Shared** | All layers | `CheckStore`, `StepMemory`, `FileRegistry`, `PaletteStore`, `ReportAssembler`, `schemas.ts`, `memory/` | — |
+| **7. API Routes** | HTTP clients | 14 route handlers; consumes Pipeline + Shared | Pipeline, Shared |
 
 ### Key Decoupling Points
 
@@ -422,11 +491,13 @@ HTTP POST /api/chat
 
 3. **Loading ↔ Pipeline**: Loading delivers a fully initialized `PipelineContext` with all 5 slices. Pipeline never loads skills or files.
 
-4. **Pipeline internal**: 5 shared slices (`CheckStore`, `StepMemory`, `FileRegistry`, `PaletteStore`, `ReportAssembler`) hold all state. Pipeline orchestrator coordinates execution loop.
+4. **Pipeline internal**: 5 shared slices (`CheckStore`, `StepMemory`, `FileRegistry`, `PaletteStore`, `ReportAssembler`) hold all state. Pipeline orchestrator coordinates execution loop with: skip-reuse, clear-before-execute, context-snapshot patterns.
 
 5. **Pipeline ↔ Evaluation ↔ Present**: Pipeline runs steps and fills CheckStore. Present calls Evaluation to get confidence + findings + validation, then assembles `AgentResponse`.
 
-6. **Shared**: All 5 slices plus `memory/` and `schemas.ts` live in `shared/` — consumed by every layer but owned by none.
+6. **API Routes ↔ Pipeline**: `/api/chat` wraps `orchestratePipeline` async generator in SSE `ReadableStream`. All other routes are thin wrappers over `shared/memory/repository.ts` or `loading/skill/loader.ts`.
+
+7. **Shared**: 5 slices + `memory/` + `schemas.ts` + types live in `shared/` — consumed by every layer but owned by none.
 
 ---
 
@@ -467,6 +538,9 @@ HTTP POST /api/chat
 |----------|-------------|
 | `extractFileContent(file)` | Main dispatcher. Routes to OCR, PDF, or DOCX extractor based on MIME type and extension. Returns `ExtractionResult`. |
 | `mergeWordBoxes(boxes)` | Computes bounding box enclosing all input word boxes. |
+| `ExtractionResult` | `{text, chunks, pageCount?, ocrConfidence?, extractorUsed?}` |
+| `TextChunk` | `{id, text, bbox?, wordBoxes?, pageNumber?}` |
+| `WordBox` | `{x, y, width, height}` |
 
 #### `user-info/extractors/ocr.ts`
 | Function | Description |
@@ -515,6 +589,12 @@ HTTP POST /api/chat
 |----------|-------------|
 | `generateSkill(message, fileTexts)` | Calls LLM to generate a SKILL.md from user request + uploaded file contents. Parses result with `gray-matter`, extracts frontmatter + Checks. Returns `SkillLoader`. |
 
+#### `loading/generate-steps.ts`
+| Function | Description |
+|----------|-------------|
+| `generateStepsFromChecks(checks)` | Maps `ParsedCheck[]` to `ExecutableStep[]` (1:1, `llm+tool` type). Each step includes field-specific instructions via `buildFieldInstructions()`. |
+| `buildFieldInstructions(c)` | Builds LLM instructions for a step: type/kind, constraint, clause, depends_on, sample JSON output format. |
+
 #### `loading/phases/init-phase.ts`
 | Function | Description |
 |----------|-------------|
@@ -533,7 +613,8 @@ HTTP POST /api/chat
 #### `loading/phases/revision-phase.ts`
 | Function | Description |
 |----------|-------------|
-| `identifyRevisionTarget(ctx, userMessage)` | On follow-up turns, calls LLM to determine which step number to redo based on the user's follow-up message. Returns step number or `-1`. |
+| `identifyRevisionTarget(ctx, userMessage)` | On follow-up turns, calls LLM to determine which step number to redo based on user's follow-up message. Returns step number or `-1`. |
+| `identifyRevisionTargets(revisionFields, checks)` | Maps explicit field names from UI checkboxes to step numbers (1-indexed from checks order). Used for targeted re-execution. |
 
 ---
 
@@ -542,18 +623,23 @@ HTTP POST /api/chat
 #### `pipeline/orchestrator-v2.ts`
 | Function | Description |
 |----------|-------------|
-| `orchestratePipeline(message, skillName, sessionId, files?)` | **Top-level entry point.** Async generator: init → input → skill-gen → load-refs → step-gen → revision → step-exec → enforce → finalize. Yields `PipelineEvent` for streaming. |
+| `orchestratePipeline(message, skillName, sessionId, files?, revisionFields?)` | **Top-level entry point.** Async generator: init → input → skill-gen → load-refs → step-gen → revision → step-exec → enforce → finalize. Yields `PipelineEvent` for SSE streaming. Handles skip-reuse, clear-before-execute, context snapshots. |
+| `executeStepWithRetry(step, ctx, maxRetries)` | Wraps `executeLlmToolStep()` with retry loop (default 1 retry). Returns `StepResult`. |
 
 #### `pipeline/pipeline-context.ts`
-| Function | Description |
-|----------|-------------|
-| `createPipelineContext(name, skillmd, checks, sessionId, cid?, scripts?)` | Factory. Creates `PipelineContext` with all 5 slices: `CheckStore`, `StepMemory`, `FileRegistry`, `PaletteStore`, `ReportAssembler`. |
+| Function / Type | Description |
+|-----------------|-------------|
+| `createPipelineContext(name, skillmd, checks, sessionId, cid?, scripts?)` | Factory. Creates `PipelineContext` with all 5 slices. |
+| `PipelineContext` | Core context: `skill` metadata, `sessionId`, `correlationId`, slices (`checks`, `steps`, `files`, `palette`, `report`), `previousTurns[]`, `uploadedFiles[]`. |
+| `CheckResult` | `{name, type, finding, verdict, citationRef, sourceCitation, toolCallId?, toolResult?}` |
+| `CitationPaletteEntry` | `{id, regulation, clause, text}` |
+| `SourcePaletteEntry` | `{id, fileId, filename, extractedText, keyExcerpt, chunks?, ...}` |
 
 #### `pipeline/builtins.ts`
 | Function | Description |
 |----------|-------------|
-| `loadReferences(ctx)` | Loads regulation data into palette by extracting IDs from checks, fetching via API. |
-| `executeComplianceCheck(input)` | Evaluates numerical checks against operators (`>=`, `<=`, `>`, `<`, `range`). Returns pass/fail. Called as a tool handler. |
+| `loadReferences(ctx)` | Loads regulation data into palette by extracting IDs from checks, fetching via API. Builds `CitationPaletteEntry[]`. |
+| `executeComplianceCheck(input)` | Evaluates numerical checks against operators (`>=`, `<=`, `>`, `<`, `range`). Returns pass/fail results. Called as a registered tool handler. |
 
 #### `pipeline/executors/llm-executor.ts`
 | Function | Description |
@@ -563,12 +649,17 @@ HTTP POST /api/chat
 | `buildContextSummary(ctx)` | Builds composite context string: file summary, latest step output, citation summary, check results, domain schema guide, source summary, previous turns. |
 | `buildCitationGuide(ctx)` | Builds citation format instructions for LLM (`[R48.5.11]` and `[SN]` markers). |
 
+#### `pipeline/executors/script-runner.ts`
+| Function | Description |
+|----------|-------------|
+| `runScript(scriptPath, input, timeoutMs?)` | Spawns `python3` subprocess with JSON stdin, collects stdout/stderr. Returns `ScriptResult{stdout, stderr, success}`. 30s default timeout. |
+
 #### `pipeline/types.ts`
 | Type | Description |
 |------|-------------|
 | `PipelineEvent` | Discriminated union: `status`, `token`, `tool-result`, `done`, `error`. |
 | `ExecutableStep` | Step metadata: `number`, `title`, `type: "llm+tool"`, `instructions`, `temperature?`. |
-| `StepResult` | Step output: `success`, `error?`, `streamedTokens?`, `toolResults?`. |
+| `StepResult` | Step output: `success`, `error?`, `errorCode?`, `streamedTokens?`, `toolResults?`, `contextSnapshot?`. |
 
 #### `pipeline/errors.ts`
 | Function | Description |
@@ -594,34 +685,34 @@ HTTP POST /api/chat
 #### `evaluation/enforce-checks.ts`
 | Function | Description |
 |----------|-------------|
-| `enforceChecks(ctx)` | Gap-fills missing check results via regex extraction from file text. Found → PASS, not found → FAIL "not assessed". |
+| `enforceChecks(ctx)` | Gap-fills missing numerical check results via regex extraction from file text. Qualitative checks skipped (narrative-only). Found → PASS, not found → FAIL "not assessed". |
 
 #### `evaluation/index.ts`
 | Function | Description |
 |----------|-------------|
-| `evaluate(input)` | Main entry. Computes confidence, builds findings, validates consistency. Returns `{confidence, findings, validationErrors}`. |
+| `evaluate(input)` | Main entry. Computes confidence, builds findings (FAIL-only map), validates consistency. Returns `{confidence, findings, validationErrors, citations, sourceCitations, claims, reason, reasoningSteps}`. |
 
 #### `evaluation/confidence.ts`
 | Function | Description |
 |----------|-------------|
-| `computeConfidence(input)` | Computes score: base 100 − OCR penalty − PDF penalty, multiplied by LLM confidence multiplier. Returns `{score, ocrConfidence, dataCompleteness, llmMultiplier, llmReasoning, needsExpert}`. |
+| `computeConfidence(input)` | Computes score: base 100 − OCR penalty − PDF penalty, multiplied by LLM confidence multiplier from step outputs. Returns `Confidence{score, ocrConfidence, dataCompleteness, llmMultiplier, llmReasoning, needsExpert}`. |
 
 #### `evaluation/summary.ts`
 | Function | Description |
 |----------|-------------|
-| `buildFindings(checkResults)` | Converts check results to findings map: `field → "finding → VERDICT [citation]"`. |
+| `buildFindings(checkResults)` | Converts FAIL check results to findings map: `field → "finding → VERDICT [sourceCitation]"`. PASS checks omitted. |
 
 #### `evaluation/validate.ts`
 | Function | Description |
 |----------|-------------|
-| `validate({claims, citations, sourceCitations, ...})` | Validates citation/chunk consistency, marker presence, verdict alignment. Returns `ValidationError[]`. |
-| `validateClaimChunks(claims, sourcePalette)` | Validates each claim's chunkRef exists and has ~25% word overlap. Returns `ValidationError[]`. |
+| `validate({claims, citations, sourceCitations, ...})` | Validates citation/chunk consistency, marker presence in report content, claim-chunk word overlap (~25%). Auto-supplements missing citations from palette. Returns `ValidationError[]`. |
+| `validateClaimChunks(claims, sourcePalette)` | Validates each claim's chunkRef exists and has ~25% word overlap. |
 
 #### `evaluation/types.ts`
 | Type | Description |
 |------|-------------|
-| `EvaluationInput` | Input shape: checkResults, citationPalette, sourcePalette, files, steps, skill. |
-| `EvaluationResult` | Output shape: confidence, findings, validationErrors. |
+| `EvaluationInput` | Input shape: checkResults, citationPalette, sourcePalette, files, stepOutputs, stepTitles, claims, citations, sourceCitations, checks, toolCalls. |
+| `EvaluationResult` | Output shape: confidence, findings, validationErrors, citations, sourceCitations, claims, reason, reasoningSteps. |
 
 ---
 
@@ -631,7 +722,7 @@ HTTP POST /api/chat
 | Function | Description |
 |----------|-------------|
 | `finalizePhase(ctx, steps, sessionId)` | Runs evaluation (`evaluate()`), computes verdict, builds `AgentResponseData`, validates with `AgentResponseSchema`, persists to DB. Returns `{response, validationErrors, confidence}`. |
-| `formatContent(ctx, steps)` | Formats sections as markdown tables or falls back to last LLM step output. |
+| `formatContent(stepOutputs, checks, checkResults, citationPalette)` | Per-check: strips JSON + `[R...]` markers from narrative, injects `<cite>` badges. |
 
 #### `present/export/export-docx.ts`
 | Function | Description |
@@ -646,6 +737,68 @@ HTTP POST /api/chat
 
 ---
 
+### SEGMENT 7 — API Routes (`src/app/api/`)
+
+#### `api/chat/route.ts`
+| Route | Description |
+|-------|-------------|
+| `POST /api/chat` | Validates body with `ChatRequestSchema`, wraps `orchestratePipeline()` async generator in SSE `ReadableStream`. Yields `PipelineEvent` as SSE data frames. Returns `text/event-stream`. |
+
+#### `api/sessions/route.ts`
+| Route | Description |
+|-------|-------------|
+| `GET /api/sessions` | Returns all sessions via `getAllSessions()`. |
+
+#### `api/sessions/[id]/route.ts`
+| Route | Description |
+|-------|-------------|
+| `GET /api/sessions/[id]` | Returns conversation history + responses for a session. 404 if not found. |
+| `DELETE /api/sessions/[id]` | Cascade-deletes session and all related records. |
+
+#### `api/sessions/[id]/star/route.ts`
+| Route | Description |
+|-------|-------------|
+| `POST /api/sessions/[id]/star` | Toggles `starred` flag on session via `toggleStar(id, starred)`. |
+
+#### `api/settings/route.ts`
+| Route | Description |
+|-------|-------------|
+| `GET /api/settings` | Returns `provider`, `model`, `retentionDays`, `retentionMaxSessions` from DB settings. |
+| `POST /api/settings` | Persists LLM provider, model, retention settings. Validates values. |
+
+#### `api/skills/route.ts`
+| Route | Description |
+|-------|-------------|
+| `GET /api/skills` | Lists all skills with full metadata via `listSkills()` + `loadSkill()`. |
+
+#### `api/skills/[name]/template/route.ts`
+| Route | Description |
+|-------|-------------|
+| `GET /api/skills/[name]/template` | Returns the skill's `assets/template.docx` as `.docx` binary. 404 if not found. |
+| `POST /api/skills/[name]/template` | Uploads a base64-encoded `.docx` and saves as `assets/template.docx`. |
+
+#### `api/scripts/route.ts`
+| Route | Description |
+|-------|-------------|
+| `GET /api/scripts?skillId=<id>` | Lists all Python scripts for a given skill via `loadSkill(id).scripts`. |
+
+#### `api/scripts/[name]/route.ts`
+| Route | Description |
+|-------|-------------|
+| `POST /api/scripts/[name]` | Executes a named script for a given skill. Validates input with `ComplianceCheckSchema`, calls `runScript()`. |
+
+#### `api/files/[sessionId]/[filename]/route.ts`
+| Route | Description |
+|-------|-------------|
+| `GET /api/files/[sessionId]/[filename]` | Serves uploaded file from `data/uploads/{sessionId}/{filename}` with path traversal protection and MIME type detection. |
+
+#### `api/agent/evolution-confirm/route.ts`
+| Route | Description |
+|-------|-------------|
+| `POST /api/agent/evolution-confirm` | Confirms or dismisses a proposed lesson. If confirmed, appends to SKILL.md under `## Lessons Learnt`. Inserts message record. |
+
+---
+
 ### SHARED — Cross-Layer State & Persistence (`src/lib/agent/shared/`)
 
 #### `shared/slices/check-store.ts`
@@ -654,6 +807,7 @@ HTTP POST /api/chat
 | `CheckStore` (class) | Manages check results, claims, and compiled citations across pipeline + evaluation. |
 | `.addCheck(result)` | Add single `CheckResult`. |
 | `.addResults(results)` | Add multiple `CheckResult`s. |
+| `.removeResultsForField(field)` | Remove and return results for a specific field (clear-before-execute pattern). |
 | `.getResults()` | Get all check results. |
 | `.addClaims(claims)` | Set claims array. |
 | `.getClaims()` | Get claims. |
@@ -733,7 +887,7 @@ HTTP POST /api/chat
 | `deleteSession(sessionId)` | CASCADE delete session + all related records. |
 | `getAllSessions()` | SELECT all sessions with metadata. |
 | `getResponsesForSession(sessionId)` | SELECT all responses with parsed JSON fields. |
-| `saveContextSnapshot(snapshot)` | INSERT step state snapshot. |
+| `saveContextSnapshot(snapshot)` | INSERT step state snapshot (system prompt, context summary, skillmd, references, uploaded files, step outputs). |
 | `getContextSnapshots(sessionId)` | SELECT all snapshots. |
 | `toggleStar(sessionId, starred)` | UPDATE `sessions.starred`. |
 
@@ -748,19 +902,46 @@ HTTP POST /api/chat
 #### `shared/schemas.ts`
 | Schema | Description |
 |--------|-------------|
-| `ChatRequestSchema` | Validates chat payload. |
-| `AgentResponseSchema` | Validates full agent response. |
-| `CitationSchema` | Regulation citation. |
-| `SourceChunkSchema` | Source text chunk. |
-| `SourceCitationSchema` | Source file citation. |
-| `VerdictSchema` | PASS / FAIL enum. |
-| `ClaimSchema` | Claim with citation refs. |
-| `ConfidenceSchema` | Confidence score object. |
-| `ComplianceCheckSchema` | Compliance check tool input. |
-| `ToolCallRecordSchema` | Tool call record. |
-| `ReasoningStepSchema` | Reasoning step. |
-| `ValidationErrorSchema` | Validation error. |
-| `ReferenceMapSchema` | Reference code map. |
+| `ChatRequestSchema` | Validates chat payload: `message`, `skillName?`, `sessionId`, `files?`, `revisionFields?`. |
+| `ChatRequestFileSchema` | Validates file: `name`, `size`, `type`, `dataUrl?` (base64 data URL). |
+| `AgentResponseSchema` | Validates full agent response: `content`, `reasoning`, `citations`, `sourceCitations?`, `round`, `sessionId`, `verdict`, `lesson?`, `clauseTexts?`, `toolCalls?`, `reasoningSteps?`, `claims?`, `confidence?`, `validationErrors?`, `sections?`. |
+| `CitationSchema` | `{ref, regulation, clause}` — regulation citation. |
+| `SourceCitationSchema` | `{ref, fileId, filename, fileUrl?, extractedText, keyExcerpt, chunks?, boundingBox?, pageNumber?}`. |
+| `SourceChunkSchema` | `{id, text, bbox?, wordBoxes?, pageNumber?}`. |
+| `VerdictSchema` | `PASS` / `FAIL` enum. |
+| `ClaimSchema` | `{statement, citationRef, sourceCitation?}`. |
+| `ConfidenceSchema` | `{score, ocrConfidence, dataCompleteness?, llmMultiplier, llmReasoning, needsExpert}`. |
+| `ComplianceCheckSchema` | Tool input: `{checks: [{name, value, limit, operator, clause}]}`. |
+| `LessonSchema` | `{text, confidence (1-10), sourceSkill}`. |
+| `ToolCallRecordSchema` | `{step, toolName, summary, status (success|error)}`. |
+| `ReasoningStepSchema` | `{stepNumber, subStep?, title, body}`. |
+| `ValidationErrorSchema` | `{type (6 error kinds), message}`. |
+| `ReferenceMapSchema` | `Record<string, string>` — code alias map. |
+| `parseChunkRef(chunkRef)` | Parses `"S1.c3"` → `{fileRef: 1, chunkId: "c3"}`. |
+
+#### `shared/template-types.ts`
+| Type | Description |
+|------|-------------|
+| `ReportTemplate` | `{name, sections: TemplateSection[]}` — template for .docx export. |
+| `TemplateSection` | `{id, title, type (fields|markdown|table|verdict), fields?, columns?}`. |
+| `TemplateField` | `{id, label, type (text|number|select), options?}`. |
+
+#### `shared/turn-types.ts`
+| Type | Description |
+|------|-------------|
+| `ChatTurn` | UI-facing: `{userMessage, attachedFiles, response?, reasoningSteps, toolCalls, liveToolResults, error}`. |
+
+#### `shared/types.ts`
+| Type | Description |
+|------|-------------|
+| (re-exports) | Re-exports all inferred types from `schemas.ts`: `Citation`, `SourceCitation`, `SourceChunk`, `Claim`, `Verdict`, `AgentResponse`, `Confidence`, `ChatRequest`, `ComplianceCheckInput`, `ToolCallRecord`, `ValidationError`, `ReasoningStep`. |
+
+#### `shared/llm/factory.ts`
+| Function | Description |
+|----------|-------------|
+| `createModel()` | Creates a `LanguageModel` instance. Reads provider (openai/anthropic/deepseek), API key, model name from DB settings or env vars. Wraps DeepSeek fetch to inject `reasoning_content` placeholder for tool_calls compat. |
+| `getProvider()` | Resolves LLM provider: DB setting → env var → default "openai". |
+| `getProviderConfig()` | Resolves full provider config: provider, apiKey, baseURL, model. |
 
 ---
 
@@ -769,14 +950,15 @@ HTTP POST /api/chat
 | Segment | Files | Functions |
 |---------|-------|-----------|
 | **1. Knowledge** | 3 | ~8 |
-| **2. User-Info** | 4 | ~8 |
-| **3. Loading** | 7 | ~7 |
-| **4. Pipeline** | 7 | ~12 |
-| **5. Evaluation** | 5 | ~6 |
-| **6. Present** | 2 | ~8 |
-| **Shared** | 10 | ~35 |
-| **Total** | **38** | **~84** |
+| **2. User-Info** | 4 | ~10 |
+| **3. Loading** | 8 | ~9 |
+| **4. Pipeline** | 8 | ~14 |
+| **5. Evaluation** | 6 | ~8 |
+| **6. Present** | 3 | ~8 |
+| **7. API Routes** | 11 | ~14 |
+| **Shared** | 12 | ~40 |
+| **LLM (shared/llm)** | 1 | ~3 |
+| **Total (agent engine)** | **45** | **~98** |
+| **Total (all source)** | **56** | **~114** |
 
-Plus: `llm/factory.ts`, `pipeline/executors/script-runner.ts` — utilities not specific to any segment.
-
-*Updated 2026-05-22: removed dead functions, inlined step-executor and evolution/integrator, renamed phases/types.ts → types.ts*
+*Updated 2026-05-23: added missing modules (generate-steps, script-runner, llm/factory, shared types), added API Routes segment, updated pipeline flow for revisionFields + clear-before-execute + context snapshots, fixed file counts throughout.*
