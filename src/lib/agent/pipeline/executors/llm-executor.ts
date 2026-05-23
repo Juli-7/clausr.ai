@@ -1,4 +1,5 @@
 import { streamText, tool } from "ai";
+import { z } from "zod";
 import { createModel } from "@/lib/agent/llm/factory";
 import { runScript } from "./script-runner";
 import { ComplianceCheckSchema, type ComplianceCheckInput } from "@/lib/agent/shared/schemas";
@@ -360,6 +361,14 @@ function buildCitationGuide(ctx: PipelineContext): string {
  * Expected JSON format (per field):
  *   {"field_name": {"value": "narrative...", "sourceRef": [1], "chunkRef": ["S1.c1"], "citationRef": ["R48.5.11"], "verdict": "PASS"}}
  */
+const CheckFieldEntrySchema = z.object({
+  value: z.string().min(1),
+  sourceRef: z.union([z.number(), z.array(z.number())]).optional(),
+  chunkRef: z.union([z.string(), z.array(z.string())]).optional(),
+  citationRef: z.union([z.string(), z.array(z.string())]).optional(),
+  verdict: z.string().optional(),
+});
+
 function extractCheckResultsFromText(
   text: string,
   checks: ParsedCheck[],
@@ -393,6 +402,11 @@ function extractCheckResultsFromText(
   if (!entry || typeof entry !== "object") return [];
 
   const e = entry as Record<string, unknown>;
+  const validation = CheckFieldEntrySchema.safeParse(e);
+  if (!validation.success) {
+    logPipeline(`  [LLM] invalid check field entry for "${field}": ${validation.error.message}`);
+    return [];
+  }
 
   const value = typeof e.value === "string" ? e.value : "";
 
