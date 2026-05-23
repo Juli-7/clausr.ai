@@ -93,8 +93,6 @@ export async function initPhase(
       restoredResults.push({
         name: field,
         type: checkDef?.type.kind === "number" ? "numerical" : "qualitative",
-        regulation: regMatch?.[1]?.replace(/\.\d+$/, "") ?? "",
-        clause: regMatch?.[1] ?? "",
         finding,
         verdict: finding.startsWith("FAIL") ? "FAIL" : "PASS",
         citationRef: regMatch?.[1] ?? "",

@@ -5,7 +5,7 @@ import { ComplianceCheckSchema, type ComplianceCheckInput } from "@/lib/agent/sh
 import { executeComplianceCheck } from "@/lib/agent/pipeline/builtins";
 import type { ExecutableStep } from "../types";
 import type { ParsedCheck } from "@/lib/agent/loading/skill/check-parser";
-import type { PipelineContext, CheckResult } from "../pipeline-context";
+import type { PipelineContext, CheckResult, CitationPaletteEntry } from "../pipeline-context";
 import type { StepResult } from "../types";
 import type { ToolCallRecord } from "@/lib/agent/shared/types";
 import { logPipeline, truncate } from "../logger";
@@ -187,18 +187,18 @@ ${retryContext}
 
     if (collectedToolRuns.length > 0) {
       // Build CheckResults from tool output, merge narrative from text
+      const palette = ctx.palette.getCitationPalette();
       const allResults = collectedToolRuns.flatMap(run => run.outputs);
       const mergedResults = allResults.map((r, i) => {
         const name = (r.name as string) ?? `check-${i + 1}`;
         const narrative = textResults.find(tr => tr.name === name);
+        const clause = (r.clause as string) ?? "";
         return {
           name,
           type: "numerical" as const,
-          regulation: narrative?.regulation ?? (r.regulation as string) ?? "",
-          clause: narrative?.clause ?? (r.clause as string) ?? "",
           finding: narrative?.finding ?? `${r.name}: ${r.value} ${r.comparison} → ${r.status}`,
           verdict: r.status === "pass" ? ("PASS" as const) : ("FAIL" as const),
-          citationRef: narrative?.citationRef ?? findCitationRef(ctx, r),
+          citationRef: narrative?.citationRef ?? resolveCitationRef(palette, clause),
           sourceRef: narrative?.sourceRef,
           chunkRef: narrative?.chunkRef,
           toolResult: {
@@ -248,42 +248,14 @@ function storeOutput(ctx: PipelineContext, stepNumber: number, text: string): vo
   }
 }
 
-function findCitationRef(ctx: PipelineContext, result: Record<string, unknown>): string {
-  const clauseStr = (result.clause as string) ?? "";
-  const regulation = deriveRegFromClause(clauseStr) || (result.regulation as string) || (ctx.skill.regulationIds[0] ?? "");
-
-  let clauseNum = "";
-  const clauseIdx = clauseStr.indexOf("§");
-  if (clauseIdx !== -1) {
-    clauseNum = clauseStr.substring(clauseIdx + 1);
-  } else {
-    const firstDot = clauseStr.indexOf(".");
-    if (firstDot !== -1) {
-      clauseNum = clauseStr.substring(firstDot + 1);
-    }
-  }
-
-  if (clauseNum) {
-    for (const entry of ctx.palette.getCitationPalette()) {
-      if (entry.regulation === regulation && entry.clause === clauseNum) {
-        return entry.id;
-      }
-    }
-  }
-
-  for (const entry of ctx.palette.getCitationPalette()) {
-    if (entry.regulation === regulation) {
-      return entry.id;
-    }
-  }
-
-  return regulation ? `${regulation}.0` : "";
-}
-
-function deriveRegFromClause(clause: string): string {
+function resolveCitationRef(palette: readonly CitationPaletteEntry[], clause: string): string {
   if (!clause) return "";
-  const dotIdx = clause.indexOf(".");
-  return dotIdx !== -1 ? clause.substring(0, dotIdx) : "";
+  if (palette.some(e => e.id === clause)) return clause;
+  const dot = clause.indexOf(".");
+  const reg = dot !== -1 ? clause.substring(0, dot) : "";
+  if (!reg) return "";
+  const fallback = palette.find(e => e.id.startsWith(reg + "."));
+  return fallback ? fallback.id : `${reg}.0`;
 }
 
 export function buildDomainSchemaGuide(checks: ParsedCheck[]): string {
@@ -436,16 +408,11 @@ function extractCheckResultsFromText(
   const verdictRaw = typeof e.verdict === "string" ? e.verdict : "PASS";
   const verdict = verdictRaw.toUpperCase() === "FAIL" ? "FAIL" as const : "PASS" as const;
 
-  const clause = checkDef.clause ?? "";
-  const regulation = deriveRegFromClause(clause);
-
   if (!value) return [];
 
   return [{
     name: field,
     type: checkDef.type.kind === "number" ? "numerical" as const : "qualitative" as const,
-    regulation,
-    clause,
     finding: value,
     verdict,
     citationRef,

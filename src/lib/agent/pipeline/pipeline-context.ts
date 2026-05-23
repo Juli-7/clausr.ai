@@ -29,8 +29,6 @@ export interface SourcePaletteEntry {
 export interface CheckResult {
   name: string;
   type: "numerical" | "qualitative";
-  regulation: string;
-  clause: string;
   finding: string;
   verdict: "PASS" | "FAIL";
   citationRef: string;

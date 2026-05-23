@@ -62,13 +62,9 @@ export function enforceChecks(ctx: PipelineContext): void {
       }
     }
 
-    const regulation = ctx.skill.regulationIds.length > 0 ? ctx.skill.regulationIds[0] : "";
-
     const result: CheckResult = {
       name: field,
       type: "numerical",
-      regulation,
-      clause: check.clause ?? "",
       finding: extractedValue
         ? `${field}: ${extractedValue} (auto-extracted)`
         : `${field}: not assessed (no file data)`,
