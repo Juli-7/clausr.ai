@@ -339,9 +339,9 @@ function buildCitationGuide(ctx: PipelineContext): string {
     parts.push("");
     parts.push("# Citation Format");
     parts.push("Every field entry in the JSON block MUST include these three arrays:");
-    parts.push("- `citationRef`: regulation references (e.g., [\"R48.5.11\", \"R112.5.3\"])");
-    parts.push("- `sourceRef`: source file references (e.g., [1, 2])");
-    parts.push("- `chunkRef`: source chunk references (e.g., [\"S1.c3\", \"S2.c1\"])");
+    parts.push("- `citationRef`: regulation references — use the EXACT IDs from Available Citations (e.g., \"R48.5.11\"), not the clause text like \"Art 15\"");
+    parts.push("- `sourceRef`: source file numbers (e.g., [1, 2])");
+    parts.push("- `chunkRef`: source chunk IDs (e.g., [\"S1.c3\", \"S2.c1\"])");
     parts.push("Arrays can be empty if not applicable, but must be present.");
   }
 

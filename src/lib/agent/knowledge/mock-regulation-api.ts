@@ -151,6 +151,19 @@ function seedData(db: Database.Database): void {
     clauseStmt.run("r13-6.2", "R13", "6.2", "Service braking — Type I test", "The Type I test (fade test) shall verify braking performance after repeated applications.", null);
     clauseStmt.run("r13-6.3", "R13", "6.3", "Parking braking", "The parking brake shall hold the vehicle stationary on a 20% gradient, both laden and unladen.", null);
     clauseStmt.run("r13-6.4", "R13", "6.4", "ABS performance", "ABS-equipped vehicles shall meet the adhesion utilization and wheel lock requirements.", null);
+
+    // GDPR — General Data Protection Regulation
+    regStmt.run("eu-gdpr", "GDPR", "EU General Data Protection Regulation", "Regulation on the protection of natural persons with regard to the processing of personal data and on the free movement of such data.", "EU", JSON.stringify([]));
+    for (const a of ["GDPR", "gdpr", "EU GDPR", "eu-gdpr"]) aliasStmt.run(a, "GDPR");
+    verStmt.run("GDPR", "01", "2018-05-25", 1, "Initial application");
+    clauseStmt.run("gdpr-art5", "GDPR", "Art 5", "Principles relating to processing of personal data", "Personal data shall be processed lawfully, fairly and in a transparent manner; collected for specified, explicit and legitimate purposes; adequate, relevant and limited to what is necessary; accurate and kept up to date; kept in a form which permits identification for no longer than necessary; processed in a manner that ensures appropriate security.", null);
+    clauseStmt.run("gdpr-art6", "GDPR", "Art 6", "Lawfulness of processing", "Processing shall be lawful only if and to the extent that at least one of the following applies: consent of the data subject; performance of a contract; compliance with a legal obligation; protection of vital interests; performance of a task carried out in the public interest; or legitimate interests of the controller.", null);
+    clauseStmt.run("gdpr-art6-1a", "GDPR", "Art 6(1)(a)", "Consent", "The data subject has given consent to the processing of his or her personal data for one or more specific purposes.", null);
+    clauseStmt.run("gdpr-art6-1b", "GDPR", "Art 6(1)(b)", "Contract", "Processing is necessary for the performance of a contract to which the data subject is party.", null);
+    clauseStmt.run("gdpr-art7", "GDPR", "Art 7", "Conditions for consent", "Where processing is based on consent, the controller shall be able to demonstrate that the data subject has consented to processing of his or her personal data. The request for consent shall be presented in a clear and plain language.", null);
+    clauseStmt.run("gdpr-art15", "GDPR", "Art 15", "Right of access by the data subject", "The data subject shall have the right to obtain from the controller confirmation as to whether or not personal data concerning him or her are being processed, and access to the personal data and certain information about the processing purposes, categories, recipients, retention periods, and safeguards.", null);
+    clauseStmt.run("gdpr-art17", "GDPR", "Art 17", "Right to erasure (right to be forgotten)", "The data subject shall have the right to obtain from the controller the erasure of personal data concerning him or her without undue delay where the personal data are no longer necessary, consent is withdrawn, or processing is unlawful.", null);
+    clauseStmt.run("gdpr-art32", "GDPR", "Art 32", "Security of processing", "The controller and processor shall implement appropriate technical and organisational measures to ensure a level of security appropriate to the risk, including pseudonymisation, encryption, confidentiality, integrity, availability, and resilience of processing systems.", null);
   });
 
   seed();
