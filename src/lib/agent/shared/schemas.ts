@@ -88,7 +88,7 @@ export const AgentResponseSchema = z.object({
   sourceCitations: z.array(SourceCitationSchema).optional(),
   round: z.number().int().positive(),
   sessionId: z.string(),
-  verdict: VerdictSchema,
+  verdict: VerdictSchema.optional(),
   lesson: LessonSchema.optional(),
   clauseTexts: z.record(z.string(), z.string()).optional(),
   toolCalls: z.array(ToolCallRecordSchema).optional(),

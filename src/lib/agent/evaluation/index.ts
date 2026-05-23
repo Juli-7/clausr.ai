@@ -8,9 +8,6 @@ export function evaluate(input: EvaluationInput): EvaluationResult {
   const citations = [...input.citations];
   const sourceCitations = [...input.sourceCitations];
 
-  const confidence = computeConfidence(input);
-  const findings = buildFindings(checkResults);
-
   const validationErrors = validate({
     claims: input.claims,
     citations,
@@ -19,6 +16,9 @@ export function evaluate(input: EvaluationInput): EvaluationResult {
     sourcePalette: input.sourcePalette,
     reportContent: null,
   });
+
+  const confidence = computeConfidence({ ...input, validationErrors });
+  const findings = buildFindings(checkResults);
 
   const reasoningSteps = Object.entries(input.stepTitles).map(([num, title]) => {
     const output = input.stepOutputs[num];

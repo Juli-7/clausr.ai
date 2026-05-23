@@ -8,6 +8,7 @@ import type { EvaluationInput } from "./types";
  *   - OCR quality (how well the extractors read uploaded files)
  *   - PDF extraction method (pdf-parse = reliable, render fallback = less)
  *   - LLM self-assessed confidence (from step outputs, if LLM provided one)
+ *   - Validation errors (citation mismatches, chunk mismatches, etc.)
  */
 export function computeConfidence(input: EvaluationInput): Confidence {
   const avgOcr = averageOcrConfidence(input.files);
@@ -19,7 +20,9 @@ export function computeConfidence(input: EvaluationInput): Confidence {
     else if (f.extractorUsed === "fallback") pdfPenalty = Math.max(pdfPenalty, 10);
   }
 
-  const baseScore = Math.max(0, 100 - ocrPenalty - pdfPenalty);
+  const validationPenalty = (input.validationErrors?.length ?? 0) * 5;
+
+  const baseScore = Math.max(0, 100 - ocrPenalty - pdfPenalty - validationPenalty);
 
   let llmMultiplier = 1.0;
   let llmReasoning = "No LLM assessment available";

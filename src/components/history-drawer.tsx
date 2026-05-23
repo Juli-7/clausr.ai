@@ -122,7 +122,7 @@ export function HistoryDrawer({
                       >
                         {session.confidenceScore.toFixed(0)}%
                       </span>
-                    ) : (
+                    ) : session.verdict && session.verdict !== "UNKNOWN" ? (
                       <span
                         className="text-[10px] font-semibold px-2 py-0.5 rounded flex-shrink-0"
                         style={{
@@ -132,7 +132,7 @@ export function HistoryDrawer({
                       >
                         {session.verdict}
                       </span>
-                    )}
+                    ) : null}
                   </div>
                   {session.needsExpert && (
                     <span className="text-[10px] font-medium px-1.5 py-0.5 rounded mb-1 inline-block" style={{ color: "#f85149", background: "#f8514918" }}>

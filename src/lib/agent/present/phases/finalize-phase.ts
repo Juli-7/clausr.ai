@@ -44,10 +44,7 @@ export async function finalizePhase(
 
   const round = getResponseCount(sessionId) + 1;
 
-  // Verdict: simple — FAIL if any check failed (required by schema, not rendered)
-  const verdict = ctx.checks.getResults().length > 0 && ctx.checks.getResults().some((c) => c.verdict === "FAIL") ? "FAIL" : "PASS";
-
-  // Clause texts for citation popovers (trivial map, not evaluation concern)
+  // Clause texts for citation popovers
   const clauseTexts: Record<string, string> = {};
   for (const entry of ctx.palette.getCitationPalette()) {
     const key = `${entry.regulation}.${entry.clause}`;
@@ -61,7 +58,6 @@ export async function finalizePhase(
     sourceCitations: result.sourceCitations.length > 0 ? result.sourceCitations : undefined,
     round,
     sessionId,
-    verdict,
     sections: { findings: result.findings },
     clauseTexts: Object.keys(clauseTexts).length > 0 ? clauseTexts : undefined,
   };

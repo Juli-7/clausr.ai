@@ -23,6 +23,7 @@ export interface EvaluationInput {
   sourceCitations: SourceCitation[];
   checks: ParsedCheck[];
   toolCalls: unknown;
+  validationErrors?: PipelineValidationError[];
 }
 
 /**
