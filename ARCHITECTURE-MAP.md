@@ -24,33 +24,33 @@
                                    │
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                    SEGMENT 2: VECTOR-STORE (DOC STORE) LAYER                          │
-│                       (mock = extractors; real = vecDB)                               │
+│                    SEGMENT 2: USER-INFO LAYER (EXTRACTION + STORAGE)                  │
 │                                                                                      │
-│  vector-store/                       user-info/extractors/ (mock vecDB engine)       │
-│  ┌───────────────┐   ┌──────────────┐ ┌──────────────┐ ┌──────────────┐             │
-│  │ IDocStore     │   │ OCR (Tesser) │ │ PDF (pdfjs)  │ │ DOCX (mammoth)│            │
-│  │ getDocStore() │   │ extractImage │ │ extractPdf   │ │ extractDocx  │             │
-│  │ setDocStore() │   │ Text()       │ │ Text()       │ │ Text()       │             │
-│  └───────┬───────┘   └──────────────┘ └──────────────┘ └──────────────┘             │
-│          │                                                                           │
-│  ┌───────▼─────────────────────────────────────────────────────────────┐            │
-│  │ MockDocStore (class) — wraps all extractors                          │            │
-│  │  .processFile(file, sessionId)                                       │            │
-│  │    → extractFileContent() → chunk → saveChunks() → saveFileChunks()  │            │
-│  │    → return { extractedText }                                        │            │
-│  │  .getFiles(sessionId)                                                │            │
-│  │    → read file_chunks + chunk_store → return ProcessedFile[]         │            │
-│  └───────────────────────────────────────────────────────────────────────┘            │
-│                                                                                      │
-│  ┌───────────────────────────────────────────────────────────────────────────────┐  │
-│  │ (REAL vecDB, future):                                                          │  │
-│  │  .processFile(file, sessionId) → extract + chunk + embed → store in vector DB │  │
-│  │  .getFiles(sessionId, query) → embed query → search → return top-k chunks    │  │
-│  └───────────────────────────────────────────────────────────────────────────────┘  │
-│                                                                                      │
-│  PROVIDES: ProcessedFile[], ChunkInfo via IDocStore interface                         │
-│  CONSUMED BY: Loading (processFile), Pipeline (getFiles)                              │
+│  user-info/extractors/ (real — OCR/pdf.js/mammoth)      user-info/vector-store/      │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐     ┌───────────────────────┐    │
+│  │ OCR (Tesser) │ │ PDF (pdfjs)  │ │ DOCX (mamm- │     │ IDocStore interface    │    │
+│  │ extractImage │ │ extractPdf   │ │ oth)         │     │ (processFile = real,   │    │
+│  │ Text()       │ │ Text()       │ │ extractDocx  │     │  getFiles = mock vecDB │    │
+│  └──────────────┘ └──────────────┘ │ Text()       │     │  retrieval — returns   │    │
+│                                    └──────────────┘     │  ALL chunks today)     │    │
+│  Clausr.ai MUST do extraction + chunking itself because: └──────────┬────────────┘    │
+│   • Bounding boxes (spatial coords) are needed for UI highlighting  │                 │
+│   • OCR confidence feeds into evaluation layer's confidence formula  │                 │
+│   • Chunk IDs must be deterministic for LLM citation refs [S1.c3]   │                 │
+│   • Page numbers needed for source display                           │                 │
+│                                                                      │                 │
+│  ┌────────────────────────────────────────────────────────────────────┘                 │
+│  │                                                                                      │
+│  ├─ MockDocStore (class) — wraps extractors + raw file disk persistence                 │
+│  │  .processFile(file, sessionId)                                                       │
+│  │    → saveRawFile() to data/uploads/{sessionId}/{filename}  (NEW — raw file on disk)  │
+│  │    → extractFileContent() → chunk → saveChunks() → saveFileChunks()                  │
+│  │    → return { extractedText }                                                        │
+│  │  .getFiles(sessionId)                                                                │
+│  │    → reads file_chunks + chunk_store → returns ALL ProcessedFile[]                   │
+│  │    → dataUrl constructed as /api/files/{sessionId}/{filename} URL                    │
+│  │    (MOCK behavior — real vecDB will embed query and return top-k chunks)             │
+│  └──────────────────────────────────────────────────────────────────────────────────────┘
 └─────────────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
@@ -109,7 +109,7 @@
 │  PROVIDES: session_setup persistence — PipelineContext (FileRegistry has metadata    │
 │    only, no chunks; PaletteStore empty — pipeline loads regs; StepMemory with        │
 │    step definitions), plus ExecutableStep[]                                           │
-│  CONSIDERS FROM: Vector-Store (processFile), Shared (DB persistence)                  │
+│  CONSIDERS FROM: User-Info (processFile), Shared (DB persistence)                  │
 │  CONSUMED BY: POST /api/setup → setupSession()                                        │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                    │
@@ -165,7 +165,7 @@
 │                                                                                      │
 │  PROVIDES: StepResult[], streamed PipelineEvents                                      │
 │  CONSIDERS FROM: Pipeline slices (via restoreContext), session_setup (DB),              │
-│    Vector-Store (getFiles for chunks), Knowledge (loadReferences for regs)            │
+│    User-Info (getFiles for chunks), Knowledge (loadReferences for regs)            │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
@@ -319,7 +319,7 @@ HTTP POST /api/setup
        │════════════════════════════════════════════════════════════════
        │
         ├─ inputPhase(ctx, {files, sessionId})
-        │    └─ docStore.processFile(file, sessionId)  ◄── vector-store/mock-store.ts
+        │    └─ docStore.processFile(file, sessionId)  ◄── user-info/vector-store/mock-store.ts
         │         └─ extractFileContent(file)           ◄── user-info extractors
         │              ├─ image/*  → Tesseract OCR
         │              ├─ .pdf     → pdfjs-dist (or render+OCR fallback)
@@ -368,7 +368,7 @@ HTTP POST /api/chat
         │    ├─ ExecutableStep[].fromJSON(stepsJson)
         │    └─ Returns {ctx, steps, correlationId}
         │
-        ├─ docStore.getFiles(sessionId)           ◄── vector-store/mock-store.ts
+        ├─ docStore.getFiles(sessionId)           ◄── user-info/vector-store/mock-store.ts
         │    └─ read file metadata + chunk texts from DB
         │    └─ ctx.files.loadFiles(ProcessedFile[])  ← populate chunks
         │
@@ -499,9 +499,9 @@ HTTP POST /api/chat
 | Segment | Provides To | Interface (Types + Functions) | Consumes From |
 |---------|------------|-------------------------------|---------------|
 | **1. Knowledge** | Pipeline | `IRegulationApi`, `getRegulationApi()` | — |
-| **2. Vector-Store** | Loading, Pipeline | `IDocStore.processFile()`, `IDocStore.getFiles()`, `setDocStore()`, `extractFileContent()` (internal) | Shared (chunk_store DB) |
-| **3. Loading** | Pipeline (via session_setup DB) | `setupSession()`, `initSession()`, `inputPhase()`, `skillGenPhase()`, `generateStepsFromChecks()`, `saveSessionSetup()`, `SkillLoader`, `ParsedCheck[]`, `ExecutableStep[]` | Vector-Store (processFile), Shared (repository) |
-| **4. Pipeline** | Evaluation, Present | `orchestratePipeline(sessionId, msg, revisionFields?)`, `restoreContext()`, `initPipelineTurn()`, `StepResult`, `PipelineEvent` (streaming) | Shared (repository), session_setup DB, Vector-Store (getFiles), Knowledge (loadReferences) |
+| **2. User-Info** | Loading, Pipeline | `IDocStore.processFile()` (real extraction + raw file storage), `IDocStore.getFiles()` (mock vecDB retrieval — returns all chunks), extractors + chunkers (real) | Shared (chunk_store DB) |
+| **3. Loading** | Pipeline (via session_setup DB) | `setupSession()`, `initSession()`, `inputPhase()`, `skillGenPhase()`, `generateStepsFromChecks()`, `saveSessionSetup()`, `SkillLoader`, `ParsedCheck[]`, `ExecutableStep[]` | User-Info (processFile), Shared (repository) |
+| **4. Pipeline** | Evaluation, Present | `orchestratePipeline(sessionId, msg, revisionFields?)`, `restoreContext()`, `initPipelineTurn()`, `StepResult`, `PipelineEvent` (streaming) | Shared (repository), session_setup DB, User-Info (getFiles), Knowledge (loadReferences) |
 | **5. Evaluation** | Present | `evaluate()`, `EvaluationResult` | Pipeline (CheckStore), Shared (schemas) |
 | **6. Present** | External | `finalizePhase()` → `AgentResponse`, `generateDocx()` → `.docx Blob` | Pipeline, Evaluation, Shared (schemas/repository) |
 | **7. API Routes** | HTTP clients | 14 route handlers; consumes Pipeline + Shared | Pipeline, Shared (repository/schemas) |
@@ -510,7 +510,7 @@ HTTP POST /api/chat
 
 1. **Knowledge ↔ Pipeline**: `PipelineContext.skill` carries loaded skill metadata. `IRegulationApi` is swappable (mock ↔ real).
 
-2. **Vector-Store ↔ Loading/Pipeline**: `IDocStore` is swappable (mock ↔ real vecDB). Loading calls `processFile()` to store files; Pipeline calls `getFiles()` to retrieve chunks. The extractors (`user-info/`) are internal to the vecDB mock — the rest of the app never touches them directly.
+2. **User-Info ↔ Loading/Pipeline**: `IDocStore` is swappable (mock ↔ real vecDB), but only for the `getFiles()` retrieval part. Extraction + chunking + raw file storage (`processFile`) is always clausr.ai's responsibility — the extractors are real production code, not mock stand-ins. The mock vecDB returns all chunks; the real vecDB will embed a query and return top-k chunk IDs.
 
 3. **Loading ↔ Pipeline**: Loading runs once per session (via `POST /api/setup`) and persists skill + steps to `session_setup`. Pipeline restores from DB, then independently loads chunks from the doc store and regulation clauses from the Knowledge API before executing steps.
 
@@ -530,13 +530,15 @@ This section traces the complete function call chain from user input to final ou
 
 ---
 
-### 1. Vector-Store Layer — File Ingestion + Storage (mock = extractors, real = vecDB)
+### 1. User-Info Layer — Extraction + Chunking + Raw File Storage (with mock vecDB retrieval)
 
-Wraps extraction/chunking/storage behind the `IDocStore` interface. Called by both loading and pipeline layers.
+Extraction and chunking are always done by clausr.ai (for bounding boxes, OCR confidence, deterministic chunk IDs). The `IDocStore.getFiles()` is the only mock vector-DB seam — today it returns all chunks; a real vecDB would embed and return top-k.
 
 ```
   SETUP (loading layer calls):
     docStore.processFile(file, sessionId)
+      ├─ saveRawFile(sessionId, filename, dataUrl)  ◄── NEW: decode base64 → disk
+      │    data/uploads/{sessionId}/{filename}
       ├─ extractFileContent(file)     ◄── user-info extractors (OCR/PDF/DOCX)
       │    dispatches by MIME:
       │    ├─ image → Tesseract OCR → groupWordsIntoLines() → TextChunk[]
@@ -547,12 +549,14 @@ Wraps extraction/chunking/storage behind the `IDocStore` interface. Called by bo
       ├─ saveFileChunks(file metadata)           ◄── sessions.file_chunks
       └─ return { extractedText }                ◄── full text for auto-skill
 
-  PIPELINE (orchestrator calls):
+  PIPELINE (orchestrator calls) — MOCK vecDB RETRIEVAL:
     docStore.getFiles(sessionId)
       ├─ read file metadata + chunk texts from DB
       └─ return ProcessedFile[] with ALL chunks
+         (real vecDB: embed query → search → top-k chunk IDs)
 
-  [REAL vecDB future: getFiles(query) embeds query, searches top-k chunks]
+  Raw files stored at: data/uploads/{sessionId}/{filename}
+  Served via: GET /api/files/{sessionId}/{filename}
 ```
 
 ---
@@ -658,7 +662,7 @@ restoreContext(sessionId, correlationId)      [pipeline/pipeline-context.ts]
   │    (FileRegistry + PaletteStore both empty)
   └─ deserialize steps
 
-docStore.getFiles(sessionId)                  [vector-store/mock-store.ts]
+docStore.getFiles(sessionId)                  [user-info/vector-store/mock-store.ts]
   ├─ read file metadata + chunk texts from DB
   └─ ctx.files.loadFiles(ProcessedFile[])     ← populate chunks
 
@@ -819,8 +823,8 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 |----------|--------|
 | `MockRegulationApi` (class + all methods) | `knowledge/mock-regulation-api.ts` |
 | `getRegulationApi()` / `setRegulationApi()` | `knowledge/regulation-api.ts` |
-| `MockDocStore` (class + all methods) | `vector-store/mock-store.ts` |
-| `getDocStore()` / `setDocStore()` | `vector-store/index.ts` |
+| `MockDocStore` (class + all methods) | `user-info/vector-store/mock-store.ts` |
+| `getDocStore()` / `setDocStore()` | `user-info/vector-store/index.ts` |
 
 #### Shared/Memory Utilities (called internally, not in main flow)
 
@@ -891,29 +895,63 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 
 ---
 
-### SEGMENT 2 — Vector-Store (`src/lib/agent/vector-store/` + `user-info/extractors/`)
+### SEGMENT 2 — User-Info Layer (`src/lib/agent/user-info/`)
 
-The vector-store layer wraps file extraction, chunking, and storage behind the `IDocStore` interface. The extractors (`user-info/`) are the mock implementation's engine — they are NOT a separate segment.
+The user-info layer handles everything before semantic search: extraction, chunking, raw file storage. The `extractors/` are the **real** extraction engine (clausr.ai owns these — they're not mock code). The `vector-store/` sub-directory wraps them into the `IDocStore` interface and provides mock vecDB retrieval in `getFiles()`.
 
-#### `vector-store/types.ts`
+#### `user-info/extractors/index.ts`
+| Function | Description |
+|----------|-------------|
+| `extractFileContent(file)` | Main dispatcher. Routes to OCR, PDF, or DOCX extractor based on MIME type and extension. Returns `ExtractionResult`. |
+| `mergeWordBoxes(boxes)` | Computes bounding box enclosing all input word boxes. |
+| `ExtractionResult` | `{text, chunks, pageCount?, ocrConfidence?, extractorUsed?}` |
+| `TextChunk` | `{id, text, bbox?, wordBoxes?, pageNumber?}` |
+| `WordBox` | `{x, y, width, height}` |
+
+#### `user-info/extractors/ocr.ts`
+| Function | Description |
+|----------|-------------|
+| `extractImageText(dataUrl)` | OCR via Tesseract.js. Returns `{text, chunks, ocrConfidence, extractorUsed}`. |
+| `getTesseractWorker()` | Lazy singleton Tesseract worker initialization. |
+| `collectWords(page)` | Flattens Tesseract page blocks/paragraphs/lines/words into flat array. |
+| `toWordBox(b)` | Converts Tesseract bbox to internal `WordBox` format. |
+| `groupWordsIntoLines(words)` | Groups words into lines by Y-coordinate proximity. |
+
+#### `user-info/extractors/pdf-extract.ts`
+| Function | Description |
+|----------|-------------|
+| `extractPdfText(dataUrl)` | Two-path PDF extraction: Path A uses pdfjs-dist; Path B renders + OCR for scanned PDFs. |
+| `itemToWordBox(item)` | Converts PDF text item's transform matrix to `WordBox`. |
+| `groupItemsIntoLines(items)` | Groups PDF text items into lines by Y-coordinate proximity. |
+| `linesToChunks(lines, pageNumber)` | Converts lines to `TextChunk[]` with bounding boxes. |
+
+#### `user-info/extractors/docx-extract.ts`
+| Function | Description |
+|----------|-------------|
+| `extractDocxText(dataUrl)` | Uses mammoth to convert DOCX to HTML, strips to plain text. Returns paragraph-level chunks. |
+| `stripHtml(html)` | Removes HTML tags and decodes HTML entities. |
+| `splitParagraphs(html)` | Splits HTML by `</p>` tags and strips each paragraph. |
+
+#### `user-info/vector-store/types.ts`
 | Type / Interface | Description |
 |-----------------|-------------|
-| `IDocStore` | Interface: `processFile(file, sessionId) → {extractedText}` (setup), `getFiles(sessionId) → ProcessedFile[]` (pipeline). |
+| `IDocStore` | Interface: `processFile(file, sessionId) → {extractedText}` (real extraction), `getFiles(sessionId) → ProcessedFile[]` (mock: returns all; real: embed query → top-k). |
 | `ProcessedFile` | `{fileId, filename, extractedText, chunks, dataUrl?, pageCount?, ocrConfidence?, extractorUsed?}` |
 | `ChunkInfo` | `{id, text, pageNumber?}` |
 
-#### `vector-store/index.ts`
+#### `user-info/vector-store/index.ts`
 | Function | Description |
 |----------|-------------|
 | `getDocStore()` | Singleton factory — lazily instantiates and returns the current `IDocStore` implementation (defaults to `MockDocStore`). |
-| `setDocStore(store)` | Injects a custom `IDocStore` implementation. Used for swapping mock ↔ real vector DB backends. |
+| `setDocStore(store)` | Injects a custom `IDocStore` implementation for swapping mock ↔ real vecDB backends. |
 
-#### `vector-store/mock-store.ts`
+#### `user-info/vector-store/mock-store.ts`
 | Function | Description |
 |----------|-------------|
-| `MockDocStore` (class) | Implements `IDocStore` with current extractors + SQLite chunk storage. |
-| `.processFile(file, sessionId)` | Deletes existing chunks, calls `extractFileContent()` (user-info), saves chunks to `chunk_store` DB table, stores file metadata in `sessions.file_chunks`. Returns `{extractedText}`. |
-| `.getFiles(sessionId)` | Reads file metadata from `sessions.file_chunks`, fetches chunk texts from `chunk_store` via `getChunksByIds()`. Returns `ProcessedFile[]` with all chunks. |
+| `MockDocStore` (class) | Implements `IDocStore`. Runs real extraction + chunking (`processFile`), saves raw files to disk. Mock vecDB retrieval (`getFiles` — returns all chunks today; future: embed query → top-k). |
+| `saveRawFile(sessionId, filename, dataUrl)` | Decodes base64 dataUrl and writes to `data/uploads/{sessionId}/{filename}`. Called by `processFile()`. |
+| `.processFile(file, sessionId)` | Deletes existing chunks for session, saves raw file to disk, calls `extractFileContent()`, saves chunks to `chunk_store` DB, stores file metadata in `sessions.file_chunks`. Returns `{extractedText}`. |
+| `.getFiles(sessionId)` | Reads file metadata from `sessions.file_chunks`, fetches chunk texts from `chunk_store` via `getChunksByIds()`. Returns `ProcessedFile[]` with all chunks. `dataUrl` is constructed as the serving URL `/api/files/{sessionId}/{filename}`. |
 
 ---
 
@@ -1288,7 +1326,7 @@ The shared layer contains only what is genuinely cross-layer: type definitions, 
 | Segment | Files | Functions |
 |---------|-------|-----------|
 | **1. Knowledge** | 3 | ~8 |
-| **2. Vector-Store** | 7 | ~14 |
+| **2. User-Info** | 8 | ~18 |
 | **3. Loading** | 10 | ~12 |
 | **4. Pipeline** | 13 | ~21 |
 | **5. Evaluation** | 5 | ~7 |
@@ -1296,7 +1334,7 @@ The shared layer contains only what is genuinely cross-layer: type definitions, 
 | **7. API Routes** | 12 | ~15 |
 | **Shared** | 4 | ~20 |
 | **LLM** | 1 | ~3 |
-| **Total (agent engine)** | **48** | **~106** |
-| **Total (all source)** | **59** | **~122** |
+| **Total (agent engine)** | **47** | **~107** |
+| **Total (all source)** | **59** | **~123** |
 
-*Updated 2026-05-24 (2): moved layer-owned state out of shared/ into owning layers — slices → pipeline/slices/, cleanup → loading/, template-types → present/, turn-types → src/types/. Shared now contains only schemas, types, database, and repository.*
+*Updated 2026-05-24: restructured SEGMENT 2 from "Vector-Store" to "User-Info" layer. vector-store/ moved into user-info/ as a sub-directory. Extraction + chunking are always clausr.ai's responsibility (real code, not mock). Only `IDocStore.getFiles()` is mock vecDB retrieval (returns all chunks today; real vecDB to embed query + return top-k later). Added raw file persistence to disk in processFile().*

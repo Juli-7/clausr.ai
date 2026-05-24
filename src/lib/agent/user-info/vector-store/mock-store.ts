@@ -7,6 +7,17 @@ import {
   getFileChunks,
   saveFileChunks,
 } from "@/lib/agent/shared/memory/repository";
+import fs from "fs";
+import path from "path";
+
+const UPLOADS_DIR = path.join(process.cwd(), "data", "uploads");
+
+function saveRawFile(sessionId: string, filename: string, dataUrl: string): void {
+  const dir = path.join(UPLOADS_DIR, sessionId);
+  fs.mkdirSync(dir, { recursive: true });
+  const base64 = dataUrl.split(",")[1] ?? dataUrl;
+  fs.writeFileSync(path.join(dir, filename), Buffer.from(base64, "base64"));
+}
 
 export class MockDocStore implements IDocStore {
   async processFile(
@@ -16,10 +27,12 @@ export class MockDocStore implements IDocStore {
     deleteChunksBySession(sessionId);
     const extracted = await extractFileContent(file);
     const chunkIds = saveChunks(sessionId, file.name, extracted.chunks);
+    if (file.dataUrl) {
+      saveRawFile(sessionId, file.name, file.dataUrl);
+    }
     const meta = {
       fileId: file.name,
       filename: file.name,
-      dataUrl: file.dataUrl,
       pageCount: extracted.pageCount,
       ocrConfidence: extracted.ocrConfidence,
       extractorUsed: extracted.extractorUsed,
@@ -36,7 +49,6 @@ export class MockDocStore implements IDocStore {
     const fileMeta: {
       fileId: string;
       filename: string;
-      dataUrl?: string;
       pageCount?: number;
       ocrConfidence?: number;
       extractorUsed?: string;
@@ -56,7 +68,7 @@ export class MockDocStore implements IDocStore {
         filename: meta.filename,
         extractedText: fullText,
         chunks,
-        dataUrl: meta.dataUrl,
+        dataUrl: `/api/files/${sessionId}/${encodeURIComponent(meta.filename)}`,
         pageCount: meta.pageCount,
         ocrConfidence: meta.ocrConfidence,
         extractorUsed: meta.extractorUsed,

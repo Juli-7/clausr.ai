@@ -1,6 +1,6 @@
 import { executeLlmToolStep } from "./executors/llm-executor";
 import { restoreContext } from "./pipeline-context";
-import { getDocStore } from "@/lib/agent/vector-store";
+import { getDocStore } from "@/lib/agent/user-info/vector-store";
 import { loadReferences } from "./builtins";
 import { initPipelineTurn } from "@/lib/agent/loading/phases/init-phase";
 import { identifyRevisionTarget, identifyRevisionTargets } from "@/lib/agent/loading/phases/revision-phase";

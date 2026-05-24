@@ -1,4 +1,4 @@
-import { getDocStore } from "@/lib/agent/vector-store";
+import { getDocStore } from "@/lib/agent/user-info/vector-store";
 import { logPipeline } from "@/lib/agent/pipeline/logger";
 import type { PipelineContext } from "@/lib/agent/pipeline/pipeline-context";
 
