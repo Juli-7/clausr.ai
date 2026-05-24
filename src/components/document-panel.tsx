@@ -200,7 +200,7 @@ function formatLoadingMessage(stepStatus?: string | null): string {
 }
 
 function findHighlightChunk(
-  sourceCitation: { chunks?: { id: string; text: string; bbox?: HighlightChunk["bbox"]; wordBoxes?: HighlightChunk["wordBoxes"]; pageNumber?: number }[] } | undefined,
+  sourceCitation: { chunks?: { id: string; text: string; bbox?: HighlightChunk["bbox"]; wordBoxes?: HighlightChunk["wordBoxes"]; pageNumber?: number; pageWidth?: number; pageHeight?: number }[] } | undefined,
   claims: { sourceCitation?: string }[] | undefined,
   ref: string,
 ): HighlightChunk | undefined {
@@ -215,6 +215,8 @@ function findHighlightChunk(
     bbox: chunk.bbox,
     wordBoxes: chunk.wordBoxes,
     pageNumber: chunk.pageNumber,
+    pageWidth: chunk.pageWidth,
+    pageHeight: chunk.pageHeight,
   };
 }
 

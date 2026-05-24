@@ -19,89 +19,154 @@ interface PdfTextItem {
   height: number;
 }
 
-function itemToWordBox(item: PdfTextItem): WordBox | null {
-  if (!item.transform || item.transform.length < 6) return null;
-  const x = item.transform[4];
-  const y = item.transform[5];
-  if (x == null || y == null) return null;
-  return { x, y, width: item.width ?? 0, height: item.height ?? 12 };
+interface PositionedTextItem {
+  item: PdfTextItem;
+  box: WordBox;
 }
 
-function groupItemsIntoLines(items: PdfTextItem[]): PdfTextItem[][] {
+const MAX_CHUNK_CHARS = 900;
+const MAX_CHUNK_LINES = 8;
+
+function itemToWordBoxes(item: PdfTextItem, pageHeight: number): WordBox[] {
+  if (!item.transform || item.transform.length < 6) return [];
+
+  const text = item.str ?? "";
+  if (text.trim().length === 0) return [];
+
+  const x = item.transform[4];
+  const pdfY = item.transform[5];
+  if (x == null || pdfY == null) return [];
+
+  const width = item.width ?? 0;
+  const height = item.height || Math.abs(item.transform[3]) || 12;
+  const y = pageHeight - pdfY - height;
+  const trimmedStart = text.search(/\S/);
+  if (trimmedStart === -1) return [];
+
+  const words = [...text.matchAll(/\S+/g)];
+  if (words.length === 0) return [];
+
+  // pdf.js text items are often runs, not words. Approximate each word's
+  // rectangle inside the run so highlights are tighter than whole-line boxes.
+  const charWidth = width > 0 ? width / text.length : 0;
+  return words.map((match) => {
+    const start = match.index ?? trimmedStart;
+    const word = match[0];
+    return {
+      x: x + start * charWidth,
+      y,
+      width: Math.max(word.length * charWidth, 1),
+      height,
+    };
+  });
+}
+
+function itemToWordBox(item: PdfTextItem, pageHeight: number): WordBox | null {
+  const boxes = itemToWordBoxes(item, pageHeight);
+  return boxes.length > 0 ? mergeWordBoxes(boxes) : null;
+}
+
+function groupItemsIntoLines(items: PdfTextItem[], pageHeight: number): PdfTextItem[][] {
   const withPos = items
     .filter((i) => (i.str ?? "").trim().length > 0)
-    .map((i) => ({ item: i, box: itemToWordBox(i) }))
-    .filter((x): x is { item: PdfTextItem; box: WordBox } => x.box !== null)
+    .map((i) => ({ item: i, box: itemToWordBox(i, pageHeight) }))
+    .filter((x): x is PositionedTextItem => x.box !== null)
     .sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x);
 
   if (withPos.length === 0) return [];
 
-  const lines: PdfTextItem[][] = [[withPos[0].item]];
+  const positionedLines: PositionedTextItem[][] = [[withPos[0]]];
   for (let i = 1; i < withPos.length; i++) {
     const prevBox = withPos[i - 1].box;
     const currBox = withPos[i].box;
     const tolerance = Math.max(prevBox.height, currBox.height) * 0.75;
     if (Math.abs(currBox.y - prevBox.y) <= tolerance) {
-      lines[lines.length - 1].push(withPos[i].item);
+      positionedLines[positionedLines.length - 1].push(withPos[i]);
     } else {
-      lines.push([withPos[i].item]);
+      positionedLines.push([withPos[i]]);
     }
   }
-  return lines;
+
+  return positionedLines.map((line) =>
+    line.sort((a, b) => a.box.x - b.box.x).map((entry) => entry.item)
+  );
 }
 
-function linesToChunks(lines: PdfTextItem[][], pageNumber: number): TextChunk[] {
-  const chunks: TextChunk[] = [];
+function lineToChunkInput(line: PdfTextItem[], pageHeight: number): { text: string; bbox: WordBox; wordBoxes: WordBox[] } | null {
+  const wordBoxes: WordBox[] = [];
+  const texts: string[] = [];
 
-  for (const line of lines) {
-    const wordBoxes: WordBox[] = [];
-    const texts: string[] = [];
-
-    for (const item of line) {
-      const wb = itemToWordBox(item);
-      if (wb) {
-        wordBoxes.push(wb);
-        texts.push(item.str);
-      }
+  for (const item of line) {
+    const boxes = itemToWordBoxes(item, pageHeight);
+    if (boxes.length > 0) {
+      wordBoxes.push(...boxes);
+      texts.push((item.str ?? "").trim());
     }
-
-    if (wordBoxes.length === 0) continue;
-
-    const bbox = mergeWordBoxes(wordBoxes);
-    const text = texts.join(" ");
-
-    const prev = chunks[chunks.length - 1];
-    const gapThreshold = bbox.height * 1.5;
-
-    if (prev && prev.pageNumber === pageNumber && prev.bbox) {
-      const prevBottom = prev.bbox.y + prev.bbox.height;
-      const gap = bbox.y - prevBottom;
-
-      if (gap >= 0 && gap <= gapThreshold) {
-        prev.text += "\n" + text;
-        prev.bbox = {
-          x: Math.min(prev.bbox.x, bbox.x),
-          y: prev.bbox.y,
-          width:
-            Math.max(prev.bbox.x + prev.bbox.width, bbox.x + bbox.width) -
-            Math.min(prev.bbox.x, bbox.x),
-          height: Math.max(prev.bbox.y + prev.bbox.height, bbox.y + bbox.height) - prev.bbox.y,
-        };
-        prev.wordBoxes?.push(...wordBoxes);
-        continue;
-      }
-    }
-
-    chunks.push({
-      id: `c${chunks.length + 1}`,
-      text,
-      bbox,
-      wordBoxes,
-      pageNumber,
-    });
   }
 
-  return chunks.map((c, i) => ({ ...c, id: `c${i + 1}` }));
+  if (wordBoxes.length === 0) return null;
+
+  return {
+    text: texts.join(" ").replace(/\s+/g, " ").trim(),
+    bbox: mergeWordBoxes(wordBoxes),
+    wordBoxes,
+  };
+}
+
+function linesToChunks(lines: PdfTextItem[][], pageNumber: number, pageWidth: number, pageHeight: number): TextChunk[] {
+  const chunks: TextChunk[] = [];
+  let current: TextChunk | null = null;
+  let currentLines = 0;
+
+  function flushCurrent(): void {
+    if (!current) return;
+    chunks.push(current);
+    current = null;
+    currentLines = 0;
+  }
+
+  for (const line of lines) {
+    const lineChunk = lineToChunkInput(line, pageHeight);
+    if (!lineChunk) continue;
+
+    const shouldStartNew = !current || !current.bbox || (() => {
+      const prevBottom = current.bbox.y + current.bbox.height;
+      const gap = lineChunk.bbox.y - prevBottom;
+      const gapThreshold = Math.max(current.bbox.height, lineChunk.bbox.height) * 1.35;
+      const wouldBeTooLong = current.text.length + lineChunk.text.length + 1 > MAX_CHUNK_CHARS;
+      const tooManyLines = currentLines >= MAX_CHUNK_LINES;
+      return gap < 0 || gap > gapThreshold || wouldBeTooLong || tooManyLines;
+    })();
+
+    if (shouldStartNew) {
+      flushCurrent();
+      current = {
+        id: "",
+        text: lineChunk.text,
+        bbox: lineChunk.bbox,
+        wordBoxes: lineChunk.wordBoxes,
+        pageNumber,
+        pageWidth,
+        pageHeight,
+      };
+      currentLines = 1;
+      continue;
+    }
+
+    if (!current?.bbox) continue;
+
+    current.text += "\n" + lineChunk.text;
+    current.wordBoxes?.push(...lineChunk.wordBoxes);
+    current.bbox = mergeWordBoxes([current.bbox, lineChunk.bbox]);
+    currentLines++;
+  }
+
+  flushCurrent();
+  return chunks;
+}
+
+function assignChunkIds(chunks: TextChunk[]): TextChunk[] {
+  return chunks.map((chunk, index) => ({ ...chunk, id: `c${index + 1}` }));
 }
 
 const PDF_MAGIC = /^%PDF/;
@@ -134,10 +199,11 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
 
     for (let i = 1; i <= pageCount; i++) {
       const page = await pdfjsDoc.getPage(i);
+      const viewport = page.getViewport({ scale: 1 });
       const textContent = await page.getTextContent();
       const items = textContent.items as PdfTextItem[];
-      const lines = groupItemsIntoLines(items);
-      const pageChunks = linesToChunks(lines, i);
+      const lines = groupItemsIntoLines(items, viewport.height);
+      const pageChunks = linesToChunks(lines, i, viewport.width, viewport.height);
       allChunks.push(...pageChunks);
 
       for (const item of items) {
@@ -148,11 +214,12 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
     }
 
     if (totalChars > 50) {
-      const fullText = allChunks.map((c) => c.text).join("\n\n");
+      const chunks = assignChunkIds(allChunks);
+      const fullText = chunks.map((c) => c.text).join("\n\n");
       return {
         text: fullText,
         pageCount,
-        chunks: allChunks,
+        chunks,
         ocrConfidence: 100,
         extractorUsed: "pdfjs-dist",
       };
@@ -174,9 +241,15 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
 
     const pageCount = screenshots.total;
     const allChunks: TextChunk[] = [];
+    const pageSizes = new Map<number, { width: number; height: number }>();
     let totalConfidence = 0;
     let pageWithText = 0;
-    let chunkCounter = 0;
+
+    for (const screenshot of screenshots.pages) {
+      if (typeof screenshot.width === "number" && typeof screenshot.height === "number") {
+        pageSizes.set(screenshot.pageNumber, { width: screenshot.width, height: screenshot.height });
+      }
+    }
 
     const validScreenshots = screenshots.pages.filter((s) => s.dataUrl);
 
@@ -199,23 +272,27 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
       totalConfidence += result.ocrConfidence ?? 0;
       pageWithText++;
 
+      const pageSize = pageSizes.get(screenshot.pageNumber);
       for (const chunk of result.chunks) {
         allChunks.push({
           ...chunk,
-          id: `c${++chunkCounter}`,
+          id: "",
           pageNumber: screenshot.pageNumber,
+          pageWidth: pageSize?.width,
+          pageHeight: pageSize?.height,
         });
       }
     }
 
-    const fullText = allChunks.map((c) => c.text).join("\n\n");
+    const chunks = assignChunkIds(allChunks);
+    const fullText = chunks.map((c) => c.text).join("\n\n");
     const avgConfidence = pageWithText > 0 ? totalConfidence / pageWithText : 0;
 
     if (fullText.length > 0) {
       return {
         text: fullText,
         pageCount,
-        chunks: allChunks,
+        chunks,
         ocrConfidence: avgConfidence,
         extractorUsed: "tesseract",
       };

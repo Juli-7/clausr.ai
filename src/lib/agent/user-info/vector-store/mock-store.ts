@@ -37,7 +37,14 @@ export class MockDocStore implements IDocStore {
       ocrConfidence: extracted.ocrConfidence,
       extractorUsed: extracted.extractorUsed,
       chunkIds,
-      chunks: extracted.chunks.map((c) => ({ id: c.id, pageNumber: c.pageNumber })),
+      chunks: extracted.chunks.map((c) => ({
+        id: c.id,
+        pageNumber: c.pageNumber,
+        bbox: c.bbox,
+        wordBoxes: c.wordBoxes,
+        pageWidth: c.pageWidth,
+        pageHeight: c.pageHeight,
+      })),
     };
     saveFileChunks(sessionId, JSON.stringify([meta]));
     return { extractedText: extracted.text };
@@ -53,7 +60,14 @@ export class MockDocStore implements IDocStore {
       ocrConfidence?: number;
       extractorUsed?: string;
       chunkIds: string[];
-      chunks: { id: string; pageNumber?: number }[];
+      chunks: {
+        id: string;
+        pageNumber?: number;
+        bbox?: { x: number; y: number; width: number; height: number };
+        wordBoxes?: { x: number; y: number; width: number; height: number }[];
+        pageWidth?: number;
+        pageHeight?: number;
+      }[];
     }[] = JSON.parse(fileMetaJson);
     return fileMeta.map((meta) => {
       const fetchedChunks = meta.chunkIds.length > 0 ? getChunksByIds(meta.chunkIds) : [];
@@ -61,6 +75,10 @@ export class MockDocStore implements IDocStore {
         id: cMeta.id,
         text: fetchedChunks.find((fc) => fc.id === meta.chunkIds[i])?.text ?? "",
         pageNumber: cMeta.pageNumber,
+        bbox: cMeta.bbox,
+        wordBoxes: cMeta.wordBoxes,
+        pageWidth: cMeta.pageWidth,
+        pageHeight: cMeta.pageHeight,
       }));
       const fullText = chunks.map((c) => c.text).join("\n");
       return {

@@ -1,7 +1,18 @@
+export interface WordBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface ChunkInfo {
   id: string;
   text: string;
   pageNumber?: number;
+  bbox?: WordBox;
+  wordBoxes?: WordBox[];
+  pageWidth?: number;
+  pageHeight?: number;
 }
 
 export interface ProcessedFile {

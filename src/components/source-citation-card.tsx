@@ -15,6 +15,8 @@ export interface HighlightChunk {
   bbox?: WordBox;
   wordBoxes?: WordBox[];
   pageNumber?: number;
+  pageWidth?: number;
+  pageHeight?: number;
 }
 
 function SourceCitationBadge({

@@ -15,6 +15,8 @@ export interface TextChunk {
   bbox?: WordBox;
   wordBoxes?: WordBox[];
   pageNumber?: number;
+  pageWidth?: number;
+  pageHeight?: number;
 }
 
 export function mergeWordBoxes(boxes: WordBox[]): WordBox {

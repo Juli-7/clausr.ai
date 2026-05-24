@@ -25,7 +25,7 @@ export function getOrCreateSession(sessionId: string, skillName: string): void {
 export function saveChunks(
   sessionId: string,
   fileId: string,
-  chunks: { id: string; text: string; pageNumber?: number; bbox?: unknown }[]
+  chunks: { id: string; text: string; pageNumber?: number; bbox?: unknown; wordBoxes?: unknown; pageWidth?: number; pageHeight?: number }[]
 ): string[] {
   const db = getDb();
   const stmt = db.prepare(
@@ -241,7 +241,7 @@ export function getResponsesForSession(sessionId: string): {
   verdict: string;
   round: number;
   sections?: Record<string, Record<string, string> | string>;
-  sourceCitations?: { ref: number; fileId: string; filename: string; extractedText: string; keyExcerpt: string; fileUrl?: string; pageNumber?: number; chunks?: { id: string; text: string; bbox?: { x: number; y: number; width: number; height: number }; wordBoxes?: { x: number; y: number; width: number; height: number }[]; pageNumber?: number }[] }[];
+  sourceCitations?: { ref: number; fileId: string; filename: string; extractedText: string; keyExcerpt: string; fileUrl?: string; pageNumber?: number; chunks?: { id: string; text: string; bbox?: { x: number; y: number; width: number; height: number }; wordBoxes?: { x: number; y: number; width: number; height: number }[]; pageNumber?: number; pageWidth?: number; pageHeight?: number }[] }[];
   clauseTexts?: Record<string, string>;
   toolCalls?: { step: number; toolName: string; summary: string; status: string }[];
   reasoningSteps?: { stepNumber: number; title: string; body: string; subStep?: number }[];
