@@ -1,10 +1,10 @@
 import type { IDocStore } from "./types";
+import { MockDocStore } from "./mock-store";
 
 let _instance: IDocStore | null = null;
 
 export function getDocStore(): IDocStore {
   if (!_instance) {
-    const { MockDocStore } = require("./mock-store");
     _instance = new MockDocStore();
   }
   return _instance!;
