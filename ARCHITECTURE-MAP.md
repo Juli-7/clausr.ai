@@ -54,7 +54,7 @@
 └─────────────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           SEGMENT 4: LOADING LAYER (ONCE PER SESSION)                │
+│                           SEGMENT 3: LOADING LAYER (ONCE PER SESSION)                │
 │                                                                                      │
 │  loading/loading-orchestrator.ts — TOP-LEVEL ORCHESTRATOR                            │
 │  ┌────────────────────────────────────────────────────────────────────────────────┐  │
@@ -115,7 +115,7 @@
                                    │
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           SEGMENT 5: PIPELINE (PER TURN)                              │
+│                           SEGMENT 4: PIPELINE (PER TURN)                              │
 │                                                                                      │
 │  ┌─────────────────────────────────────────────────────────────────────────────┐    │
 │  │  orchestrator-v2.ts (ENTRY POINT — async generator, yields PipelineEvent)   │    │
@@ -138,31 +138,39 @@
 │         ▼               ▼              ▼               ▼              ▼              │
 │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌───────────────┐  │
 │  │ builtins.ts │ │ errors.ts   │ │ logger.ts   │ │ types.ts    │ │ pipeline-     │  │
-│  │ loadRefer-  │ │ PipelineErr │ │ logPipeline │ │ PipelineEv- │ │ context.ts    │  │
-│  │ ences()     │ │ format...   │ │ truncate()  │ │ ent,        │ │ createPipe-   │  │
-│  │ .execute-   │ └─────────────┘ └─────────────┘ │ Executable- │ │ lineContext() │  │
-│  │  Compliance │                                  │ Step,       │ │ restoreCtx()  │  │
-│  │  Check()    │                                  │ StepResult  │ │               │  │
-│  └─────────────┘                                  └─────────────┘ └───────────────┘  │
-│  ┌────────────────────────────────────────────────────────────────────────────────┐  │
-│  │ executors/llm-executor.ts                                                     │  │
-│  │ executeLlmToolStep(step, ctx, previousError?) — LLM+tool executor with retry  │  │
-│  │ buildDomainSchemaGuide(checks), buildContextSummary(ctx), buildCitationGuide()│  │
-│  └────────────────────────────────────────────────────────────────────────────────┘  │
-│  ┌────────────────────────────────────────────────────────────────────────────────┐  │
-│  │ executors/script-runner.ts                                                     │  │
-│  │ runScript(scriptPath, input, timeoutMs) — spawns python3 subprocess            │  │
-│  │   → used for compliance-check scripts defined in SKILL.md                      │  │
-│  └────────────────────────────────────────────────────────────────────────────────┘  │
+│  │ loadRefer-  │ │ PipelineErr │ │ logPipeline │ │ PipelineEv- │ │ context.ts    │──│──┐
+│  │ ences()     │ │ format...   │ │ truncate()  │ │ ent,        │ │ createPipe-   │  │  │
+│  │ .execute-   │ └─────────────┘ └─────────────┘ │ Executable- │ │ lineContext() │  │  │
+│  │  Compliance │                                  │ Step,       │ │ restoreCtx()  │  │  │
+│  │  Check()    │                                  │ StepResult  │ └───────────────┘  │  │
+│  └─────────────┘                                  └─────────────┘                    │  │
+│  ┌────────────────────────────────────────────────────────────────────────────────┐  │  │
+│  │ executors/llm-executor.ts                                                     │  │  │
+│  │ executeLlmToolStep(step, ctx, previousError?) — LLM+tool executor with retry  │  │  │
+│  │ buildDomainSchemaGuide(checks), buildContextSummary(ctx), buildCitationGuide()│  │  │
+│  └────────────────────────────────────────────────────────────────────────────────┘  │  │
+│  ┌────────────────────────────────────────────────────────────────────────────────┐  │  │
+│  │ executors/script-runner.ts                                                     │  │  │
+│  │ runScript(scriptPath, input, timeoutMs) — spawns python3 subprocess            │  │  │
+│  │   → used for compliance-check scripts defined in SKILL.md                      │  │  │
+│  └────────────────────────────────────────────────────────────────────────────────┘  │  │
+│  ┌──────────────────────────────────────────────────────────────────────────────┐    │  │
+│  │ pipeline/slices/ (5 owned stores)                                            │◄───┘  │
+│  │ CheckStore — CheckResult[], claims, compiled citations                       │       │
+│  │ StepMemory — step outputs keyed by step number                               │       │
+│  │ FileRegistry — uploaded files + chunks                                       │       │
+│  │ PaletteStore — regulation clauses + citation palette                         │       │
+│  │ ReportAssembler — report sections + verdict                                  │       │
+│  └──────────────────────────────────────────────────────────────────────────────┘       │
 │                                                                                      │
 │  PROVIDES: StepResult[], streamed PipelineEvents                                      │
-│  CONSIDERS FROM: Shared (slices via restoreContext), session_setup (DB),              │
+│  CONSIDERS FROM: Pipeline slices (via restoreContext), session_setup (DB),              │
 │    Vector-Store (getFiles for chunks), Knowledge (loadReferences for regs)            │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           SEGMENT 6: EVALUATION LAYER                                │
+│                           SEGMENT 5: EVALUATION LAYER                                │
 │                                                                                      │
 │  evaluation/index.ts                                                    │
 │  ┌────────────────────────────────────┐                                              │
@@ -185,12 +193,12 @@
 │  └──────────────────────────────────────────────────────────────────────┘           │
 │                                                                                      │
 │  PROVIDES: EvaluationResult {confidence, findings, validationErrors, reason}          │
-│  CONSIDERS FROM: Pipeline (CheckStore, PipelineContext), Shared (slices)               │
+│  CONSIDERS FROM: Pipeline (CheckStore, PipelineContext types)                          │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           SEGMENT 7: PRESENT LAYER                                   │
+│                           SEGMENT 6: PRESENT LAYER                                   │
 │                                                                                      │
 │  present/phases/finalize-phase.ts    present/export/export-docx.ts                    │
 │  ┌─────────────────────────────────────────┐  ┌──────────────────────────────────┐   │
@@ -212,7 +220,7 @@
                                    │
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           SEGMENT 8: API ROUTES (Next.js App Router)                  │
+│                           SEGMENT 7: API ROUTES (Next.js App Router)                  │
 │                                                                                      │
 │  POST /api/setup —— once-per-session loading entry point (files, skill gen)          │
 │  POST /api/chat —— per-turn SSE streaming pipeline entry point                       │
@@ -230,54 +238,40 @@
 │  GET  /api/files/[sessionId]/[filename] —— serve uploaded file                       │
 │  POST /api/agent/evolution-confirm —— confirm/dismiss evolution lesson               │
 │                                                                                      │
-│  PROVIDES: HTTP responses; consumes Pipeline (chat), Shared/repository (sessions)    │
-│  CONSIDERS FROM: Pipeline (orchestratePipeline), Shared/memory (DB queries)           │
+│  PROVIDES: HTTP responses; consumes Pipeline (chat), Shared (repository)              │
+│  CONSIDERS FROM: Pipeline (orchestratePipeline), Shared (DB queries via repository)  │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │                           SHARED (cross-layer)                                        │
 │                                                                                      │
-│  shared/slices/                     shared/memory/                                    │
-│  ┌────────────────────────┐        ┌─────────────────────────────┐                   │
-│  │ CheckStore (class)     │        │ database.ts                  │                   │
-│  │ StepMemory (class)     │        │  getDb(), getSetting()       │                   │
-│  │ FileRegistry (class)   │        │  setSetting()                │                   │
-│  │ PaletteStore (class)   │        ├──────────────────────────────┤                   │
-│  │ ReportAssembler (class)│        │ repository.ts                │                   │
-│  └────────────────────────┘        │  getOrCreateSession()        │                   │
-│                                    │  addUserMessage()            │                   │
-│  shared/schemas.ts                 │  addAssistantResponse()      │                   │
-│  ┌────────────────────────┐        │  saveFileContents/Chunks()   │                   │
-│  │ Zod schemas:            │        │  getConversationHistory()    │                   │
-│  │ ChatRequestSchema      │        │  getAllSessions()            │                   │
-│  │ AgentResponseSchema    │        │  deleteSession()             │                   │
-│  │ CitationSchema         │        │  getContextSnapshots()       │                   │
-│  │ ConfidenceSchema       │        │  toggleStar()                │                   │
-│  │ ComplianceCheckSchema  │        │  saveContextSnapshot()        │                   │
-│  │ LessonSchema           │        ├──────────────────────────────┤                   │
-│  │ ReferenceMapSchema     │        │ cleanup.ts                   │                   │
-│  │ ClaimSchema            │        │  pruneOldSessions()          │                   │
-│  │ ToolCallRecordSchema   │        │  deleteSessionCascade()      │                   │
-│  │ ReasoningStepSchema    │        │  removeUploadDir()           │                   │
-│  │ ValidationErrorSchema  │        └──────────────────────────────┘                   │
-│  │ parseChunkRef()        │                                                           │
-│  └────────────────────────┘        shared/template-types.ts                           │
-│                                    ┌────────────────────────────────┐                │
-│  shared/types.ts                  │ ReportTemplate, SectionType     │                │
-│  ┌────────────────────────┐        │ TemplateSection, TemplateField  │                │
-│  │ Re-exports all types   │        └────────────────────────────────┘                │
-│  │ from schemas.ts        │                                                           │
-│  └────────────────────────┘        shared/turn-types.ts                               │
-│                                    ┌────────────────────────────────┐                │
-│  shared/llm/factory.ts            │ ChatTurn interface             │                │
-│  ┌────────────────────────┐        └────────────────────────────────┘                │
-│  │ createModel()          │                                                           │
-│  │ createOpenAI / Anthropic│         (Future: evolution/ directory)                    │
-│  │ DeepSeek reasoning_    │                                                           │
-│  │  content wrapper       │                                                           │
-│  └────────────────────────┘                                                           │
-│                                                                                      │
-│  CONSUMED BY: Loading, Pipeline, Evaluation, Present, API Routes                      │
+│  shared/memory/                     shared/schemas.ts                                 │
+│  ┌──────────────────────────────┐  ┌─────────────────────────────────────┐           │
+│  │ database.ts                   │  │ Zod schemas:                        │           │
+│  │  getDb(), getSetting()        │  │ ChatRequestSchema                  │           │
+│  │  setSetting()                 │  │ AgentResponseSchema                │           │
+│  ├──────────────────────────────┤  │ CitationSchema, ConfidenceSchema     │           │
+│  │ repository.ts                 │  │ ComplianceCheckSchema, ClaimSchema  │           │
+│  │  getOrCreateSession()         │  │ ToolCallRecordSchema                │           │
+│  │  addUserMessage()             │  │ ReasoningStepSchema, LessonSchema   │           │
+│  │  addAssistantResponse()       │  │ ValidationErrorSchema               │           │
+│  │  saveFileChunks()             │  │ ReferenceMapSchema                  │           │
+│  │  deleteSession() / getAll...  │  │ parseChunkRef()                     │           │
+│  │  saveSessionSetup / load...   │  └─────────────────────────────────────┘           │
+│  │  saveContextSnapshot()        │                                                   │
+│  │  toggleStar()                 │  shared/types.ts                                   │
+│  └──────────────────────────────┘  ┌─────────────────────────────────────┐           │
+│                                    │ Re-exports all types                │           │
+│  (Layer-owned slices moved to      │ from schemas.ts                     │           │
+│   pipeline/slices/ — CheckStore,   └─────────────────────────────────────┘           │
+│   StepMemory, FileRegistry,                                                           │
+│   PaletteStore, ReportAssembler,   llm/factory.ts (at src/lib/agent/llm/)            │
+│   cleanup → loading/, template-    ┌─────────────────────────────────────┐           │
+│   types → present/, turn-types     │ createModel() — creates Language-   │           │
+│   → src/types/)                    │ Model from DB settings or env vars  │           │
+│                                    └─────────────────────────────────────┘           │
+│  CONSUMED BY: Loading (repository), Pipeline (repository),                            │
+│    Evaluation (schemas/types), Present (schemas/repository), API Routes               │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -307,11 +301,11 @@ HTTP POST /api/setup
        │    │    ├─ discover scripts/             → [{name, path, desc}]
        │    │    │    └─ getScriptDescription()   → Python docstring
        │    │    └─ load template.json (optional) → ReportTemplate
-       │    ├─ getOrCreateSession(sessionId, skillName)  ◄── shared/memory/repository.ts
-       │    ├─ pruneOldSessions()                        ◄── shared/memory/cleanup.ts
-       │    │    ├─ getSetting("retention_days")
-       │    │    └─ deleteSessionCascade() for expired
-       │    └─ [skill loaded into memory — no context created yet]
+        │    ├─ getOrCreateSession(sessionId, skillName)  ◄── shared/memory/repository.ts
+        │    ├─ pruneOldSessions()                        ◄── loading/cleanup.ts
+        │    │    ├─ getSetting("retention_days")
+        │    │    └─ deleteSessionCascade() for expired
+        │    └─ [skill loaded into memory — no context created yet]
        │
        ├─ createPipelineContext(name, skillmd, checks, sessionId, cid)
        │    ├─ new CheckStore()
@@ -324,45 +318,32 @@ HTTP POST /api/setup
        │  LOADING — INPUT + SKILL GEN
        │════════════════════════════════════════════════════════════════
        │
-       ├─ inputPhase(ctx, {files, sessionId})
-       │    └─ for each file:
-       │         ├─ extractFileContent(file)  ◄── user-info/extractors/index.ts
-       │         │    ├─ image/*  → extractImageText(dataUrl)    ◄── ocr.ts
-       │         │    │    └─ getTesseractWorker().recognize()
-       │         │    │         └─ groupWordsIntoLines() → TextChunk[]
-       │         │    ├─ pdf      → extractPdfText(dataUrl)     ◄── pdf-extract.ts
-       │         │    │    ├─ Path A: pdfjs-dist → itemToWordBox() → linesToChunks()
-       │         │    │    └─ Path B: render + OCR (scanned fallback)
-       │         │    └─ docx     → extractDocxText(dataUrl)    ◄── docx-extract.ts
-       │         │         └─ mammoth → stripHtml → splitParagraphs()
-       │         └─ ctx.files.addFile({fileId, filename, extractedText, chunks, ...})
-       │
-       ├─ skillGenPhase(ctx, message)         (only if isAutoSkill)
-       │    └─ generateSkill(message, fileTexts)  ◄── loading/extractors/skill-generator.ts
-       │         ├─ streamText({model, system: SKILL_GENERATION_PROMPT, messages})
-       │         ├─ matter(fullText) → frontmatter + body
-       │         ├─ parseChecks(skillmd)
-       │         └─ extractRegulationIds(checks)
-       │
-       ├─═══════════════════════════════════════════════════════════════
-       │  LOADING — REFERENCES + STEPS
-       │════════════════════════════════════════════════════════════════
-       │
-       ├─ loadReferences(ctx)  ◄── pipeline/builtins.ts
-       │    ├─ extract regulationIds from ctx.skill.checks
-       │    ├─ loadRegulations(regulationIds)
-       │    │    └─ for each id:
-       │    │         ├─ api.resolveCode(id)
-       │    │         └─ api.getRegulation({code})
-       │    │              └─ RegulationSchema.safeParse()
-       │    ├─ ctx.palette.loadReferences([{filename, content}])
-       │    └─ ctx.palette.loadCitationPalette(palette)
-       │
-       ├─ generateStepsFromChecks(ctx.skill.checks)  ◄── loading/generate-steps.ts
-       │    └─ Steps 1..N: llm+tool (one per check field, with field instructions)
-       │
-       └─ saveSessionSetup(sessionId, {ctx, steps, skillName, correlationId})
-            └─ INSERT ctx JSON + steps JSON into session_setup table
+        ├─ inputPhase(ctx, {files, sessionId})
+        │    └─ docStore.processFile(file, sessionId)  ◄── vector-store/mock-store.ts
+        │         └─ extractFileContent(file)           ◄── user-info extractors
+        │              ├─ image/*  → Tesseract OCR
+        │              ├─ .pdf     → pdfjs-dist (or render+OCR fallback)
+        │              └─ .docx    → mammoth → splitParagraphs()
+        │    └─ returns extractedTexts[] for auto-skill
+        │       (no ctx.files population — chunks stored in doc store)
+        │
+        ├─ skillGenPhase(ctx, message, fileTexts)   (only if isAutoSkill)
+        │    └─ generateSkill(message, fileTexts)  ◄── loading/extractors/skill-generator.ts
+        │         ├─ streamText({model, system: SKILL_GENERATION_PROMPT, messages})
+        │         ├─ matter(fullText) → frontmatter + body
+        │         ├─ parseChecks(skillmd)
+        │         └─ extractRegulationIds(checks)
+        │
+        ├─═══════════════════════════════════════════════════════════════
+        │  LOADING — STEPS
+        │════════════════════════════════════════════════════════════════
+        │
+        ├─ generateStepsFromChecks(ctx.skill.checks)  ◄── loading/generate-steps.ts
+        │    └─ Steps 1..N: llm+tool (one per check field, with field instructions)
+        │
+        └─ saveSessionSetup(sessionId, {ctx, steps, skillName, correlationId})
+             └─ INSERT ctx JSON + steps JSON into session_setup table
+                (palette + file chunks loaded by pipeline layer on each turn)
 ```
 
 ### Phase 2: Chat — POST /api/chat (per turn)
@@ -381,17 +362,27 @@ HTTP POST /api/chat
        │  RESTORE — Load session from DB
        │════════════════════════════════════════════════════════════════
        │
-       ├─ restoreContext(sessionId)  ◄── pipeline/pipeline-context.ts
-       │    ├─ loadSessionSetup(sessionId)      ◄── shared/memory/repository.ts
-       │    ├─ PipelineContext.fromJSON(ctxJson) → reconstructed 5 slices
-       │    ├─ ExecutableStep[].fromJSON(stepsJson)
-       │    └─ Returns {ctx, steps, correlationId}
-       │
-       ├─ initPipelineTurn(ctx, sessionId, message, correlationId)
-       │    ├─ addUserMessage(sessionId, message)        ◄── shared/memory/repository.ts
-       │    ├─ restore previous step outputs from DB (file chunks, snapshots)
-       │    ├─ getResponsesForSession(sessionId)  → ctx.previousTurns[]
-       │    └─ [ctx is now fully loaded with previous turn data]
+        ├─ restoreContext(sessionId)  ◄── pipeline/pipeline-context.ts
+        │    ├─ loadSessionSetup(sessionId)      ◄── shared/memory/repository.ts
+        │    ├─ PipelineContext.fromJSON(ctxJson) → reconstructed 5 slices
+        │    ├─ ExecutableStep[].fromJSON(stepsJson)
+        │    └─ Returns {ctx, steps, correlationId}
+        │
+        ├─ docStore.getFiles(sessionId)           ◄── vector-store/mock-store.ts
+        │    └─ read file metadata + chunk texts from DB
+        │    └─ ctx.files.loadFiles(ProcessedFile[])  ← populate chunks
+        │
+        ├─ loadReferences(ctx)                   ◄── pipeline/builtins.ts
+        │    ├─ extract regulationIds from ctx.skill.checks
+        │    ├─ loadRegulations(ids) via getRegulationApi()
+        │    │    api.resolveCode(id) → api.getRegulation({code})
+        │    └─ ctx.palette.loadCitationPalette(palette)  ← populate citations
+        │
+        ├─ initPipelineTurn(ctx, sessionId, message, correlationId)
+        │    ├─ addUserMessage(sessionId, message)        ◄── shared/memory/repository.ts
+        │    ├─ restore previous step outputs from DB (file chunks, snapshots)
+        │    ├─ getResponsesForSession(sessionId)  → ctx.previousTurns[]
+        │    └─ [ctx is now fully loaded with chunks + citations + previous turn data]
        │
        ├─═══════════════════════════════════════════════════════════════
        │  PIPELINE — REVISION + STEP EXECUTION LOOP
@@ -419,7 +410,7 @@ HTTP POST /api/chat
        │  │    │              │    ├─ buildDomainSchemaGuide(ctx.skill.checks)
        │  │    │              │    └─ ctx.palette.formatSourceSummary(sourcePalette)
        │  │    │              ├─ buildCitationGuide(ctx)
-       │  │    │              ├─ createModel()  ◄── llm/factory.ts
+       │  │    │              ├─ createModel()  ◄── llm/factory.ts (at src/lib/agent/llm/)
        │  │    │              ├─ Register tools from skill.scripts:
        │  │    │              │    ├─ "compliance-check" → executeComplianceCheck()
        │  │    │              │    │    └─ eval operator (>=, <=, >, <, range)
@@ -494,7 +485,7 @@ HTTP POST /api/chat
             │    └─ validationErrors
             │
             ├─ agentResponse = AgentResponseSchema.parse(responseData)
-            ├─ addAssistantResponse(sessionId, agentResponse)  ◄── shared/memory/
+            ├─ addAssistantResponse(sessionId, agentResponse)  ◄── shared/memory/repository.ts
             │
             └─ return {response: agentResponse, validationErrors, confidence}
                  │
@@ -509,11 +500,11 @@ HTTP POST /api/chat
 |---------|------------|-------------------------------|---------------|
 | **1. Knowledge** | Pipeline | `IRegulationApi`, `getRegulationApi()` | — |
 | **2. Vector-Store** | Loading, Pipeline | `IDocStore.processFile()`, `IDocStore.getFiles()`, `setDocStore()`, `extractFileContent()` (internal) | Shared (chunk_store DB) |
-| **3. Loading** | Pipeline (via session_setup DB) | `setupSession()`, `initSession()`, `inputPhase()`, `skillGenPhase()`, `generateStepsFromChecks()`, `saveSessionSetup()`, `SkillLoader`, `ParsedCheck[]`, `ExecutableStep[]` | Vector-Store (processFile), Shared |
-| **4. Pipeline** | Evaluation, Present | `orchestratePipeline(sessionId, msg, revisionFields?)`, `restoreContext()`, `initPipelineTurn()`, `StepResult`, `PipelineEvent` (streaming) | Shared, session_setup DB, Vector-Store (getFiles), Knowledge (loadReferences) |
-| **5. Evaluation** | Present | `evaluate()`, `EvaluationResult` | Pipeline (CheckStore), Shared |
-| **6. Present** | External | `finalizePhase()` → `AgentResponse`, `generateDocx()` → `.docx Blob` | Pipeline, Evaluation, Shared |
-| **7. API Routes** | HTTP clients | 14 route handlers; consumes Pipeline + Shared | Pipeline, Shared |
+| **3. Loading** | Pipeline (via session_setup DB) | `setupSession()`, `initSession()`, `inputPhase()`, `skillGenPhase()`, `generateStepsFromChecks()`, `saveSessionSetup()`, `SkillLoader`, `ParsedCheck[]`, `ExecutableStep[]` | Vector-Store (processFile), Shared (repository) |
+| **4. Pipeline** | Evaluation, Present | `orchestratePipeline(sessionId, msg, revisionFields?)`, `restoreContext()`, `initPipelineTurn()`, `StepResult`, `PipelineEvent` (streaming) | Shared (repository), session_setup DB, Vector-Store (getFiles), Knowledge (loadReferences) |
+| **5. Evaluation** | Present | `evaluate()`, `EvaluationResult` | Pipeline (CheckStore), Shared (schemas) |
+| **6. Present** | External | `finalizePhase()` → `AgentResponse`, `generateDocx()` → `.docx Blob` | Pipeline, Evaluation, Shared (schemas/repository) |
+| **7. API Routes** | HTTP clients | 14 route handlers; consumes Pipeline + Shared | Pipeline, Shared (repository/schemas) |
 
 ### Key Decoupling Points
 
@@ -523,7 +514,7 @@ HTTP POST /api/chat
 
 3. **Loading ↔ Pipeline**: Loading runs once per session (via `POST /api/setup`) and persists skill + steps to `session_setup`. Pipeline restores from DB, then independently loads chunks from the doc store and regulation clauses from the Knowledge API before executing steps.
 
-5. **Pipeline internal**: 5 shared slices (`CheckStore`, `StepMemory`, `FileRegistry`, `PaletteStore`, `ReportAssembler`) hold all state. Pipeline orchestrator coordinates execution loop with: skip-reuse, clear-before-execute, context-snapshot patterns.
+5. **Pipeline internal**: 5 pipeline-owned slices (`CheckStore`, `StepMemory`, `FileRegistry`, `PaletteStore`, `ReportAssembler` under `pipeline/slices/`) hold all state. Pipeline orchestrator coordinates execution loop with: skip-reuse, clear-before-execute, context-snapshot patterns.
 
 6. **Pipeline ↔ Evaluation ↔ Present**: Pipeline runs steps and fills CheckStore. Present calls Evaluation to get confidence + findings + validation, then assembles `AgentResponse`.
 
@@ -716,7 +707,7 @@ executeStepWithRetry(step, ctx, maxRetries=1)   [pipeline/orchestrator-v2.ts]
        ├─ buildCitationGuide(ctx)
        │    (instructions for [R48.5.11] and [S1.c3] markers)
        │
-       ├─ createModel()                              [shared/llm/factory.ts]
+        ├─ createModel()                              [llm/factory.ts]
        │    (reads provider/model from DB or env)
        │
        ├─ Register tools:
@@ -837,8 +828,8 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 |----------|--------|
 | `getDb()` / `getSetting()` / `setSetting()` | `shared/memory/database.ts` |
 | `getConversationHistory()` / `getFileContents()` / `getFileChunks()` | `shared/memory/repository.ts` |
-| `deleteSession()` / `removeUploadDir()` | `shared/memory/repository.ts`, `cleanup.ts` |
-| `isValidSessionId()` | `shared/memory/cleanup.ts` |
+| `deleteSession()` / `removeUploadDir()` | `shared/memory/repository.ts` / `loading/cleanup.ts` |
+| `isValidSessionId()` | `loading/cleanup.ts` |
 | `hasSessionSetup()` (gate in `/api/chat`) | `shared/memory/repository.ts` |
 | `saveContextSnapshot()` / `getContextSnapshots()` | `shared/memory/repository.ts` |
 | `toggleStar()` | `shared/memory/repository.ts` |
@@ -863,8 +854,8 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 | `parseChunkRef()` | `shared/schemas.ts` |
 | `restoreStepOutput()` (internal to `initPipelineTurn`) | `loading/phases/init-phase.ts` |
 | All `.toJSON()` / `.fromJSON()` on slices | serialization helpers |
-| All `CheckStore` internals (`supplementFromContent`, `buildCitationsFromClaims`, `computeVerdict`) | `shared/slices/check-store.ts` |
-| All `ReportAssembler` methods | `shared/slices/report-assembler.ts` |
+| All `CheckStore` internals (`supplementFromContent`, `buildCitationsFromClaims`, `computeVerdict`) | `pipeline/slices/check-store.ts` |
+| All `ReportAssembler` methods | `pipeline/slices/report-assembler.ts` |
 | All Zod schemas | `shared/schemas.ts` |
 | All type re-exports | `shared/types.ts` |
 
@@ -961,7 +952,7 @@ The vector-store layer wraps file extraction, chunking, and storage behind the `
 #### `loading/phases/init-phase.ts`
 | Function | Description |
 |----------|-------------|
-| `initSession(skillName?, sessionId)` | **Once-per-session.** Generates correlation ID, loads skill (or sets auto-skill flag), creates/gets session, prunes old sessions. Returns `{correlationId, isAutoSkill}`. (Does NOT create context — that happens in setupSession.) |
+| `initSession(skillName?, sessionId)` | **Once-per-session.** Generates correlation ID, loads skill (or sets auto-skill flag), gets/creates session, prunes old sessions via `loading/cleanup.ts`. Returns `{correlationId, isAutoSkill}`. (Does NOT create context — that happens in setupSession.) |
 | `initPipelineTurn(ctx, sessionId, message, correlationId)` | **Per-turn.** Adds user message to DB, restores previous step outputs from DB (file chunks, snapshots), loads previous turns. Used by pipeline on every POST /api/chat. |
 
 #### `loading/phases/input-phase.ts`
@@ -1044,6 +1035,52 @@ The vector-store layer wraps file extraction, chunking, and storage behind the `
 | `logInfo(msg)` | Info line to stderr with `[clausr]` prefix. |
 | `logError(tag, err)` | Error line to stderr with prefix. |
 
+#### `pipeline/slices/check-store.ts`
+| Function | Description |
+|----------|-------------|
+| `CheckStore` (class) | Manages check results, claims, and compiled citations. |
+| `.addCheck(result)` / `.addResults(results)` | Add `CheckResult`s. |
+| `.removeResultsForField(field)` | Remove results for a specific field (clear-before-execute). |
+| `.getResults()` | Get all check results. |
+| `.addClaims(claims)` / `.getClaims()` | Set/get claims array. |
+| `.compileCitations(citationPalette, sourcePalette)` | Build `Citation[]` from check results. |
+| `.computeVerdict()` | `FAIL` if any check has `verdict === "FAIL"`, else `PASS`. |
+| `.supplementFromContent(content, ...)` | Scan for `[R...]` markers, backfill missing citations. |
+
+#### `pipeline/slices/step-memory.ts`
+| Function | Description |
+|----------|-------------|
+| `StepMemory` (class) | In-memory store for step outputs. |
+| `.write(stepNumber, value)` / `.read(stepNumber)` | Store/read step output. |
+| `.latest()` | Most recent step output. |
+| `.entries()` | All entries as record. |
+
+#### `pipeline/slices/file-registry.ts`
+| Function | Description |
+|----------|-------------|
+| `FileRegistry` (class) | Manages uploaded files for the session. |
+| `.addFile(file)` / `.getFiles()` | Register/retrieve files. |
+| `.getSourcePalette()` | Convert files to `SourcePaletteEntry[]`. |
+| `.buildContextSummary()` | Build LLM context string with chunk annotations. |
+| `.toJSON()` / `FileRegistry.fromJSON()` | Serialize/deserialize. |
+
+#### `pipeline/slices/palette-store.ts`
+| Function | Description |
+|----------|-------------|
+| `PaletteStore` (class) | Manages regulation references + citation palette. |
+| `.loadReferences(refs)` / `.getReferences()` | Set/get regulation texts. |
+| `.loadCitationPalette(entries)` / `.getCitationPalette()` | Set/get citation palette. |
+| `.formatContextSummary()` | Format citations for LLM context. |
+| `.toJSON()` / `PaletteStore.fromJSON()` | Serialize/deserialize. |
+
+#### `pipeline/slices/report-assembler.ts`
+| Function | Description |
+|----------|-------------|
+| `ReportAssembler` (class) | Assembles report sections + verdict. |
+| `.setContent(sections)` / `.getContent()` | Set/get formatted report. |
+| `.getAllContentFlat()` | Flat string for citation scanning. |
+| `.setVerdict(v)` / `.getVerdict()` | Set/get PASS/FAIL verdict. |
+
 ---
 
 ### SEGMENT 5 — Evaluation Layer (`src/lib/agent/evaluation/`)
@@ -1095,6 +1132,13 @@ The vector-store layer wraps file extraction, chunking, and storage behind the `
 | `escapeXml(s)` | Escapes `&`, `<`, `>`, `"` for safe XML. |
 | `stripMarkdown(md)` | Removes markdown characters. |
 | `buildFallbackDocx(response, skillName?)` | Builds `.docx` from scratch using the `docx` library. |
+
+#### `present/template-types.ts`
+| Type | Description |
+|------|-------------|
+| `ReportTemplate` | `{name, sections: TemplateSection[]}` — template for .docx export. |
+| `TemplateSection` | `{id, title, type (fields\|markdown\|table\|verdict), fields?, columns?}`. |
+| `TemplateField` | `{id, label, type (text\|number\|select), options?}`. |
 
 ---
 
@@ -1245,10 +1289,10 @@ The shared layer contains only what is genuinely cross-layer: type definitions, 
 |---------|-------|-----------|
 | **1. Knowledge** | 3 | ~8 |
 | **2. Vector-Store** | 7 | ~14 |
-| **3. Loading** | 8 | ~11 |
+| **3. Loading** | 10 | ~12 |
 | **4. Pipeline** | 13 | ~21 |
 | **5. Evaluation** | 5 | ~7 |
-| **6. Present** | 4 | ~9 |
+| **6. Present** | 3 | ~9 |
 | **7. API Routes** | 12 | ~15 |
 | **Shared** | 4 | ~20 |
 | **LLM** | 1 | ~3 |
