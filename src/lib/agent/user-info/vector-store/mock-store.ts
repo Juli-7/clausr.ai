@@ -1,4 +1,4 @@
-import type { IDocStore, ProcessedFile } from "./types";
+import type { ChunkInfo, IDocStore, ProcessedFile, WordBox } from "./types";
 import { extractFileContent } from "@/lib/agent/user-info/extractors";
 import {
   saveChunks,
@@ -11,6 +11,25 @@ import fs from "fs";
 import path from "path";
 
 const UPLOADS_DIR = path.join(process.cwd(), "data", "uploads");
+
+function isWordBox(value: unknown): value is WordBox {
+  if (!value || typeof value !== "object") return false;
+  const box = value as Partial<WordBox>;
+  return (
+    typeof box.x === "number" &&
+    typeof box.y === "number" &&
+    typeof box.width === "number" &&
+    typeof box.height === "number"
+  );
+}
+
+function asWordBox(value: unknown): WordBox | undefined {
+  return isWordBox(value) ? value : undefined;
+}
+
+function asWordBoxes(value: unknown): WordBox[] | undefined {
+  return Array.isArray(value) && value.every(isWordBox) ? value : undefined;
+}
 
 function saveRawFile(sessionId: string, filename: string, dataUrl: string): void {
   const dir = path.join(UPLOADS_DIR, sessionId);
@@ -71,15 +90,18 @@ export class MockDocStore implements IDocStore {
     }[] = JSON.parse(fileMetaJson);
     return fileMeta.map((meta) => {
       const fetchedChunks = meta.chunkIds.length > 0 ? getChunksByIds(meta.chunkIds) : [];
-      const chunks = meta.chunks.map((cMeta, i) => ({
-        id: cMeta.id,
-        text: fetchedChunks.find((fc) => fc.id === meta.chunkIds[i])?.text ?? "",
-        pageNumber: cMeta.pageNumber,
-        bbox: cMeta.bbox,
-        wordBoxes: cMeta.wordBoxes,
-        pageWidth: cMeta.pageWidth,
-        pageHeight: cMeta.pageHeight,
-      }));
+      const chunks: ChunkInfo[] = meta.chunks.map((cMeta, i) => {
+        const storedChunk = fetchedChunks.find((fc) => fc.id === meta.chunkIds[i]);
+        return {
+          id: cMeta.id,
+          text: storedChunk?.text ?? "",
+          pageNumber: cMeta.pageNumber ?? storedChunk?.pageNumber,
+          bbox: cMeta.bbox ?? asWordBox(storedChunk?.bbox),
+          wordBoxes: cMeta.wordBoxes ?? asWordBoxes(storedChunk?.wordBoxes),
+          pageWidth: cMeta.pageWidth ?? storedChunk?.pageWidth,
+          pageHeight: cMeta.pageHeight ?? storedChunk?.pageHeight,
+        };
+      });
       const fullText = chunks.map((c) => c.text).join("\n");
       return {
         fileId: meta.fileId,

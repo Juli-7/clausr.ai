@@ -667,16 +667,21 @@ function SourceCitationPopoverImage({
   filename: string;
   highlightChunk: HighlightChunk;
 }) {
+  const isPdf = filename.toLowerCase().endsWith(".pdf");
+  const pageUrl = isPdf && highlightChunk.pageNumber
+    ? `${fileUrl.replace(/\/+$/, "")}/page/${highlightChunk.pageNumber}`
+    : fileUrl;
+
   const imgRef = useRef<HTMLImageElement>(null);
   const [displaySize, setDisplaySize] = useState<{ w: number; h: number; ox: number; oy: number } | null>(null);
 
   const highlightRects: { x: number; y: number; width: number; height: number }[] = [];
-  if (highlightChunk.wordBoxes && displaySize && imgRef.current) {
-    const nw = imgRef.current.naturalWidth;
-    const nh = imgRef.current.naturalHeight;
-    if (nw > 0 && nh > 0) {
-      const sx = displaySize.w / nw;
-      const sy = displaySize.h / nh;
+  if (highlightChunk.wordBoxes && displaySize) {
+    const refWidth = highlightChunk.pageWidth ?? 0;
+    const refHeight = highlightChunk.pageHeight ?? 0;
+    if (refWidth > 0 && refHeight > 0) {
+      const sx = displaySize.w / refWidth;
+      const sy = displaySize.h / refHeight;
       for (const wb of highlightChunk.wordBoxes) {
         highlightRects.push({
           x: wb.x * sx + displaySize.ox,
@@ -703,21 +708,22 @@ function SourceCitationPopoverImage({
       >
         <img
           ref={imgRef}
-          src={fileUrl}
-          alt={filename}
+          src={pageUrl}
+          alt={`${filename}${highlightChunk.pageNumber ? ` page ${highlightChunk.pageNumber}` : ""}`}
           style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
           onLoad={(e) => {
             const img = e.currentTarget;
-            const cw = 352; // container width minus padding
+            const cw = 352;
             const ch = 120;
-            const nw = img.naturalWidth;
-            const nh = img.naturalHeight;
-            const scale = Math.min(cw / nw, ch / nh);
+            const refW = highlightChunk.pageWidth ?? img.naturalWidth;
+            const refH = highlightChunk.pageHeight ?? img.naturalHeight;
+            if (refW <= 0 || refH <= 0) return;
+            const scale = Math.min(cw / refW, ch / refH);
             setDisplaySize({
-              w: nw * scale,
-              h: nh * scale,
-              ox: (cw - nw * scale) / 2,
-              oy: (ch - nh * scale) / 2,
+              w: refW * scale,
+              h: refH * scale,
+              ox: (cw - refW * scale) / 2,
+              oy: (ch - refH * scale) / 2,
             });
           }}
         />

@@ -29,7 +29,7 @@ export function saveChunks(
 ): string[] {
   const db = getDb();
   const stmt = db.prepare(
-    "INSERT INTO chunk_store (id, session_id, file_id, text, page_number, bbox_json, ocr_confidence, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO chunk_store (id, session_id, file_id, text, page_number, bbox_json, word_boxes_json, page_width, page_height, ocr_confidence, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
   );
   const ids: string[] = [];
   const insert = db.transaction(() => {
@@ -43,6 +43,9 @@ export function saveChunks(
         chunks[i].text,
         chunks[i].pageNumber ?? null,
         chunks[i].bbox ? JSON.stringify(chunks[i].bbox) : null,
+        chunks[i].wordBoxes ? JSON.stringify(chunks[i].wordBoxes) : null,
+        chunks[i].pageWidth ?? null,
+        chunks[i].pageHeight ?? null,
         null,
         Date.now()
       );
@@ -52,26 +55,59 @@ export function saveChunks(
   return ids;
 }
 
-export function getChunksByIds(
-  ids: string[]
-): { id: string; fileId: string; text: string; pageNumber?: number; bbox?: unknown }[] {
+interface StoredChunkRow {
+  id: string;
+  fileId: string;
+  text: string;
+  pageNumber?: number;
+  bboxJson?: string | null;
+  wordBoxesJson?: string | null;
+  pageWidth?: number | null;
+  pageHeight?: number | null;
+}
+
+export interface StoredChunk {
+  id: string;
+  fileId: string;
+  text: string;
+  pageNumber?: number;
+  bbox?: unknown;
+  wordBoxes?: unknown;
+  pageWidth?: number;
+  pageHeight?: number;
+}
+
+function hydrateStoredChunk(row: StoredChunkRow): StoredChunk {
+  return {
+    id: row.id,
+    fileId: row.fileId,
+    text: row.text,
+    pageNumber: row.pageNumber ?? undefined,
+    bbox: row.bboxJson ? safeJsonParse(row.bboxJson) : undefined,
+    wordBoxes: row.wordBoxesJson ? safeJsonParse(row.wordBoxesJson) : undefined,
+    pageWidth: row.pageWidth ?? undefined,
+    pageHeight: row.pageHeight ?? undefined,
+  };
+}
+
+export function getChunksByIds(ids: string[]): StoredChunk[] {
   if (ids.length === 0) return [];
   const db = getDb();
   const placeholders = ids.map(() => "?").join(",");
-  return db
+  const rows = db
     .prepare(
-      `SELECT id, file_id as fileId, text, page_number as pageNumber, bbox_json as bboxJson FROM chunk_store WHERE id IN (${placeholders})`
+      `SELECT id, file_id as fileId, text, page_number as pageNumber, bbox_json as bboxJson, word_boxes_json as wordBoxesJson, page_width as pageWidth, page_height as pageHeight FROM chunk_store WHERE id IN (${placeholders})`
     )
-    .all(...ids) as { id: string; fileId: string; text: string; pageNumber?: number; bboxJson?: string }[];
+    .all(...ids) as StoredChunkRow[];
+  return rows.map(hydrateStoredChunk);
 }
 
-export function getChunksBySession(
-  sessionId: string
-): { id: string; fileId: string; text: string; pageNumber?: number; bbox?: unknown }[] {
+export function getChunksBySession(sessionId: string): StoredChunk[] {
   const db = getDb();
-  return db
-    .prepare("SELECT id, file_id as fileId, text, page_number as pageNumber, bbox_json as bboxJson FROM chunk_store WHERE session_id = ?")
-    .all(sessionId) as { id: string; fileId: string; text: string; pageNumber?: number; bboxJson?: string }[];
+  const rows = db
+    .prepare("SELECT id, file_id as fileId, text, page_number as pageNumber, bbox_json as bboxJson, word_boxes_json as wordBoxesJson, page_width as pageWidth, page_height as pageHeight FROM chunk_store WHERE session_id = ?")
+    .all(sessionId) as StoredChunkRow[];
+  return rows.map(hydrateStoredChunk);
 }
 
 export function deleteChunksBySession(sessionId: string): void {

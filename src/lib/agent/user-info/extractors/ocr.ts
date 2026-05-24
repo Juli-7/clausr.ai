@@ -86,7 +86,7 @@ export async function extractImageText(dataUrl: string): Promise<OcrResult> {
   const text = page.text ?? words.map((w) => w.text).join(" ");
   const lines = groupWordsIntoLines(words);
 
-  const chunks: TextChunk[] = lines.map((lineWords, idx) => {
+  const rawChunks: TextChunk[] = lines.map((lineWords, idx) => {
     const wordBoxes = lineWords.map((w) => toWordBox(w.bbox));
     const lineText = lineWords.map((w) => w.text).join(" ");
     return {
@@ -94,6 +94,19 @@ export async function extractImageText(dataUrl: string): Promise<OcrResult> {
       text: lineText,
       bbox: mergeWordBoxes(wordBoxes),
       wordBoxes,
+    };
+  });
+
+  // Apply overlap between adjacent lines for retrieval context
+  const overlapChars = 80;
+  const chunks: TextChunk[] = rawChunks.map((chunk, i) => {
+    if (i === 0) return chunk;
+    const prev = rawChunks[i - 1];
+    if (prev.text.length <= overlapChars) return chunk;
+    const tail = prev.text.slice(-overlapChars);
+    return {
+      ...chunk,
+      text: tail + "\n" + chunk.text,
     };
   });
 

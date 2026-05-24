@@ -165,8 +165,32 @@ function linesToChunks(lines: PdfTextItem[][], pageNumber: number, pageWidth: nu
   return chunks;
 }
 
-function assignChunkIds(chunks: TextChunk[]): TextChunk[] {
-  return chunks.map((chunk, index) => ({ ...chunk, id: `c${index + 1}` }));
+const OVERLAP_CHARS = 120;
+
+function applyOverlap(chunks: TextChunk[]): TextChunk[] {
+  if (chunks.length <= 1) return chunks;
+  const result: TextChunk[] = [chunks[0]];
+  for (let i = 1; i < chunks.length; i++) {
+    const prev = result[i - 1];
+    const curr = chunks[i];
+    if (prev.text.length <= OVERLAP_CHARS) {
+      result.push(curr);
+      continue;
+    }
+    const tail = prev.text.slice(-OVERLAP_CHARS);
+    const lastNewline = tail.indexOf("\n");
+    const overlap = lastNewline >= 0 ? tail.slice(lastNewline + 1) : tail;
+    result.push({
+      ...curr,
+      text: overlap + "\n" + curr.text,
+    });
+  }
+  return result;
+}
+
+function finalizeChunks(chunks: TextChunk[]): TextChunk[] {
+  const withOverlap = applyOverlap(chunks);
+  return withOverlap.map((chunk, index) => ({ ...chunk, id: `c${index + 1}` }));
 }
 
 const PDF_MAGIC = /^%PDF/;
@@ -214,7 +238,7 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
     }
 
     if (totalChars > 50) {
-      const chunks = assignChunkIds(allChunks);
+      const chunks = finalizeChunks(allChunks);
       const fullText = chunks.map((c) => c.text).join("\n\n");
       return {
         text: fullText,
@@ -284,7 +308,7 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
       }
     }
 
-    const chunks = assignChunkIds(allChunks);
+    const chunks = finalizeChunks(allChunks);
     const fullText = chunks.map((c) => c.text).join("\n\n");
     const avgConfidence = pageWithText > 0 ? totalConfidence / pageWithText : 0;
 

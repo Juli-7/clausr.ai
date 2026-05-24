@@ -93,6 +93,9 @@ export function getDb(): Database.Database {
       text TEXT NOT NULL,
       page_number INTEGER,
       bbox_json TEXT,
+      word_boxes_json TEXT,
+      page_width REAL,
+      page_height REAL,
       ocr_confidence REAL,
       created_at INTEGER NOT NULL
     );
@@ -109,6 +112,9 @@ export function getDb(): Database.Database {
   try { db.exec("ALTER TABLE responses ADD COLUMN reasoning_steps_json TEXT"); } catch { /* column exists */ }
   try { db.exec("ALTER TABLE responses ADD COLUMN claims_json TEXT"); } catch { /* column exists */ }
   try { db.exec("ALTER TABLE responses ADD COLUMN confidence_json TEXT"); } catch { /* column exists */ }
+  try { db.exec("ALTER TABLE chunk_store ADD COLUMN word_boxes_json TEXT"); } catch { /* column exists */ }
+  try { db.exec("ALTER TABLE chunk_store ADD COLUMN page_width REAL"); } catch { /* column exists */ }
+  try { db.exec("ALTER TABLE chunk_store ADD COLUMN page_height REAL"); } catch { /* column exists */ }
   // Indexes
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_snapshots_session ON context_snapshots(session_id)"); } catch { /* index exists */ }
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id)"); } catch { /* index exists */ }

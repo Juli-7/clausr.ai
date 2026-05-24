@@ -37,6 +37,7 @@ function splitParagraphs(html: string): string[] {
 }
 
 const MAX_CHUNK_SIZE = 2000;
+const OVERLAP_CHARS = 120;
 
 function splitLargeText(text: string): string[] {
   if (text.length <= MAX_CHUNK_SIZE) return [text];
@@ -79,10 +80,23 @@ export async function extractDocxText(dataUrl: string): Promise<DocxResult> {
   const paragraphs = splitParagraphs(result.value);
 
   const rawChunks = paragraphs.flatMap((text) => splitLargeText(text));
-  const chunks: TextChunk[] = rawChunks.map((text, i) => ({
+  let chunks: TextChunk[] = rawChunks.map((text, i) => ({
     id: `c${i + 1}`,
     text,
   }));
+
+  // Apply overlap between adjacent chunks for retrieval context
+  for (let i = 1; i < chunks.length; i++) {
+    const prev = chunks[i - 1];
+    if (prev.text.length <= OVERLAP_CHARS) continue;
+    const tail = prev.text.slice(-OVERLAP_CHARS);
+    const lastNewline = tail.indexOf("\n");
+    const overlap = lastNewline >= 0 ? tail.slice(lastNewline + 1) : tail;
+    chunks[i] = {
+      ...chunks[i],
+      text: overlap + "\n" + chunks[i].text,
+    };
+  }
 
   return {
     text: chunks.map((c) => c.text).join("\n"),
