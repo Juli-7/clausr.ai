@@ -24,56 +24,33 @@
                                    │
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                     SEGMENT 2: VECTOR-STORE (DOC STORE) LAYER                        │
+│                    SEGMENT 2: VECTOR-STORE (DOC STORE) LAYER                          │
+│                       (mock = extractors; real = vecDB)                               │
 │                                                                                      │
-│  vector-store/index.ts              vector-store/mock-store.ts                       │
-│  ┌──────────────────────┐           ┌──────────────────────────────────┐             │
-│  │ IDocStore            │           │ MockDocStore (class)             │             │
-│  │ getDocStore()        │──────────►│  .processFile(file, sessionId)   │             │
-│  │ setDocStore(store)   │           │    → extract + chunk + store     │             │
-│  └──────────────────────┘           │    → return { extractedText }    │             │
-│                                     │  .getFiles(sessionId)            │             │
-│  vector-store/types.ts              │    → return ProcessedFile[]      │             │
-│  ┌──────────────────────┐           │      (chunks + full text)        │             │
-│  │ IDocStore            │           └──────────────────────────────────┘             │
-│  │ ProcessedFile        │           ┌──────────────────────────────────┐             │
-│  │ ChunkInfo            │           │ (REAL vecDB, future):            │             │
-│  └──────────────────────┘           │  .search(query, topK)            │             │
-│                                     │    → embed query → return        │             │
-│  WRAPS: extractors from             │      only relevant chunks        │             │
-│  user-info layer                    └──────────────────────────────────┘             │
+│  vector-store/                       user-info/extractors/ (mock vecDB engine)       │
+│  ┌───────────────┐   ┌──────────────┐ ┌──────────────┐ ┌──────────────┐             │
+│  │ IDocStore     │   │ OCR (Tesser) │ │ PDF (pdfjs)  │ │ DOCX (mammoth)│            │
+│  │ getDocStore() │   │ extractImage │ │ extractPdf   │ │ extractDocx  │             │
+│  │ setDocStore() │   │ Text()       │ │ Text()       │ │ Text()       │             │
+│  └───────┬───────┘   └──────────────┘ └──────────────┘ └──────────────┘             │
+│          │                                                                           │
+│  ┌───────▼─────────────────────────────────────────────────────────────┐            │
+│  │ MockDocStore (class) — wraps all extractors                          │            │
+│  │  .processFile(file, sessionId)                                       │            │
+│  │    → extractFileContent() → chunk → saveChunks() → saveFileChunks()  │            │
+│  │    → return { extractedText }                                        │            │
+│  │  .getFiles(sessionId)                                                │            │
+│  │    → read file_chunks + chunk_store → return ProcessedFile[]         │            │
+│  └───────────────────────────────────────────────────────────────────────┘            │
 │                                                                                      │
-│  CONSIDERS FROM: user-info extractors (wrapped), shared/memory (chunk_store)         │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-                                   │
-                                   ▼
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           SEGMENT 3: USER-INFO LAYER (EXTRACTORS ONLY)               │
+│  ┌───────────────────────────────────────────────────────────────────────────────┐  │
+│  │ (REAL vecDB, future):                                                          │  │
+│  │  .processFile(file, sessionId) → extract + chunk + embed → store in vector DB │  │
+│  │  .getFiles(sessionId, query) → embed query → search → return top-k chunks    │  │
+│  └───────────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                      │
-│  user-info/extractors/index.ts     user-info/extractors/ocr.ts                       │
-│  ┌──────────────────────┐          ┌──────────────────────┐                          │
-│  │ extractFileContent() │─────────►│ extractImageText()   │                          │
-│  │   → routes by MIME   │          │   → Tesseract.js OCR  │                          │
-│  │   → Image → OCR      ├──       │ getTesseractWorker() │                          │
-│  │   → PDF → pdf-extract│ │       │ groupWordsIntoLines() │                          │
-│  │   → DOCX → docx-ext  │ │       └──────────────────────┘                          │
-│  │ ExtractionResult     │ │                                                          │
-│  │ TextChunk, WordBox   │ │  user-info/extractors/pdf-extract.ts                     │
-│  └──────────────────────┘ │  ┌──────────────────────┐                              │
-│                           ├──►│ extractPdfText()     │                              │
-│                           │   │   Path A: pdfjs-dist │                              │
-│                           │   │   Path B: OCR fallback│                              │
-│                           │   │ itemToWordBox()      │                              │
-│                           │   │ linesToChunks()      │                              │
-│                           │   └──────────────────────┘                              │
-│                           │  user-info/extractors/docx-extract.ts                    │
-│                           └──►┌──────────────────────┐                              │
-│                               │ extractDocxText()    │                              │
-│                               │   → mammoth + strip  │                              │
-│                               └──────────────────────┘                              │
-│                                                                                      │
-│  PROVIDES: ExtractionResult, TextChunk, WordBox                                       │
-│  CONSUMED BY: vector-store layer (MockDocStore wraps all extractors)                  │
+│  PROVIDES: ProcessedFile[], ChunkInfo via IDocStore interface                         │
+│  CONSUMED BY: Loading (processFile), Pipeline (getFiles)                              │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
@@ -92,12 +69,11 @@
 │  │  4. skillGenPhase(fileTexts) → if auto, generate SKILL.md, accepts file texts   │  │
 │  │     as param (no longer reads from ctx.files)                                   │  │
 │  │  5. generateStepsFromChecks() → ExecutableStep[] 1:1 from ##Checks              │  │
-│  │  6. loadReferences()     → fetch regulation clauses → PaletteStore.citations   │  │
-│  │  7. saveSessionSetup()   → persist state to session_setup table                 │  │
-│  │     (fileRegistry saved without chunks — docStore stores them)                  │  │
+│  │  6. saveSessionSetup()   → persist skill + steps + file metadata to              │  │
+│  │     session_setup table (palette is empty — pipeline loads regs)                 │  │
 │  │                                                                                  │  │
-│  │  OUTPUT READY: regulation clauses (in PaletteStore), ExecutableStep[],            │  │
-│  │  file metadata (in FileRegistry without chunks), docStore has chunk data         │  │
+│  │  OUTPUT READY: ExecutableStep[], skill metadata,                                  │  │
+│  │  file metadata (empty FileRegistry), docStore has chunk data                     │  │
 │  └────────────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                      │
 │  loading/phases/init-phase.ts        ┌── SKILL SOURCE (parallel branches) ──┐        │
@@ -131,10 +107,9 @@
 │  └──────────────────────────────────────┘                                                │
 │                                                                                      │
 │  PROVIDES: session_setup persistence — PipelineContext (FileRegistry has metadata    │
-│    only, no chunks; PaletteStore with regulation clauses; StepMemory with step       │
-│    definitions), plus ExecutableStep[]                                                │
-│  CONSIDERS FROM: Knowledge (regulation refs), Vector-Store (via processFile/wraps   │
-│    user-info extractors), Shared (DB persistence)                                     │
+│    only, no chunks; PaletteStore empty — pipeline loads regs; StepMemory with        │
+│    step definitions), plus ExecutableStep[]                                           │
+│  CONSIDERS FROM: Vector-Store (processFile), Shared (DB persistence)                  │
 │  CONSUMED BY: POST /api/setup → setupSession()                                        │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                    │
@@ -182,7 +157,7 @@
 │                                                                                      │
 │  PROVIDES: StepResult[], streamed PipelineEvents                                      │
 │  CONSIDERS FROM: Shared (slices via restoreContext), session_setup (DB),              │
-│    Vector-Store (getFiles to populate chunks in ctx.files)                            │
+│    Vector-Store (getFiles for chunks), Knowledge (loadReferences for regs)            │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
@@ -532,24 +507,21 @@ HTTP POST /api/chat
 
 | Segment | Provides To | Interface (Types + Functions) | Consumes From |
 |---------|------------|-------------------------------|---------------|
-| **1. Knowledge** | Loading, Pipeline | `IRegulationApi`, `getRegulationApi()` | — |
-| **2. Vector-Store** | Loading, Pipeline | `IDocStore.processFile()`, `IDocStore.getFiles()`, `setDocStore()` | User-Info (wrapped), Shared |
-| **3. User-Info** | Vector-Store | `extractFileContent()`, `ExtractionResult`, `TextChunk` | — |
-| **4. Loading** | Pipeline (via session_setup DB) | `setupSession()`, `initSession()`, `inputPhase()`, `skillGenPhase()`, `generateStepsFromChecks()`, `loadReferences()`, `saveSessionSetup()`, `SkillLoader`, `ParsedCheck[]`, `ExecutableStep[]` | Knowledge, Vector-Store, Shared |
-| **5. Pipeline** | Evaluation, Present | `orchestratePipeline(sessionId, msg, revisionFields?)`, `restoreContext()`, `initPipelineTurn()`, `StepResult`, `PipelineEvent` (streaming) | Shared, session_setup DB, Vector-Store |
-| **6. Evaluation** | Present | `evaluate()`, `EvaluationResult` | Pipeline (CheckStore), Shared |
-| **7. Present** | External | `finalizePhase()` → `AgentResponse`, `generateDocx()` → `.docx Blob` | Pipeline, Evaluation, Shared |
-| **8. API Routes** | HTTP clients | 14 route handlers; consumes Pipeline + Shared | Pipeline, Shared |
+| **1. Knowledge** | Pipeline | `IRegulationApi`, `getRegulationApi()` | — |
+| **2. Vector-Store** | Loading, Pipeline | `IDocStore.processFile()`, `IDocStore.getFiles()`, `setDocStore()`, `extractFileContent()` (internal) | Shared (chunk_store DB) |
+| **3. Loading** | Pipeline (via session_setup DB) | `setupSession()`, `initSession()`, `inputPhase()`, `skillGenPhase()`, `generateStepsFromChecks()`, `saveSessionSetup()`, `SkillLoader`, `ParsedCheck[]`, `ExecutableStep[]` | Vector-Store (processFile), Shared |
+| **4. Pipeline** | Evaluation, Present | `orchestratePipeline(sessionId, msg, revisionFields?)`, `restoreContext()`, `initPipelineTurn()`, `StepResult`, `PipelineEvent` (streaming) | Shared, session_setup DB, Vector-Store (getFiles), Knowledge (loadReferences) |
+| **5. Evaluation** | Present | `evaluate()`, `EvaluationResult` | Pipeline (CheckStore), Shared |
+| **6. Present** | External | `finalizePhase()` → `AgentResponse`, `generateDocx()` → `.docx Blob` | Pipeline, Evaluation, Shared |
+| **7. API Routes** | HTTP clients | 14 route handlers; consumes Pipeline + Shared | Pipeline, Shared |
 
 ### Key Decoupling Points
 
 1. **Knowledge ↔ Pipeline**: `PipelineContext.skill` carries loaded skill metadata. `IRegulationApi` is swappable (mock ↔ real).
 
-2. **Vector-Store ↔ Loading/Pipeline**: `IDocStore` is swappable (mock ↔ real vecDB). Loading calls `processFile()` to store files; Pipeline calls `getFiles()` to retrieve chunks. Loading and Pipeline never touch extraction directly.
+2. **Vector-Store ↔ Loading/Pipeline**: `IDocStore` is swappable (mock ↔ real vecDB). Loading calls `processFile()` to store files; Pipeline calls `getFiles()` to retrieve chunks. The extractors (`user-info/`) are internal to the vecDB mock — the rest of the app never touches them directly.
 
-3. **User-Info → Vector-Store**: `extractFileContent()` is wrapped by `MockDocStore`. User-Info is a pure extraction layer — it doesn't know about sessions, pipelines, or storage.
-
-4. **Loading ↔ Pipeline**: Loading runs once per session (via `POST /api/setup`) and persists state (`PipelineContext` + steps) to the `session_setup` DB table. Pipeline restores from DB on each turn via `restoreContext()`. Pipeline never loads skills, files, or refs directly — it queries the doc store for chunks.
+3. **Loading ↔ Pipeline**: Loading runs once per session (via `POST /api/setup`) and persists skill + steps to `session_setup`. Pipeline restores from DB, then independently loads chunks from the doc store and regulation clauses from the Knowledge API before executing steps.
 
 5. **Pipeline internal**: 5 shared slices (`CheckStore`, `StepMemory`, `FileRegistry`, `PaletteStore`, `ReportAssembler`) hold all state. Pipeline orchestrator coordinates execution loop with: skip-reuse, clear-before-execute, context-snapshot patterns.
 
@@ -567,45 +539,30 @@ This section traces the complete function call chain from user input to final ou
 
 ---
 
-### 1. Vector-Store Layer — Doc Store (File Ingestion + Storage)
+### 1. Vector-Store Layer — File Ingestion + Storage (mock = extractors, real = vecDB)
 
-Wraps user-info extractors behind the `IDocStore` interface. Called by both loading and pipeline layers.
+Wraps extraction/chunking/storage behind the `IDocStore` interface. Called by both loading and pipeline layers.
 
 ```
-  loading layer: docStore.processFile(file, sessionId)
-    └── vector-store/mock-store.ts (or real vecDB)
-        ├─ deleteChunksBySession(sessionId)
-        ├─ extractFileContent(file)     ◄── user-info extractors (OCR/PDF/DOCX)
-        ├─ saveChunks(sessionId, fileId, chunks)  ◄── chunk_store DB table
-        ├─ saveFileChunks(file metadata)           ◄── sessions.file_chunks
-        └─ return { extractedText }                ◄── full text for auto-skill
+  SETUP (loading layer calls):
+    docStore.processFile(file, sessionId)
+      ├─ extractFileContent(file)     ◄── user-info extractors (OCR/PDF/DOCX)
+      │    dispatches by MIME:
+      │    ├─ image → Tesseract OCR → groupWordsIntoLines() → TextChunk[]
+      │    ├─ .pdf  → pdfjs-dist → groupItemsIntoLines() → linesToChunks()
+      │    │         or render+OCR fallback (scanned PDFs)
+      │    └─ .docx → mammoth → stripHtml() → splitParagraphs()
+      ├─ saveChunks(sessionId, fileId, chunks)  ◄── chunk_store DB table
+      ├─ saveFileChunks(file metadata)           ◄── sessions.file_chunks
+      └─ return { extractedText }                ◄── full text for auto-skill
 
-  pipeline layer: docStore.getFiles(sessionId)
-    └── vector-store/mock-store.ts
-        ├─ getFileChunks(sessionId) → file metadata
-        ├─ getChunksByIds(chunkIds) → chunk texts
-        └─ return ProcessedFile[] with ALL chunks
+  PIPELINE (orchestrator calls):
+    docStore.getFiles(sessionId)
+      ├─ read file metadata + chunk texts from DB
+      └─ return ProcessedFile[] with ALL chunks
 
   [REAL vecDB future: getFiles(query) embeds query, searches top-k chunks]
 ```
-
-User-info extractors are the lowest-level file I/O:
-
-```
-extractFileContent(file)
-  └── user-info/extractors/index.ts
-      dispatches by MIME type/extension:
-      ├─ image/*   → extractImageText(dataUrl)       [user-info/extractors/ocr.ts]
-      │                getTesseractWorker().recognize()
-      │                groupWordsIntoLines(words) → TextChunk[]
-      ├─ .pdf       → extractPdfText(dataUrl)         [user-info/extractors/pdf-extract.ts]
-      │                pdfjs-dist → itemToWordBox() → groupItemsIntoLines() → linesToChunks()
-      │                or render+OCR fallback
-      └─ .docx      → extractDocxText(dataUrl)        [user-info/extractors/docx-extract.ts]
-                       mammoth → stripHtml() → splitParagraphs()
-```
-
-The **chunking** happens here in user-info. The layer above (vector-store) wraps and persists the result.
 
 ---
 
@@ -673,19 +630,14 @@ inputPhase(ctx, {files, sessionId})          [loading/phases/input-phase.ts]
     └─ (fileTexts is a param, no longer reads from ctx.files)
 ```
 
-#### Step 2d — Build Steps + Load Regulation Clauses
+#### Step 2d — Build Steps
 
 ```
 generateStepsFromChecks(checks)              [loading/generate-steps.ts]
   └─ buildFieldInstructions(c) per check     → ExecutableStep[] (1:1 llm+tool per ##Check)
-
-loadReferences(ctx)                          [pipeline/builtins.ts]
-  ├─ extract regulationIds from ctx.skill.checks
-  ├─ loadRegulations(ids) via getRegulationApi()
-  │    api.resolveCode(id) → api.getRegulation({code}) → RegulationSchema.safeParse()
-  ├─ ctx.palette.loadReferences([{filename, content}])
-  └─ ctx.palette.loadCitationPalette(palette) → CitationPaletteEntry[]
 ```
+
+(No regulation loading during setup — pipeline layer handles that before step execution.)
 
 #### End of Loading — Everything Ready
 
@@ -693,12 +645,12 @@ After `saveSessionSetup()` persists to DB, the `session_setup` table contains:
 
 | Asset | Where it lives |
 |---|---|
-| Source file chunks | `FileRegistry` (stored in `session_setup` as metadata-only; actual chunks in doc store via `chunk_store` DB) |
-| Regulation clauses | `PaletteStore.citationPalette` (serialized in `session_setup`) |
+| Source file chunks | Doc store (loaded by pipeline via `docStore.getFiles()`) |
+| Regulation clauses | Knowledge API (loaded by pipeline via `loadReferences()`) |
 | Step definitions | `ExecutableStep[]` (serialized in `session_setup`) |
 | Skill metadata | `PipelineContext.skill` (serialized in `session_setup`) |
 
-The pipeline never re-extracts, re-fetches, or re-generates any of this.
+The pipeline restores skill + steps from `session_setup`, then loads chunks from the doc store and regulation clauses from the Knowledge API before executing steps.
 
 ---
 
@@ -706,19 +658,24 @@ The pipeline never re-extracts, re-fetches, or re-generates any of this.
 
 Entry: `POST /api/chat` → `orchestratePipeline(sessionId, message, revisionFields?)` in `pipeline/orchestrator-v2.ts`
 
-#### Step 3a — Restore + Initialize Turn + Populate Chunks
+#### Step 3a — Restore + Initialize Turn + Populate Data
 
 ```
 restoreContext(sessionId, correlationId)      [pipeline/pipeline-context.ts]
   ├─ loadSessionSetup(sessionId)  (from session_setup DB)
   ├─ PipelineContext.fromJSON() → reconstruct 5 slices
-  │    (FileRegistry restored with metadata only — NO chunks)
+  │    (FileRegistry + PaletteStore both empty)
   └─ deserialize steps
 
 docStore.getFiles(sessionId)                  [vector-store/mock-store.ts]
   ├─ read file metadata + chunk texts from DB
-  ├─ ctx.files.loadFiles(ProcessedFile[])     ← replaces metadata with full entries
-  └─ pipeline now has ctx.files with chunks
+  └─ ctx.files.loadFiles(ProcessedFile[])     ← populate chunks
+
+loadReferences(ctx)                           [pipeline/builtins.ts]
+  ├─ extract regulationIds from ctx.skill.checks
+  ├─ loadRegulations(ids) via getRegulationApi()
+  │    api.resolveCode(id) → api.getRegulation({code})
+  └─ ctx.palette.loadCitationPalette(palette) → populate citations
 
 initPipelineTurn(ctx, sessionId, message, correlationId)  [loading/phases/init-phase.ts]
   ├─ addUserMessage(sessionId, message)
@@ -893,10 +850,10 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 | `getScriptDescription()` | `loading/skill/loader.ts` |
 | `parseFieldType(raw)` | `loading/skill/check-parser.ts` |
 | `mergeWordBoxes()` | `user-info/extractors/index.ts` |
-| `getTesseractWorker()` / `collectWords()` / `toWordBox()` | `user-info/extractors/ocr.ts` |
-| `groupWordsIntoLines()` / `groupItemsIntoLines()` | `ocr.ts` / `pdf-extract.ts` |
-| `itemToWordBox()` / `linesToChunks()` | `pdf-extract.ts` |
-| `stripHtml()` / `splitParagraphs()` | `docx-extract.ts` |
+| `getTesseractWorker()` / `collectWords()` / `toWordBox()` | `user-info/extractors/ocr.ts` (internal to MockDocStore) |
+| `groupWordsIntoLines()` / `groupItemsIntoLines()` | `ocr.ts` / `pdf-extract.ts` (internal to MockDocStore) |
+| `itemToWordBox()` / `linesToChunks()` | `pdf-extract.ts` (internal to MockDocStore) |
+| `stripHtml()` / `splitParagraphs()` | `docx-extract.ts` (internal to MockDocStore) |
 | `storeOutput()` / `resolveCitationRef()` / `deriveRegulation()` | `pipeline/executors/llm-executor.ts` |
 | `averageOcrConfidence()` | `evaluation/confidence.ts` |
 | `validateClaimChunks()` | `evaluation/validate.ts` |
@@ -943,7 +900,9 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 
 ---
 
-### SEGMENT 2 — Vector-Store (`src/lib/agent/vector-store/`)
+### SEGMENT 2 — Vector-Store (`src/lib/agent/vector-store/` + `user-info/extractors/`)
+
+The vector-store layer wraps file extraction, chunking, and storage behind the `IDocStore` interface. The extractors (`user-info/`) are the mock implementation's engine — they are NOT a separate segment.
 
 #### `vector-store/types.ts`
 | Type / Interface | Description |
@@ -967,44 +926,7 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 
 ---
 
-### SEGMENT 3 — User-Info Layer (`src/lib/agent/user-info/`)
-
-#### `user-info/extractors/index.ts`
-| Function | Description |
-|----------|-------------|
-| `extractFileContent(file)` | Main dispatcher. Routes to OCR, PDF, or DOCX extractor based on MIME type and extension. Returns `ExtractionResult`. |
-| `mergeWordBoxes(boxes)` | Computes bounding box enclosing all input word boxes. |
-| `ExtractionResult` | `{text, chunks, pageCount?, ocrConfidence?, extractorUsed?}` |
-| `TextChunk` | `{id, text, bbox?, wordBoxes?, pageNumber?}` |
-| `WordBox` | `{x, y, width, height}` |
-
-#### `user-info/extractors/ocr.ts`
-| Function | Description |
-|----------|-------------|
-| `extractImageText(dataUrl)` | OCR via Tesseract.js. Returns `{text, chunks, ocrConfidence, extractorUsed}`. |
-| `getTesseractWorker()` | Lazy singleton Tesseract worker initialization. |
-| `collectWords(page)` | Flattens Tesseract page blocks/paragraphs/lines/words into flat array. |
-| `toWordBox(b)` | Converts Tesseract bbox to internal `WordBox` format. |
-| `groupWordsIntoLines(words)` | Groups words into lines by Y-coordinate proximity. |
-
-#### `user-info/extractors/pdf-extract.ts`
-| Function | Description |
-|----------|-------------|
-| `extractPdfText(dataUrl)` | Two-path PDF extraction: Path A uses pdfjs-dist; Path B renders + OCR for scanned PDFs. |
-| `itemToWordBox(item)` | Converts PDF text item's transform matrix to `WordBox`. |
-| `groupItemsIntoLines(items)` | Groups PDF text items into lines by Y-coordinate proximity. |
-| `linesToChunks(lines, pageNumber)` | Converts lines to `TextChunk[]` with bounding boxes. |
-
-#### `user-info/extractors/docx-extract.ts`
-| Function | Description |
-|----------|-------------|
-| `extractDocxText(dataUrl)` | Uses mammoth to convert DOCX to HTML, strips to plain text. Returns paragraph-level chunks. |
-| `stripHtml(html)` | Removes HTML tags and decodes HTML entities. |
-| `splitParagraphs(html)` | Splits HTML by `</p>` tags and strips each paragraph. |
-
----
-
-### SEGMENT 4 — Loading Layer (`src/lib/agent/loading/`)
+### SEGMENT 3 — Loading Layer (`src/lib/agent/loading/`)
 
 #### `loading/skill/loader.ts`
 | Function | Description |
@@ -1028,7 +950,7 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 #### `loading/loading-orchestrator.ts`
 | Function | Description |
 |----------|-------------|
-| `setupSession({skillName?, sessionId, files?, message?})` | **Once-per-session orchestrator.** Runs `initSession()`, `createPipelineContext()`, `inputPhase()`, `skillGenPhase()` (if auto), `generateStepsFromChecks()`, `loadReferences()`, then `saveSessionSetup()`. Called from `POST /api/setup`. |
+| `setupSession({skillName?, sessionId, files?, message?})` | **Once-per-session orchestrator.** Runs `initSession()`, `createPipelineContext()`, `inputPhase()`, `skillGenPhase()` (if auto), `generateStepsFromChecks()`, then `saveSessionSetup()`. Pipeline layer handles regulation + chunk loading. |
 
 #### `loading/generate-steps.ts`
 | Function | Description |
@@ -1060,7 +982,7 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 
 ---
 
-### SEGMENT 5 — Pipeline (`src/lib/agent/pipeline/`)
+### SEGMENT 4 — Pipeline (`src/lib/agent/pipeline/`)
 
 #### `pipeline/orchestrator-v2.ts`
 | Function | Description |
@@ -1082,7 +1004,7 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 #### `pipeline/builtins.ts`
 | Function | Description |
 |----------|-------------|
-| `loadReferences(ctx)` | Loads regulation data into palette by extracting IDs from checks, fetching via API. Builds `CitationPaletteEntry[]`. |
+| `loadReferences(ctx)` | Loads regulation data into palette by extracting IDs from checks, fetching via API. Builds `CitationPaletteEntry[]`. Called by pipeline orchestrator (not loading layer). |
 | `executeComplianceCheck(input)` | Evaluates numerical checks against operators (`>=`, `<=`, `>`, `<`, `range`). Returns pass/fail results. Called as a registered tool handler. |
 
 #### `pipeline/executors/llm-executor.ts`
@@ -1124,7 +1046,7 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 
 ---
 
-### SEGMENT 6 — Evaluation Layer (`src/lib/agent/evaluation/`)
+### SEGMENT 5 — Evaluation Layer (`src/lib/agent/evaluation/`)
 
 #### `evaluation/index.ts`
 | Function | Description |
@@ -1155,7 +1077,7 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 
 ---
 
-### SEGMENT 7 — Present Layer (`src/lib/agent/present/`)
+### SEGMENT 6 — Present Layer (`src/lib/agent/present/`)
 
 #### `present/phases/finalize-phase.ts`
 | Function | Description |
@@ -1176,7 +1098,7 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 
 ---
 
-### SEGMENT 8 — API Routes (`src/app/api/`)
+### SEGMENT 7 — API Routes (`src/app/api/`)
 
 #### `api/setup/route.ts`
 | Route | Description |
@@ -1400,16 +1322,15 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 | Segment | Files | Functions |
 |---------|-------|-----------|
 | **1. Knowledge** | 3 | ~8 |
-| **2. Vector-Store** | 3 | ~4 |
-| **3. User-Info** | 4 | ~10 |
-| **4. Loading** | 9 | ~12 |
-| **5. Pipeline** | 8 | ~15 |
-| **6. Evaluation** | 5 | ~7 |
-| **7. Present** | 3 | ~8 |
-| **8. API Routes** | 12 | ~15 |
+| **2. Vector-Store** | 7 | ~14 |
+| **3. Loading** | 8 | ~11 |
+| **4. Pipeline** | 8 | ~15 |
+| **5. Evaluation** | 5 | ~7 |
+| **6. Present** | 3 | ~8 |
+| **7. API Routes** | 12 | ~15 |
 | **Shared** | 12 | ~43 |
 | **LLM (shared/llm)** | 1 | ~3 |
-| **Total (agent engine)** | **49** | **~108** |
-| **Total (all source)** | **60** | **~124** |
+| **Total (agent engine)** | **48** | **~106** |
+| **Total (all source)** | **59** | **~122** |
 
-*Updated 2026-05-24: added vector-store layer (IDocStore, MockDocStore), refactored inputPhase to call docStore.processFile() instead of direct extraction, skillGenPhase now takes fileTexts as param, orchestrator calls docStore.getFiles() to populate ctx.files with chunks, user-info extractors now wrapped by vector-store layer.*
+*Updated 2026-05-24: added vector-store layer (IDocStore, MockDocStore) merging extractors into it; moved loadReferences + docStore.getFiles from loading layer to pipeline; loading now only sets up skill + steps; user-info extractors are internal to vector-store mock.*

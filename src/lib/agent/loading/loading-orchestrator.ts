@@ -2,7 +2,6 @@ import { initSession } from "@/lib/agent/loading/phases/init-phase";
 import { inputPhase } from "@/lib/agent/loading/phases/input-phase";
 import { skillGenPhase } from "@/lib/agent/loading/phases/skill-gen-phase";
 import { generateStepsFromChecks } from "@/lib/agent/loading/generate-steps";
-import { loadReferences } from "@/lib/agent/pipeline/builtins";
 import { createPipelineContext } from "@/lib/agent/pipeline/pipeline-context";
 import { generateCorrelationId } from "@/lib/agent/pipeline/errors";
 import { saveSessionSetup } from "@/lib/agent/shared/memory/repository";
@@ -18,10 +17,10 @@ export interface SetupSessionParams {
 /**
  * Once-per-session setup orchestrator.
  *
- * Loads/generates the skill, extracts files, builds steps,
- * loads regulation references, and persists everything to the
- * session_setup table so the pipeline layer can restore it on
- * subsequent /api/chat calls.
+ * Loads/generates the skill, processes files (via vector-store),
+ * builds steps from ##Checks, and persists to session_setup.
+ * Regulation reference loading and chunk retrieval happen
+ * in the pipeline layer — loading only sets up skill + steps.
  */
 export async function setupSession(params: SetupSessionParams): Promise<{ correlationId: string }> {
   const correlationId = generateCorrelationId();
@@ -61,10 +60,7 @@ export async function setupSession(params: SetupSessionParams): Promise<{ correl
   const steps = generateStepsFromChecks(ctx.skill.checks);
   logPipeline(`[SETUP] generated ${steps.length} step(s) from ${ctx.skill.checks.length} check(s)`);
 
-  // 6. Load regulation references into palette
-  await loadReferences(ctx);
-
-  // 7. Persist everything to DB
+  // 6. Persist everything to DB (palette is empty — pipeline layer loads regs)
   saveSessionSetup(params.sessionId, {
     skillName: ctx.skill.name,
     skillmd: ctx.skill.skillmd,
@@ -72,8 +68,8 @@ export async function setupSession(params: SetupSessionParams): Promise<{ correl
     scripts: ctx.skill.scripts,
     regulationIds: ctx.skill.regulationIds,
     steps,
-    paletteReferences: ctx.palette.toJSON().references,
-    paletteCitations: ctx.palette.toJSON().citationPalette,
+    paletteReferences: [],
+    paletteCitations: [],
     fileRegistry: ctx.files.toJSON(),
   });
 

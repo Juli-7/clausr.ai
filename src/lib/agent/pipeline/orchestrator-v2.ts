@@ -1,6 +1,7 @@
 import { executeLlmToolStep } from "./executors/llm-executor";
 import { restoreContext } from "./pipeline-context";
 import { getDocStore } from "@/lib/agent/vector-store";
+import { loadReferences } from "./builtins";
 import { initPipelineTurn } from "@/lib/agent/loading/phases/init-phase";
 import { identifyRevisionTarget, identifyRevisionTargets } from "@/lib/agent/loading/phases/revision-phase";
 import { saveContextSnapshot, getResponseCount } from "@/lib/agent/shared/memory/repository";
@@ -14,11 +15,9 @@ import type { PipelineContext } from "./pipeline-context";
  * Pipeline entry point — runs the LLM step-execution loop, evaluation,
  * and presentation for an already-set-up session.
  *
- * Loading phases (skill loading, file extraction, reference loading,
- * step generation) are handled once by LoadingOrchestrator.setupSession()
- * and persisted to the session_setup table. This function restores
- * that state on every call, making it safe to invoke multiple times
- * per session (human-in-the-loop review).
+ * Loading layer sets up skill + steps + stores files in doc store.
+ * Pipeline restores context, then loads regulation references +
+ * file chunks from the doc store before executing steps.
  */
 export async function* orchestratePipeline(
   sessionId: string,
@@ -43,6 +42,9 @@ export async function* orchestratePipeline(
     ctx.files.loadFiles(storedFiles);
     logPipeline(`loaded ${storedFiles.length} file(s) with ${storedFiles.reduce((s, f) => s + f.chunks.length, 0)} chunk(s) from doc store`);
   }
+
+  await loadReferences(ctx);
+  logPipeline(`loaded ${ctx.palette.getCitationPalette().length} citation(s) from regulation API`);
 
   // ── Per-turn initialization ──
   await initPipelineTurn(ctx, sessionId, message, correlationId);
