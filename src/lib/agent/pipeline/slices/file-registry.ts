@@ -1,5 +1,5 @@
 import type { TextChunk } from "@/lib/agent/user-info/extractors";
-import type { SourcePaletteEntry } from "@/lib/agent/pipeline/pipeline-context";
+import type { SourcePaletteEntry } from "../pipeline-context";
 
 export interface UploadedFileEntry {
   fileId: string;

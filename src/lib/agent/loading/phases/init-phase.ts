@@ -1,7 +1,7 @@
 import { loadSkill } from "@/lib/agent/loading/skill/loader";
 import { getOrCreateSession, addUserMessage } from "@/lib/agent/shared/memory/repository";
 import { getResponsesForSession } from "@/lib/agent/shared/memory/repository";
-import { pruneOldSessions } from "@/lib/agent/shared/memory/cleanup";
+import { pruneOldSessions } from "@/lib/agent/loading/cleanup";
 import { PipelineError } from "@/lib/agent/pipeline/errors";
 import { logPipeline, truncate } from "@/lib/agent/pipeline/logger";
 import type { PipelineContext, CheckResult } from "@/lib/agent/pipeline/pipeline-context";

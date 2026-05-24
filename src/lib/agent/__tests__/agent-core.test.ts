@@ -4,11 +4,11 @@ import { parseChecks } from "@/lib/agent/loading/skill/check-parser";
 import { executeComplianceCheck } from "@/lib/agent/pipeline/builtins";
 import { computeConfidence } from "@/lib/agent/evaluation/confidence";
 import { createPipelineContext } from "@/lib/agent/pipeline/pipeline-context";
-import { CheckStore } from "@/lib/agent/shared/slices/check-store";
-import { StepMemory } from "@/lib/agent/shared/slices/step-memory";
-import { PaletteStore } from "@/lib/agent/shared/slices/palette-store";
-import { FileRegistry } from "@/lib/agent/shared/slices/file-registry";
-import { ReportAssembler } from "@/lib/agent/shared/slices/report-assembler";
+import { CheckStore } from "@/lib/agent/pipeline/slices/check-store";
+import { StepMemory } from "@/lib/agent/pipeline/slices/step-memory";
+import { PaletteStore } from "@/lib/agent/pipeline/slices/palette-store";
+import { FileRegistry } from "@/lib/agent/pipeline/slices/file-registry";
+import { ReportAssembler } from "@/lib/agent/pipeline/slices/report-assembler";
 
 // ── parseChunkRef ──
 

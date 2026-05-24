@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { AgentResponse } from "@/lib/agent/shared/types";
-import type { ReportTemplate } from "@/lib/agent/shared/template-types";
+import type { ReportTemplate } from "@/lib/agent/present/template-types";
 
 // Replicate the utility functions from export-docx.ts for testing
 // (they are not exported individually, so we test them inline)

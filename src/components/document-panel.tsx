@@ -9,7 +9,7 @@ import { SourceCitationCard } from "@/components/source-citation-card";
 import type { HighlightChunk } from "@/components/source-citation-card";
 import { InlineCommentThread } from "@/components/inline-comment";
 import { CommentPopover } from "@/components/comment-popover";
-import type { ChatTurn } from "@/lib/agent/shared/turn-types";
+import type { ChatTurn } from "@/types/agent-types";
 import { DownloadDropdown } from "@/components/download-dropdown";
 
 interface DocumentPanelProps {

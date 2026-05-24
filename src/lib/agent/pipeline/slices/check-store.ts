@@ -1,6 +1,6 @@
 import type { Citation, Claim, SourceCitation } from "@/lib/agent/shared/schemas";
-import type { CheckResult, CitationPaletteEntry, SourcePaletteEntry } from "@/lib/agent/pipeline/pipeline-context";
-import { logPipeline } from "@/lib/agent/pipeline/logger";
+import type { CheckResult, CitationPaletteEntry, SourcePaletteEntry } from "../pipeline-context";
+import { logPipeline } from "../logger";
 
 export class CheckStore {
   private checkResults: CheckResult[] = [];

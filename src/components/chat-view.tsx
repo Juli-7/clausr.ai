@@ -11,7 +11,7 @@ import { EvolutionConfirmDialog } from "@/components/evolution-confirm-dialog";
 import { useApp } from "@/lib/app-context";
 import type { AgentResponse } from "@/lib/agent/shared/types";
 import type { ChatRequestFile } from "@/lib/agent/shared/schemas";
-import type { ChatTurn } from "@/lib/agent/shared/turn-types";
+import type { ChatTurn } from "@/types/agent-types";
 interface PendingComment {
   selectedText: string;
   comment: string;

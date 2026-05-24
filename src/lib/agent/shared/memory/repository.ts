@@ -4,8 +4,8 @@ import type { Citation } from "@/lib/agent/shared/schemas";
 import type { ParsedCheck } from "@/lib/agent/loading/skill/check-parser";
 import type { ExecutableStep } from "@/lib/agent/pipeline/types";
 import type { CitationPaletteEntry } from "@/lib/agent/pipeline/pipeline-context";
-import type { LoadedReference } from "@/lib/agent/shared/slices/palette-store";
-import type { UploadedFileEntry } from "@/lib/agent/shared/slices/file-registry";
+import type { LoadedReference } from "@/lib/agent/pipeline/slices/palette-store";
+import type { UploadedFileEntry } from "@/lib/agent/pipeline/slices/file-registry";
 
 function safeJsonParse<T>(json: string, fallback?: T): T {
   try {

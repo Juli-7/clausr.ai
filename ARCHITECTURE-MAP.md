@@ -529,7 +529,7 @@ HTTP POST /api/chat
 
 7. **API Routes ↔ Loading + Pipeline**: `/api/setup` calls `setupSession()` (loading layer). `/api/chat` calls `orchestratePipeline()` (pipeline layer) wrapped in SSE `ReadableStream`. All other routes are thin wrappers over `shared/memory/repository.ts` or `loading/skill/loader.ts`.
 
-8. **Shared**: 5 slices + `memory/` + `schemas.ts` + types live in `shared/` — consumed by every layer but owned by none.
+8. **Shared**: `schemas.ts` + `types.ts` + `memory/database.ts` + `memory/repository.ts` — the genuinely cross-layer core. Layer-owned state (5 slices) lives in `pipeline/slices/`.
 
 ---
 
@@ -1165,73 +1165,9 @@ The vector-store layer wraps file extraction, chunking, and storage behind the `
 
 ---
 
-### SHARED — Cross-Layer State & Persistence (`src/lib/agent/shared/`)
+### SHARED — Core Types & Persistence (`src/lib/agent/shared/`)
 
-#### `shared/slices/check-store.ts`
-| Function | Description |
-|----------|-------------|
-| `CheckStore` (class) | Manages check results, claims, and compiled citations across pipeline + evaluation. |
-| `.addCheck(result)` | Add single `CheckResult`. |
-| `.addResults(results)` | Add multiple `CheckResult`s. |
-| `.removeResultsForField(field)` | Remove and return results for a specific field (clear-before-execute pattern). |
-| `.getResults()` | Get all check results. |
-| `.addClaims(claims)` | Set claims array. |
-| `.getClaims()` | Get claims. |
-| `.getCitations()` | Get compiled regulation citations. |
-| `.getSourceCitations()` | Get compiled source citations. |
-| `.compileCitations(citationPalette, sourcePalette)` | Build `Citation[]` from check results by palette lookup + dedup + sort. |
-| `.buildCitationsFromClaims(citationPalette, sourcePalette)` | Build citations from structured claims. |
-| `.supplementFromContent(content, citationPalette, sourcePalette)` | Scan content for `[R...]`/`[S...]` markers and backfill missing citations. |
-| `.computeVerdict()` | `FAIL` if any check has `verdict === "FAIL"`, else `PASS`. |
-| `.failureCount` (getter) | Count of `FAIL` verdicts. |
-
-#### `shared/slices/step-memory.ts`
-| Function | Description |
-|----------|-------------|
-| `StepMemory` (class) | In-memory store for step outputs and arbitrary raw data. |
-| `.write(stepNumber, value)` | Store output for a step. |
-| `.read(stepNumber)` | Read output for a step. |
-| `.latest()` | Most recent step output (highest step number). |
-| `.getRaw(key)` | Read arbitrary data by string key. |
-| `.setRaw(key, value)` | Write arbitrary data by string key. |
-| `.entries()` | All entries as record. |
-
-#### `shared/slices/file-registry.ts`
-| Function | Description |
-|----------|-------------|
-| `FileRegistry` (class) | Manages uploaded files for the pipeline session. |
-| `.addFile(file)` | Register an uploaded file. |
-| `.getFiles()` | Get all uploaded files. |
-| `.hasFiles()` | Check if any files registered. |
-| `.getSourcePalette()` | Convert files to `SourcePaletteEntry[]` with excerpts. |
-| `.buildContextSummary()` | Build LLM context string from files with chunk annotations. |
-| `.averageOcrConfidence()` | Average OCR confidence across files. |
-| `.toJSON()` / `FileRegistry.fromJSON()` | Serialize/deserialize registry state for session persistence. |
-
-#### `shared/slices/palette-store.ts`
-| Function | Description |
-|----------|-------------|
-| `PaletteStore` (class) | Manages loaded regulation references and citation palette. |
-| `.loadReferences(refs)` | Load regulation reference texts. |
-| `.getReferences()` | Get loaded references. |
-| `.loadCitationPalette(entries)` | Load citation palette entries. |
-| `.getCitationPalette()` | Get citation palette. |
-| `.findCitation(ref)` | Lookup citation entry by ID. |
-| `.formatContextSummary()` | Format citations as LLM context string. |
-| `.formatSourceSummary(sourcePalette)` | Format source files as LLM context string. |
-| `.toJSON()` / `PaletteStore.fromJSON()` | Serialize/deserialize palette state for session persistence. |
-
-#### `shared/slices/report-assembler.ts`
-| Function | Description |
-|----------|-------------|
-| `ReportAssembler` (class) | Assembles and stores report sections and verdict. |
-| `.setContent(sections)` | Set report sections. |
-| `.getContent()` | Get formatted report as markdown. |
-| `.getAllContentFlat()` | Get all content as flat string for citation scanning. |
-| `.getSections()` | Get raw sections record. |
-| `.getSection(id)` | Get single section by ID. |
-| `.setVerdict(v)` | Set PASS/FAIL verdict. |
-| `.getVerdict()` | Get verdict. |
+The shared layer contains only what is genuinely cross-layer: type definitions, the DB singleton, and the repository of DB access functions. Layer-owned state (slices) lives in its owning layer under `pipeline/slices/`.
 
 #### `shared/memory/database.ts`
 | Function | Description |
@@ -1262,13 +1198,7 @@ The vector-store layer wraps file extraction, chunking, and storage behind the `
 | `getContextSnapshots(sessionId)` | SELECT all snapshots. |
 | `toggleStar(sessionId, starred)` | UPDATE `sessions.starred`. |
 
-#### `shared/memory/cleanup.ts`
-| Function | Description |
-|----------|-------------|
-| `pruneOldSessions()` | Deletes unstarred sessions past retention limits. Runs in single transaction. |
-| `isValidSessionId(id)` | Regex validation for session IDs. |
-| `deleteSessionCascade(db, sessionId)` | Delete all related records. |
-| `removeUploadDir(sessionId)` | Remove `data/uploads/{sessionId}` directory. |
+*(cleanup.ts moved to `loading/cleanup.ts`)*
 
 #### `shared/schemas.ts`
 | Schema | Description |
@@ -1291,24 +1221,16 @@ The vector-store layer wraps file extraction, chunking, and storage behind the `
 | `ReferenceMapSchema` | `Record<string, string>` — code alias map. |
 | `parseChunkRef(chunkRef)` | Parses `"S1.c3"` → `{fileRef: 1, chunkId: "c3"}`. |
 
-#### `shared/template-types.ts`
-| Type | Description |
-|------|-------------|
-| `ReportTemplate` | `{name, sections: TemplateSection[]}` — template for .docx export. |
-| `TemplateSection` | `{id, title, type (fields|markdown|table|verdict), fields?, columns?}`. |
-| `TemplateField` | `{id, label, type (text|number|select), options?}`. |
+*(template-types.ts moved to `present/template-types.ts`)*
 
-#### `shared/turn-types.ts`
-| Type | Description |
-|------|-------------|
-| `ChatTurn` | UI-facing: `{userMessage, attachedFiles, response?, reasoningSteps, toolCalls, liveToolResults, error}`. |
+*(turn-types.ts moved to `src/types/agent-types.ts`)*
 
 #### `shared/types.ts`
 | Type | Description |
 |------|-------------|
 | (re-exports) | Re-exports all inferred types from `schemas.ts`: `Citation`, `SourceCitation`, `SourceChunk`, `Claim`, `Verdict`, `AgentResponse`, `Confidence`, `ChatRequest`, `ComplianceCheckInput`, `ToolCallRecord`, `ValidationError`, `ReasoningStep`. |
 
-#### `shared/llm/factory.ts`
+#### `llm/factory.ts` (at `src/lib/agent/llm/`)
 | Function | Description |
 |----------|-------------|
 | `createModel()` | Creates a `LanguageModel` instance. Reads provider (openai/anthropic/deepseek), API key, model name from DB settings or env vars. Wraps DeepSeek fetch to inject `reasoning_content` placeholder for tool_calls compat. |
@@ -1324,13 +1246,13 @@ The vector-store layer wraps file extraction, chunking, and storage behind the `
 | **1. Knowledge** | 3 | ~8 |
 | **2. Vector-Store** | 7 | ~14 |
 | **3. Loading** | 8 | ~11 |
-| **4. Pipeline** | 8 | ~15 |
+| **4. Pipeline** | 13 | ~21 |
 | **5. Evaluation** | 5 | ~7 |
-| **6. Present** | 3 | ~8 |
+| **6. Present** | 4 | ~9 |
 | **7. API Routes** | 12 | ~15 |
-| **Shared** | 12 | ~43 |
-| **LLM (shared/llm)** | 1 | ~3 |
+| **Shared** | 4 | ~20 |
+| **LLM** | 1 | ~3 |
 | **Total (agent engine)** | **48** | **~106** |
 | **Total (all source)** | **59** | **~122** |
 
-*Updated 2026-05-24: added vector-store layer (IDocStore, MockDocStore) merging extractors into it; moved loadReferences + docStore.getFiles from loading layer to pipeline; loading now only sets up skill + steps; user-info extractors are internal to vector-store mock.*
+*Updated 2026-05-24 (2): moved layer-owned state out of shared/ into owning layers — slices → pipeline/slices/, cleanup → loading/, template-types → present/, turn-types → src/types/. Shared now contains only schemas, types, database, and repository.*

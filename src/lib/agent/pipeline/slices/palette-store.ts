@@ -1,4 +1,4 @@
-import type { CitationPaletteEntry, SourcePaletteEntry } from "@/lib/agent/pipeline/pipeline-context";
+import type { CitationPaletteEntry, SourcePaletteEntry } from "../pipeline-context";
 
 export interface LoadedReference {
   filename: string;
