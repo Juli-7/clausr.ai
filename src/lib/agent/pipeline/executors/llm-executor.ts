@@ -128,7 +128,6 @@ ${retryContext}
       system: toolSystemPrompt,
       messages: [{ role: "user", content: userMessage }],
       tools: Object.keys(tools).length > 0 ? tools : undefined,
-      toolChoice: "required",
       ...(step.temperature !== undefined ? { temperature: step.temperature } : {}),
       onStepFinish: (event) => {
         logPipeline(`  [LLM+TOOL] step=${step.number} onStepFinish: toolResults=${event.toolResults?.length ?? 0} textLen=${(event.text ?? "").length}`);
