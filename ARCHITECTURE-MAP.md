@@ -24,7 +24,31 @@
                                    │
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           SEGMENT 2: USER-INFO LAYER                                 │
+│                     SEGMENT 2: VECTOR-STORE (DOC STORE) LAYER                        │
+│                                                                                      │
+│  vector-store/index.ts              vector-store/mock-store.ts                       │
+│  ┌──────────────────────┐           ┌──────────────────────────────────┐             │
+│  │ IDocStore            │           │ MockDocStore (class)             │             │
+│  │ getDocStore()        │──────────►│  .processFile(file, sessionId)   │             │
+│  │ setDocStore(store)   │           │    → extract + chunk + store     │             │
+│  └──────────────────────┘           │    → return { extractedText }    │             │
+│                                     │  .getFiles(sessionId)            │             │
+│  vector-store/types.ts              │    → return ProcessedFile[]      │             │
+│  ┌──────────────────────┐           │      (chunks + full text)        │             │
+│  │ IDocStore            │           └──────────────────────────────────┘             │
+│  │ ProcessedFile        │           ┌──────────────────────────────────┐             │
+│  │ ChunkInfo            │           │ (REAL vecDB, future):            │             │
+│  └──────────────────────┘           │  .search(query, topK)            │             │
+│                                     │    → embed query → return        │             │
+│  WRAPS: extractors from             │      only relevant chunks        │             │
+│  user-info layer                    └──────────────────────────────────┘             │
+│                                                                                      │
+│  CONSIDERS FROM: user-info extractors (wrapped), shared/memory (chunk_store)         │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                           SEGMENT 3: USER-INFO LAYER (EXTRACTORS ONLY)               │
 │                                                                                      │
 │  user-info/extractors/index.ts     user-info/extractors/ocr.ts                       │
 │  ┌──────────────────────┐          ┌──────────────────────┐                          │
@@ -49,12 +73,11 @@
 │                               └──────────────────────┘                              │
 │                                                                                      │
 │  PROVIDES: ExtractionResult, TextChunk, WordBox                                       │
-│  CONSIDERS FROM: nothing (pure file I/O)                                              │
+│  CONSUMED BY: vector-store layer (MockDocStore wraps all extractors)                  │
 └─────────────────────────────────────────────────────────────────────────────────────┘
-                                   │
-                                   ▼
+
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           SEGMENT 3: LOADING LAYER (ONCE PER SESSION)                │
+│                           SEGMENT 4: LOADING LAYER (ONCE PER SESSION)                │
 │                                                                                      │
 │  loading/loading-orchestrator.ts — TOP-LEVEL ORCHESTRATOR                            │
 │  ┌────────────────────────────────────────────────────────────────────────────────┐  │
@@ -64,16 +87,17 @@
 │  │                               CheckStore(verdicts), StepMemory(outputs),       │  │
 │  │                               FileRegistry(chunks/x), PaletteStore(regs/refs), │  │
 │  │                               ReportAssembler(sections)                        │  │
-│  │  3. inputPhase()         → calls extractFileContent() in user-info layer       │  │
-│  │     (not chunking —     to parse/chunk files, then stores chunks in DB         │  │
-│  │      that's user-info)                                                          │  │
-│  │  4. skillGenPhase()      → if auto, generate SKILL.md (alternative to step 1)   │  │
+│  │  3. inputPhase()         → calls docStore.processFile() (vector-store layer)     │  │
+│  │     (returns extractedText[]; no ctx.files population)                           │  │
+│  │  4. skillGenPhase(fileTexts) → if auto, generate SKILL.md, accepts file texts   │  │
+│  │     as param (no longer reads from ctx.files)                                   │  │
 │  │  5. generateStepsFromChecks() → ExecutableStep[] 1:1 from ##Checks              │  │
 │  │  6. loadReferences()     → fetch regulation clauses → PaletteStore.citations   │  │
-│  │  7. saveSessionSetup()   → persist EVERYTHING to session_setup table            │  │
+│  │  7. saveSessionSetup()   → persist state to session_setup table                 │  │
+│  │     (fileRegistry saved without chunks — docStore stores them)                  │  │
 │  │                                                                                  │  │
-│  │  OUTPUT READY: source file chunks (in FileRegistry), regulation clauses         │  │
-│  │  (in PaletteStore), ExecutableStep[] (each mapped 1:1 to a ##Check field)       │  │
+│  │  OUTPUT READY: regulation clauses (in PaletteStore), ExecutableStep[],            │  │
+│  │  file metadata (in FileRegistry without chunks), docStore has chunk data         │  │
 │  └────────────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                      │
 │  loading/phases/init-phase.ts        ┌── SKILL SOURCE (parallel branches) ──┐        │
@@ -95,9 +119,9 @@
 │  │  Checks(checks)      │            loading/phases/input-phase.ts                    │
 │  │ buildFieldInstruc-   │            ┌──────────────────────────────────────┐        │
 │  │  tions(c)            │            │ inputPhase(ctx, {files, sessionId}) │        │
-│  └──────────────────────┘            │  → calls extractFileContent()        │        │
-│                                      │    (user-info: OCR/PDF/DOCX parsers) │        │
-│  loading/phases/revision-phase.ts    │  → chunked by user-info, stored here │        │
+│  └──────────────────────┘            │  → calls docStore.processFile()      │        │
+│                                      │    (vector-store: extract + chunk   │        │
+│  loading/phases/revision-phase.ts    │     + store, return extractedText)  │        │
 │  ┌──────────────────────────────────────┐  └──────────────────────────────────────┘   │
 │  │ identifyRevisionTarget(ctx, msg)   │                                                │
 │  │  → LLM determines which step redo  │                                                │
@@ -106,22 +130,24 @@
 │  │  → maps checkbox fields→step nums  │                                                │
 │  └──────────────────────────────────────┘                                                │
 │                                                                                      │
-│  PROVIDES: session_setup persistence — fully populated PipelineContext (slices       │
-│    include FileRegistry with chunks, PaletteStore with regulation clauses,           │
-│    StepMemory with step definitions), plus ExecutableStep[]                           │
-│  CONSIDERS FROM: Knowledge (regulation refs), User-Info (chunks via extractFile-     │
-│    Content), Shared (DB persistence)                                                  │
+│  PROVIDES: session_setup persistence — PipelineContext (FileRegistry has metadata    │
+│    only, no chunks; PaletteStore with regulation clauses; StepMemory with step       │
+│    definitions), plus ExecutableStep[]                                                │
+│  CONSIDERS FROM: Knowledge (regulation refs), Vector-Store (via processFile/wraps   │
+│    user-info extractors), Shared (DB persistence)                                     │
 │  CONSUMED BY: POST /api/setup → setupSession()                                        │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           SEGMENT 4: PIPELINE (PER TURN)                              │
+│                           SEGMENT 5: PIPELINE (PER TURN)                              │
 │                                                                                      │
 │  ┌─────────────────────────────────────────────────────────────────────────────┐    │
 │  │  orchestrator-v2.ts (ENTRY POINT — async generator, yields PipelineEvent)   │    │
 │  │  orchestratePipeline(sessionId, message, revisionFields?)                   │    │
 │  │    ├─► restoreContext(sessionId)  — load ctx + steps from session_setup DB   │    │
+│  │    ├─► docStore.getFiles(sessionId) → ctx.files.loadFiles() — populate      │    │
+│  │    │    chunks from doc store (mock: all chunks; real vecDB: per-step)       │    │
 │  │    ├─► initPipelineTurn()         — addUserMessage + restore previous turns   │    │
 │  │    ├─► identifyRevisionTarget(s)  — which step(s) to redo from fields/LLM   │    │
 │  │    ├─► [loop] executeStepWithRetry — execute each step (llm+tool, retry 1x)  │    │
@@ -155,12 +181,13 @@
 │  └────────────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                      │
 │  PROVIDES: StepResult[], streamed PipelineEvents                                      │
-│  CONSIDERS FROM: Shared (slices via restoreContext), session_setup (DB)               │
+│  CONSIDERS FROM: Shared (slices via restoreContext), session_setup (DB),              │
+│    Vector-Store (getFiles to populate chunks in ctx.files)                            │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           SEGMENT 5: EVALUATION LAYER                                │
+│                           SEGMENT 6: EVALUATION LAYER                                │
 │                                                                                      │
 │  evaluation/index.ts                                                    │
 │  ┌────────────────────────────────────┐                                              │
@@ -188,7 +215,7 @@
                                    │
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           SEGMENT 6: PRESENT LAYER                                   │
+│                           SEGMENT 7: PRESENT LAYER                                   │
 │                                                                                      │
 │  present/phases/finalize-phase.ts    present/export/export-docx.ts                    │
 │  ┌─────────────────────────────────────────┐  ┌──────────────────────────────────┐   │
@@ -210,7 +237,7 @@
                                    │
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           SEGMENT 7: API ROUTES (Next.js App Router)                  │
+│                           SEGMENT 8: API ROUTES (Next.js App Router)                  │
 │                                                                                      │
 │  POST /api/setup —— once-per-session loading entry point (files, skill gen)          │
 │  POST /api/chat —— per-turn SSE streaming pipeline entry point                       │
@@ -506,28 +533,31 @@ HTTP POST /api/chat
 | Segment | Provides To | Interface (Types + Functions) | Consumes From |
 |---------|------------|-------------------------------|---------------|
 | **1. Knowledge** | Loading, Pipeline | `IRegulationApi`, `getRegulationApi()` | — |
-| **2. User-Info** | Loading | `extractFileContent()`, `ExtractionResult`, `TextChunk` | — |
-| **3. Loading** | Pipeline (via session_setup DB) | `setupSession()`, `initSession()`, `inputPhase()`, `skillGenPhase()`, `generateStepsFromChecks()`, `loadReferences()`, `saveSessionSetup()`, `SkillLoader`, `ParsedCheck[]`, `ExecutableStep[]` | Knowledge, User-Info, Shared |
-| **4. Pipeline** | Evaluation, Present | `orchestratePipeline(sessionId, msg, revisionFields?)`, `restoreContext()`, `initPipelineTurn()`, `StepResult`, `PipelineEvent` (streaming) | Shared, session_setup DB |
-| **5. Evaluation** | Present | `evaluate()`, `EvaluationResult` | Pipeline (CheckStore), Shared |
-| **6. Present** | External | `finalizePhase()` → `AgentResponse`, `generateDocx()` → `.docx Blob` | Pipeline, Evaluation, Shared |
-| **7. API Routes** | HTTP clients | 14 route handlers; consumes Pipeline + Shared | Pipeline, Shared |
+| **2. Vector-Store** | Loading, Pipeline | `IDocStore.processFile()`, `IDocStore.getFiles()`, `setDocStore()` | User-Info (wrapped), Shared |
+| **3. User-Info** | Vector-Store | `extractFileContent()`, `ExtractionResult`, `TextChunk` | — |
+| **4. Loading** | Pipeline (via session_setup DB) | `setupSession()`, `initSession()`, `inputPhase()`, `skillGenPhase()`, `generateStepsFromChecks()`, `loadReferences()`, `saveSessionSetup()`, `SkillLoader`, `ParsedCheck[]`, `ExecutableStep[]` | Knowledge, Vector-Store, Shared |
+| **5. Pipeline** | Evaluation, Present | `orchestratePipeline(sessionId, msg, revisionFields?)`, `restoreContext()`, `initPipelineTurn()`, `StepResult`, `PipelineEvent` (streaming) | Shared, session_setup DB, Vector-Store |
+| **6. Evaluation** | Present | `evaluate()`, `EvaluationResult` | Pipeline (CheckStore), Shared |
+| **7. Present** | External | `finalizePhase()` → `AgentResponse`, `generateDocx()` → `.docx Blob` | Pipeline, Evaluation, Shared |
+| **8. API Routes** | HTTP clients | 14 route handlers; consumes Pipeline + Shared | Pipeline, Shared |
 
 ### Key Decoupling Points
 
 1. **Knowledge ↔ Pipeline**: `PipelineContext.skill` carries loaded skill metadata. `IRegulationApi` is swappable (mock ↔ real).
 
-2. **User-Info ↔ Loading**: `Loading` calls `extractFileContent()` and receives `ExtractionResult`. Loading never touches file parsing.
+2. **Vector-Store ↔ Loading/Pipeline**: `IDocStore` is swappable (mock ↔ real vecDB). Loading calls `processFile()` to store files; Pipeline calls `getFiles()` to retrieve chunks. Loading and Pipeline never touch extraction directly.
 
-3. **Loading ↔ Pipeline**: Loading runs once per session (via `POST /api/setup`) and persists full state (`PipelineContext` + steps) to the `session_setup` DB table. Pipeline restores from DB on each turn via `restoreContext()`. Pipeline never loads skills, files, or refs.
+3. **User-Info → Vector-Store**: `extractFileContent()` is wrapped by `MockDocStore`. User-Info is a pure extraction layer — it doesn't know about sessions, pipelines, or storage.
 
-4. **Pipeline internal**: 5 shared slices (`CheckStore`, `StepMemory`, `FileRegistry`, `PaletteStore`, `ReportAssembler`) hold all state. Pipeline orchestrator coordinates execution loop with: skip-reuse, clear-before-execute, context-snapshot patterns.
+4. **Loading ↔ Pipeline**: Loading runs once per session (via `POST /api/setup`) and persists state (`PipelineContext` + steps) to the `session_setup` DB table. Pipeline restores from DB on each turn via `restoreContext()`. Pipeline never loads skills, files, or refs directly — it queries the doc store for chunks.
 
-5. **Pipeline ↔ Evaluation ↔ Present**: Pipeline runs steps and fills CheckStore. Present calls Evaluation to get confidence + findings + validation, then assembles `AgentResponse`.
+5. **Pipeline internal**: 5 shared slices (`CheckStore`, `StepMemory`, `FileRegistry`, `PaletteStore`, `ReportAssembler`) hold all state. Pipeline orchestrator coordinates execution loop with: skip-reuse, clear-before-execute, context-snapshot patterns.
 
-6. **API Routes ↔ Loading + Pipeline**: `/api/setup` calls `setupSession()` (loading layer). `/api/chat` calls `orchestratePipeline()` (pipeline layer) wrapped in SSE `ReadableStream`. All other routes are thin wrappers over `shared/memory/repository.ts` or `loading/skill/loader.ts`.
+6. **Pipeline ↔ Evaluation ↔ Present**: Pipeline runs steps and fills CheckStore. Present calls Evaluation to get confidence + findings + validation, then assembles `AgentResponse`.
 
-7. **Shared**: 5 slices + `memory/` + `schemas.ts` + types live in `shared/` — consumed by every layer but owned by none.
+7. **API Routes ↔ Loading + Pipeline**: `/api/setup` calls `setupSession()` (loading layer). `/api/chat` calls `orchestratePipeline()` (pipeline layer) wrapped in SSE `ReadableStream`. All other routes are thin wrappers over `shared/memory/repository.ts` or `loading/skill/loader.ts`.
+
+8. **Shared**: 5 slices + `memory/` + `schemas.ts` + types live in `shared/` — consumed by every layer but owned by none.
 
 ---
 
@@ -537,9 +567,29 @@ This section traces the complete function call chain from user input to final ou
 
 ---
 
-### 1. User-Info Layer — File Ingestion
+### 1. Vector-Store Layer — Doc Store (File Ingestion + Storage)
 
-Called by `inputPhase(ctx, {files, sessionId})` in the loading layer. For each uploaded file:
+Wraps user-info extractors behind the `IDocStore` interface. Called by both loading and pipeline layers.
+
+```
+  loading layer: docStore.processFile(file, sessionId)
+    └── vector-store/mock-store.ts (or real vecDB)
+        ├─ deleteChunksBySession(sessionId)
+        ├─ extractFileContent(file)     ◄── user-info extractors (OCR/PDF/DOCX)
+        ├─ saveChunks(sessionId, fileId, chunks)  ◄── chunk_store DB table
+        ├─ saveFileChunks(file metadata)           ◄── sessions.file_chunks
+        └─ return { extractedText }                ◄── full text for auto-skill
+
+  pipeline layer: docStore.getFiles(sessionId)
+    └── vector-store/mock-store.ts
+        ├─ getFileChunks(sessionId) → file metadata
+        ├─ getChunksByIds(chunkIds) → chunk texts
+        └─ return ProcessedFile[] with ALL chunks
+
+  [REAL vecDB future: getFiles(query) embeds query, searches top-k chunks]
+```
+
+User-info extractors are the lowest-level file I/O:
 
 ```
 extractFileContent(file)
@@ -555,7 +605,7 @@ extractFileContent(file)
                        mammoth → stripHtml() → splitParagraphs()
 ```
 
-Returns `ExtractionResult{text, chunks, ocrConfidence, extractorUsed}`. The **chunking** (splitting into `TextChunk[]`) happens here in user-info. The loading layer merely calls this function and persists the result.
+The **chunking** happens here in user-info. The layer above (vector-store) wraps and persists the result.
 
 ---
 
@@ -612,10 +662,15 @@ createPipelineContext(name, skillmd, sessionId, cid, checks, scripts, regulation
 ```
 inputPhase(ctx, {files, sessionId})          [loading/phases/input-phase.ts]
   └─ for each file:
-       extractFileContent(file)              ◄── user-info (chunking happens there)
-       ctx.files.addFile({fileId, filename, extractedText, chunks, ...})
-       saveFileContents(sessionId, text)      ◄── persisted to DB
-       saveFileChunks(sessionId, JSON.stringify(chunks))
+       store.processFile(file, sessionId)    ◄── vector-store (extract + chunk + store)
+         → returns { extractedText }
+       extractedTexts.push(extractedText)
+  └─ return string[] extractedTexts
+
+  (No ctx.files population during loading — chunks are stored in doc store.)
+
+  skillGenPhase(ctx, message, fileTexts)     [loading/phases/skill-gen-phase.ts]
+    └─ (fileTexts is a param, no longer reads from ctx.files)
 ```
 
 #### Step 2d — Build Steps + Load Regulation Clauses
@@ -638,7 +693,7 @@ After `saveSessionSetup()` persists to DB, the `session_setup` table contains:
 
 | Asset | Where it lives |
 |---|---|
-| Source file chunks | `FileRegistry` (serialized in `session_setup`) |
+| Source file chunks | `FileRegistry` (stored in `session_setup` as metadata-only; actual chunks in doc store via `chunk_store` DB) |
 | Regulation clauses | `PaletteStore.citationPalette` (serialized in `session_setup`) |
 | Step definitions | `ExecutableStep[]` (serialized in `session_setup`) |
 | Skill metadata | `PipelineContext.skill` (serialized in `session_setup`) |
@@ -651,13 +706,19 @@ The pipeline never re-extracts, re-fetches, or re-generates any of this.
 
 Entry: `POST /api/chat` → `orchestratePipeline(sessionId, message, revisionFields?)` in `pipeline/orchestrator-v2.ts`
 
-#### Step 3a — Restore + Initialize Turn
+#### Step 3a — Restore + Initialize Turn + Populate Chunks
 
 ```
 restoreContext(sessionId, correlationId)      [pipeline/pipeline-context.ts]
   ├─ loadSessionSetup(sessionId)  (from session_setup DB)
   ├─ PipelineContext.fromJSON() → reconstruct 5 slices
+  │    (FileRegistry restored with metadata only — NO chunks)
   └─ deserialize steps
+
+docStore.getFiles(sessionId)                  [vector-store/mock-store.ts]
+  ├─ read file metadata + chunk texts from DB
+  ├─ ctx.files.loadFiles(ProcessedFile[])     ← replaces metadata with full entries
+  └─ pipeline now has ctx.files with chunks
 
 initPipelineTurn(ctx, sessionId, message, correlationId)  [loading/phases/init-phase.ts]
   ├─ addUserMessage(sessionId, message)
@@ -804,12 +865,14 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 | `GET /api/files/[sessionId]/[filename]` | `api/files/[sessionId]/[filename]/route.ts` |
 | `POST /api/agent/evolution-confirm` | `api/agent/evolution-confirm/route.ts` |
 
-#### Mock Layer (development stand-in for Knowledge)
+#### Mock Layers (development stand-ins)
 
 | Function | Module |
 |----------|--------|
 | `MockRegulationApi` (class + all methods) | `knowledge/mock-regulation-api.ts` |
 | `getRegulationApi()` / `setRegulationApi()` | `knowledge/regulation-api.ts` |
+| `MockDocStore` (class + all methods) | `vector-store/mock-store.ts` |
+| `getDocStore()` / `setDocStore()` | `vector-store/index.ts` |
 
 #### Shared/Memory Utilities (called internally, not in main flow)
 
@@ -880,7 +943,31 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 
 ---
 
-### SEGMENT 2 — User-Info Layer (`src/lib/agent/user-info/`)
+### SEGMENT 2 — Vector-Store (`src/lib/agent/vector-store/`)
+
+#### `vector-store/types.ts`
+| Type / Interface | Description |
+|-----------------|-------------|
+| `IDocStore` | Interface: `processFile(file, sessionId) → {extractedText}` (setup), `getFiles(sessionId) → ProcessedFile[]` (pipeline). |
+| `ProcessedFile` | `{fileId, filename, extractedText, chunks, dataUrl?, pageCount?, ocrConfidence?, extractorUsed?}` |
+| `ChunkInfo` | `{id, text, pageNumber?}` |
+
+#### `vector-store/index.ts`
+| Function | Description |
+|----------|-------------|
+| `getDocStore()` | Singleton factory — lazily instantiates and returns the current `IDocStore` implementation (defaults to `MockDocStore`). |
+| `setDocStore(store)` | Injects a custom `IDocStore` implementation. Used for swapping mock ↔ real vector DB backends. |
+
+#### `vector-store/mock-store.ts`
+| Function | Description |
+|----------|-------------|
+| `MockDocStore` (class) | Implements `IDocStore` with current extractors + SQLite chunk storage. |
+| `.processFile(file, sessionId)` | Deletes existing chunks, calls `extractFileContent()` (user-info), saves chunks to `chunk_store` DB table, stores file metadata in `sessions.file_chunks`. Returns `{extractedText}`. |
+| `.getFiles(sessionId)` | Reads file metadata from `sessions.file_chunks`, fetches chunk texts from `chunk_store` via `getChunksByIds()`. Returns `ProcessedFile[]` with all chunks. |
+
+---
+
+### SEGMENT 3 — User-Info Layer (`src/lib/agent/user-info/`)
 
 #### `user-info/extractors/index.ts`
 | Function | Description |
@@ -917,7 +1004,7 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 
 ---
 
-### SEGMENT 3 — Loading Layer (`src/lib/agent/loading/`)
+### SEGMENT 4 — Loading Layer (`src/lib/agent/loading/`)
 
 #### `loading/skill/loader.ts`
 | Function | Description |
@@ -958,12 +1045,12 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 #### `loading/phases/input-phase.ts`
 | Function | Description |
 |----------|-------------|
-| `inputPhase(ctx, {files, sessionId})` | If files present: extracts each via `extractFileContent()`, adds to `ctx.files`, persists to DB. If no files: restores from saved chunks in DB. |
+| `inputPhase(ctx, {files, sessionId})` | If files present: calls `docStore.processFile()` for each file (vector-store layer handles extraction + chunking + persistence). Returns `string[]` of extracted texts for auto-skill. Does NOT populate `ctx.files`. |
 
 #### `loading/phases/skill-gen-phase.ts`
 | Function | Description |
 |----------|-------------|
-| `skillGenPhase(ctx, message)` | Calls `generateSkill()` with user message + extracted file texts, replaces `ctx.skill` with the auto-generated skill. |
+| `skillGenPhase(ctx, message, fileTexts)` | Calls `generateSkill()` with user message + file texts (passed as param, no longer reads from ctx.files). Replaces `ctx.skill` with the auto-generated skill. |
 
 #### `loading/phases/revision-phase.ts`
 | Function | Description |
@@ -973,12 +1060,12 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 
 ---
 
-### SEGMENT 4 — Pipeline (`src/lib/agent/pipeline/`)
+### SEGMENT 5 — Pipeline (`src/lib/agent/pipeline/`)
 
 #### `pipeline/orchestrator-v2.ts`
 | Function | Description |
 |----------|-------------|
-| `orchestratePipeline(sessionId, message, revisionFields?)` | **Top-level entry point (per turn).** Async generator: restoreContext → initPipelineTurn → revision → step-exec → enforce → finalize. Yields `PipelineEvent` for SSE streaming. All loading imports removed — state comes from `session_setup` DB. |
+| `orchestratePipeline(sessionId, message, revisionFields?)` | **Top-level entry point (per turn).** Async generator: restoreContext → **docStore.getFiles()** (populate ctx.files with chunks) → initPipelineTurn → revision → step-exec → finalize. Yields `PipelineEvent` for SSE streaming. State comes from `session_setup` DB + doc store. |
 | `executeStepWithRetry(step, ctx, maxRetries)` | Wraps `executeLlmToolStep()` with retry loop (default 1 retry). Returns `StepResult`. |
 
 #### `pipeline/pipeline-context.ts`
@@ -1037,7 +1124,7 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 
 ---
 
-### SEGMENT 5 — Evaluation Layer (`src/lib/agent/evaluation/`)
+### SEGMENT 6 — Evaluation Layer (`src/lib/agent/evaluation/`)
 
 #### `evaluation/index.ts`
 | Function | Description |
@@ -1068,7 +1155,7 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 
 ---
 
-### SEGMENT 6 — Present Layer (`src/lib/agent/present/`)
+### SEGMENT 7 — Present Layer (`src/lib/agent/present/`)
 
 #### `present/phases/finalize-phase.ts`
 | Function | Description |
@@ -1089,7 +1176,7 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 
 ---
 
-### SEGMENT 7 — API Routes (`src/app/api/`)
+### SEGMENT 8 — API Routes (`src/app/api/`)
 
 #### `api/setup/route.ts`
 | Route | Description |
@@ -1313,15 +1400,16 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 | Segment | Files | Functions |
 |---------|-------|-----------|
 | **1. Knowledge** | 3 | ~8 |
-| **2. User-Info** | 4 | ~10 |
-| **3. Loading** | 9 | ~12 |
-| **4. Pipeline** | 8 | ~15 |
-| **5. Evaluation** | 5 | ~7 |
-| **6. Present** | 3 | ~8 |
-| **7. API Routes** | 12 | ~15 |
+| **2. Vector-Store** | 3 | ~4 |
+| **3. User-Info** | 4 | ~10 |
+| **4. Loading** | 9 | ~12 |
+| **5. Pipeline** | 8 | ~15 |
+| **6. Evaluation** | 5 | ~7 |
+| **7. Present** | 3 | ~8 |
+| **8. API Routes** | 12 | ~15 |
 | **Shared** | 12 | ~43 |
 | **LLM (shared/llm)** | 1 | ~3 |
-| **Total (agent engine)** | **46** | **~104** |
-| **Total (all source)** | **57** | **~120** |
+| **Total (agent engine)** | **49** | **~108** |
+| **Total (all source)** | **60** | **~124** |
 
-*Updated 2026-05-23: added loading-orchestrator, /api/setup route, refactored init-phase into initSession+initPipelineTurn, pipeline now restores from DB via restoreContext, added session_setup table, split Chat/Setup schemas, added Journey section, removed enforceChecks (gap-fill was duplicate verdict source).*
+*Updated 2026-05-24: added vector-store layer (IDocStore, MockDocStore), refactored inputPhase to call docStore.processFile() instead of direct extraction, skillGenPhase now takes fileTexts as param, orchestrator calls docStore.getFiles() to populate ctx.files with chunks, user-info extractors now wrapped by vector-store layer.*

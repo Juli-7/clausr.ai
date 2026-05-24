@@ -1,5 +1,6 @@
 import { executeLlmToolStep } from "./executors/llm-executor";
 import { restoreContext } from "./pipeline-context";
+import { getDocStore } from "@/lib/agent/vector-store";
 import { initPipelineTurn } from "@/lib/agent/loading/phases/init-phase";
 import { identifyRevisionTarget, identifyRevisionTargets } from "@/lib/agent/loading/phases/revision-phase";
 import { saveContextSnapshot, getResponseCount } from "@/lib/agent/shared/memory/repository";
@@ -35,6 +36,13 @@ export async function* orchestratePipeline(
 
   const { ctx, steps } = restored;
   logPipeline(`=== PIPELINE START === cid=${correlationId} session="${sessionId}" msg="${truncate(message, 100)}"`);
+
+  const store = getDocStore();
+  const storedFiles = await store.getFiles(sessionId);
+  if (storedFiles.length > 0) {
+    ctx.files.loadFiles(storedFiles);
+    logPipeline(`loaded ${storedFiles.length} file(s) with ${storedFiles.reduce((s, f) => s + f.chunks.length, 0)} chunk(s) from doc store`);
+  }
 
   // ── Per-turn initialization ──
   await initPipelineTurn(ctx, sessionId, message, correlationId);

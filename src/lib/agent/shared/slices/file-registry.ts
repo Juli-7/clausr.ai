@@ -19,6 +19,21 @@ export class FileRegistry {
     this.files.push(file);
   }
 
+  loadFiles(
+    entries: { fileId: string; filename: string; extractedText: string; chunks?: TextChunk[]; dataUrl?: string; pageCount?: number; ocrConfidence?: number; extractorUsed?: string }[]
+  ): void {
+    this.files = entries.map((e) => ({
+      fileId: e.fileId,
+      filename: e.filename,
+      extractedText: e.extractedText,
+      chunks: e.chunks,
+      dataUrl: e.dataUrl,
+      pageCount: e.pageCount,
+      ocrConfidence: e.ocrConfidence,
+      extractorUsed: e.extractorUsed,
+    }));
+  }
+
   getFiles(): readonly UploadedFileEntry[] {
     return this.files;
   }

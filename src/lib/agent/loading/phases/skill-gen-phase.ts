@@ -8,10 +8,9 @@ import type { PipelineContext } from "@/lib/agent/pipeline/pipeline-context";
  */
 export async function skillGenPhase(
   ctx: PipelineContext,
-  message: string
+  message: string,
+  fileTexts: string[] = []
 ): Promise<void> {
-  const fileTexts = ctx.files.getFiles().map((f) => f.extractedText);
-
   logPipeline("→ SKILL-GEN: generating skill from user request + files");
 
   const skill = await generateSkill(message, fileTexts);

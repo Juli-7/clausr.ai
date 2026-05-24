@@ -41,19 +41,20 @@ export async function setupSession(params: SetupSessionParams): Promise<{ correl
     skill.regulationIds,
   );
 
-  // 3. Extract files if provided
+  // 3. Extract files if provided (user-info layer)
+  let fileTexts: string[] = [];
   if (params.files && params.files.length > 0) {
-    logPipeline(`[SETUP] extracting ${params.files.length} file(s)`);
-    await inputPhase(ctx, { files: params.files, sessionId: params.sessionId });
+    logPipeline(`[SETUP] processing ${params.files.length} file(s)`);
+    fileTexts = await inputPhase(ctx, { files: params.files, sessionId: params.sessionId });
   }
 
-  // 4. Auto-skill generation (must happen after file extraction)
+  // 4. Auto-skill generation (loading layer decides if it needs file texts)
   if (isAutoSkill) {
     if (!params.message) {
       throw new Error("Auto-skill requires a 'message' describing what to assess");
     }
     logPipeline("[SETUP] generating auto-skill from user message + file texts");
-    await skillGenPhase(ctx, params.message);
+    await skillGenPhase(ctx, params.message, fileTexts);
   }
 
   // 5. Generate steps from skill checks

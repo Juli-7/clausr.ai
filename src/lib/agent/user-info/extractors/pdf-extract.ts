@@ -1,4 +1,5 @@
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
+pdfjs.GlobalWorkerOptions.workerSrc = "";
 import { PDFParse } from "pdf-parse";
 import { extractImageText } from "./ocr";
 import { mergeWordBoxes, type TextChunk, type WordBox } from "./index";

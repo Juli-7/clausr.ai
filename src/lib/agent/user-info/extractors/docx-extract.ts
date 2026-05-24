@@ -36,6 +36,36 @@ function splitParagraphs(html: string): string[] {
     .filter((t) => t.length > 0);
 }
 
+const MAX_CHUNK_SIZE = 2000;
+
+function splitLargeText(text: string): string[] {
+  if (text.length <= MAX_CHUNK_SIZE) return [text];
+
+  const byDoubleNewline = text.split(/\n\s*\n/).filter((s) => s.trim().length > 0);
+  if (byDoubleNewline.length > 1) {
+    return byDoubleNewline.flatMap((part) => splitLargeText(part));
+  }
+
+  const byNewline = text.split("\n").filter((s) => s.trim().length > 0);
+  if (byNewline.length > 1) {
+    return byNewline.flatMap((part) => splitLargeText(part));
+  }
+
+  const parts: string[] = [];
+  let start = 0;
+  while (start < text.length) {
+    let end = Math.min(start + MAX_CHUNK_SIZE, text.length);
+    if (end < text.length) {
+      const searchStart = Math.max(end - 100, start);
+      const lastSpace = text.lastIndexOf(" ", end);
+      if (lastSpace > searchStart) end = lastSpace;
+    }
+    parts.push(text.slice(start, end).trim());
+    start = end;
+  }
+  return parts.filter((s) => s.length > 0);
+}
+
 export async function extractDocxText(dataUrl: string): Promise<DocxResult> {
   const base64 = dataUrl.split(",")[1] ?? dataUrl;
   const buffer = Buffer.from(base64, "base64");
@@ -48,7 +78,8 @@ export async function extractDocxText(dataUrl: string): Promise<DocxResult> {
   }
   const paragraphs = splitParagraphs(result.value);
 
-  const chunks: TextChunk[] = paragraphs.map((text, i) => ({
+  const rawChunks = paragraphs.flatMap((text) => splitLargeText(text));
+  const chunks: TextChunk[] = rawChunks.map((text, i) => ({
     id: `c${i + 1}`,
     text,
   }));
