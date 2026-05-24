@@ -317,6 +317,7 @@ function DocumentCard({
           fileUrl: sc?.fileUrl,
           excerpt,
           text,
+          highlightChunk: findHighlightChunk(sc, response?.claims, ref),
           pageNumber: sc?.pageNumber,
           position: {
             top: rect.bottom + 6,
