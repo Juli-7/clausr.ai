@@ -128,6 +128,7 @@ ${retryContext}
       system: toolSystemPrompt,
       messages: [{ role: "user", content: userMessage }],
       tools: Object.keys(tools).length > 0 ? tools : undefined,
+      toolChoice: "required",
       ...(step.temperature !== undefined ? { temperature: step.temperature } : {}),
       onStepFinish: (event) => {
         logPipeline(`  [LLM+TOOL] step=${step.number} onStepFinish: toolResults=${event.toolResults?.length ?? 0} textLen=${(event.text ?? "").length}`);
@@ -191,19 +192,10 @@ ${retryContext}
 
     logPipeline(`  [LLM+TOOL] step=${step.number} finalText=${fullText.length}chars preview=${truncate(fullText, 150)}`);
 
-    // Require submitCheckResult for every step
-    if (!submittedResult) {
-      logPipeline(`  [LLM+TOOL] submitCheckResult was NOT called — will retry`);
-      return {
-        success: false,
-        error: `Step ${step.number}: You MUST call the submitCheckResult tool with the field value, sourceCitation (array), citationRef (array), and verdict (PASS or FAIL).`,
-        errorCode: "LLM_ERROR",
-      };
-    }
-
-    const submitData: { value: string; sourceCitation: string[]; citationRef: string[]; verdict: string } = submittedResult;
     const currentCheck = ctx.skill.checks[step.number - 1];
     const stepNeedsTool = currentCheck && (currentCheck.type.kind === "number" || currentCheck.constraint);
+
+    // Numerical steps: compliance tool results are the primary data; submitCheckResult is optional
     if (stepNeedsTool && collectedToolRuns.length === 0) {
       logPipeline(`  [LLM+TOOL] compliance tool was NOT called for numerical step — will retry`);
       return {
@@ -213,12 +205,22 @@ ${retryContext}
       };
     }
 
+    // Qualitative steps: submitCheckResult is required
+    if (collectedToolRuns.length === 0 && !submittedResult) {
+      logPipeline(`  [LLM+TOOL] submitCheckResult was NOT called — will retry`);
+      return {
+        success: false,
+        error: `Step ${step.number}: You MUST call the submitCheckResult tool with the field value, sourceCitation (array), citationRef (array), and verdict (PASS or FAIL).`,
+        errorCode: "LLM_ERROR",
+      };
+    }
+
     const checkDef = ctx.skill.checks[step.number - 1];
     const checkName = checkDef?.field ?? `step-${step.number}`;
     const checkType = checkDef?.type.kind === "number" ? ("numerical" as const) : ("qualitative" as const);
 
     if (collectedToolRuns.length > 0) {
-      // Build CheckResults from compliance tool output, merge submitCheckResult data
+      // Build CheckResults from compliance tool output; merge narrative if submitCheckResult was also called
       const palette = ctx.palette.getCitationPalette();
       const allResults = collectedToolRuns.flatMap(run => run.outputs);
       const mergedResults = allResults.map((r, i) => {
@@ -226,10 +228,10 @@ ${retryContext}
         return {
           name: (r.name as string) ?? `check-${i + 1}`,
           type: "numerical" as const,
-          finding: submitData.value,
+          finding: submittedResult?.value ?? `${r.name}: ${r.value} ${r.comparison} → ${r.status}`,
           verdict: r.status === "pass" ? ("PASS" as const) : ("FAIL" as const),
-          citationRef: submitData.citationRef.length > 0 ? submitData.citationRef : resolveCitationRef(palette, clause),
-          sourceCitation: submitData.sourceCitation,
+          citationRef: submittedResult && submittedResult.citationRef.length > 0 ? submittedResult.citationRef : resolveCitationRef(palette, clause),
+          sourceCitation: submittedResult?.sourceCitation ?? [],
           toolResult: {
             value: r.value as number,
             limit: r.limit as number,
@@ -239,16 +241,18 @@ ${retryContext}
         };
       });
       ctx.checks.addResults(mergedResults);
-      logPipeline(`  [LLM+TOOL] merged ${mergedResults.length} CheckResult(s) from compliance tool + submitCheckResult`);
+      logPipeline(`  [LLM+TOOL] merged ${mergedResults.length} CheckResult(s) from compliance tool` +
+        (submittedResult ? " + submitCheckResult narrative" : ""));
     } else {
-      // No compliance tool calls — use submitCheckResult directly (qualitative checks)
+      // No compliance tool calls — use submitCheckResult (guard at line 208 ensures it's non-null)
+      const sr = submittedResult!;
       const result: CheckResult = {
         name: checkName,
         type: checkType,
-        finding: submitData.value,
-        verdict: submitData.verdict as "PASS" | "FAIL",
-        citationRef: submitData.citationRef,
-        sourceCitation: submitData.sourceCitation,
+        finding: sr.value,
+        verdict: sr.verdict as "PASS" | "FAIL",
+        citationRef: sr.citationRef,
+        sourceCitation: sr.sourceCitation,
       };
       ctx.checks.addResults([result]);
       logPipeline(`  [LLM+TOOL] extracted CheckResult from submitCheckResult: verdict=${result.verdict}`);
