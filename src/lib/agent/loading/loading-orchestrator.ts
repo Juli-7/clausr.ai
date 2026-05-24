@@ -60,7 +60,7 @@ export async function setupSession(params: SetupSessionParams): Promise<{ correl
   const steps = generateStepsFromChecks(ctx.skill.checks);
   logPipeline(`[SETUP] generated ${steps.length} step(s) from ${ctx.skill.checks.length} check(s)`);
 
-  // 6. Persist everything to DB (palette is empty — pipeline layer loads regs)
+  // 6. Persist everything to DB (palette is loaded by pipeline layer)
   saveSessionSetup(params.sessionId, {
     skillName: ctx.skill.name,
     skillmd: ctx.skill.skillmd,
@@ -68,8 +68,6 @@ export async function setupSession(params: SetupSessionParams): Promise<{ correl
     scripts: ctx.skill.scripts,
     regulationIds: ctx.skill.regulationIds,
     steps,
-    paletteReferences: [],
-    paletteCitations: [],
     fileRegistry: ctx.files.toJSON(),
   });
 

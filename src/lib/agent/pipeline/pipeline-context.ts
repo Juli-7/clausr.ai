@@ -126,11 +126,6 @@ export async function restoreContext(
     setup.regulationIds,
   );
 
-  ctx.palette = PaletteStore.fromJSON({
-    references: setup.paletteReferences,
-    citationPalette: setup.paletteCitations,
-  });
-
   ctx.files = FileRegistry.fromJSON(setup.fileRegistry);
 
   return { ctx, steps: setup.steps };

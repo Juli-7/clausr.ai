@@ -82,8 +82,6 @@ export function getDb(): Database.Database {
       scripts_json TEXT,
       regulation_ids_json TEXT,
       steps_json TEXT NOT NULL,
-      palette_references_json TEXT,
-      palette_citations_json TEXT,
       file_registry_json TEXT NOT NULL,
       created_at INTEGER NOT NULL
     );
