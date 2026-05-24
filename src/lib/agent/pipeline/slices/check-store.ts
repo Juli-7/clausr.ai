@@ -93,6 +93,23 @@ export class CheckStore {
       }
     }
 
+    if (sourceMap.size === 0 && sourcePalette.length > 0) {
+      for (const entry of sourcePalette) {
+        if (!sourceMap.has(entry.id)) {
+          sourceMap.set(entry.id, {
+            ref: entry.id,
+            fileId: entry.fileId,
+            filename: entry.filename,
+            fileUrl: entry.dataUrl,
+            extractedText: entry.extractedText,
+            keyExcerpt: entry.keyExcerpt,
+            chunks: entry.chunks,
+            boundingBox: entry.chunks?.[0]?.bbox,
+            pageNumber: entry.pageNumber,
+          });
+        }
+      }
+    }
 
     this.compiledCitations = Array.from(citationMap.values()).sort((a, b) =>
       a.ref.localeCompare(b.ref)

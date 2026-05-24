@@ -60,14 +60,22 @@ function deepseekFetch(originalFetch: typeof fetch): typeof fetch {
     const url = typeof input === "string" ? input : input instanceof Request ? input.url : "";
     const isChatCompletion = url.includes("/chat/completions");
 
-    // Disable thinking mode (tool_choice: "required" not supported in thinking mode)
+    // Add reasoning_content placeholder to assistant messages with tool_calls
     if (isChatCompletion && init && typeof init.body === "string") {
       try {
         const body = JSON.parse(init.body);
-        body.thinking = { type: "disabled" };
-        init = { ...init, body: JSON.stringify(body) };
+        let modified = false;
+        for (const msg of body.messages) {
+          if (msg.role === "assistant" && msg.tool_calls && !("reasoning_content" in msg)) {
+            msg.reasoning_content = "";
+            modified = true;
+          }
+        }
+        if (modified) {
+          init = { ...init, body: JSON.stringify(body) };
+        }
       } catch (e) {
-        console.warn("Failed to disable thinking mode in DeepSeek request", e);
+        console.warn("Failed to inject reasoning_content into DeepSeek request", e);
       }
     }
 

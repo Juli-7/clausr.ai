@@ -40,26 +40,12 @@ ${retryContext}
 - Extract all relevant information from the files — do not ask the user to provide information that is already in the files.
 - You MUST call the available tools to execute compliance checks. Numerical checks require the tool.
 - Output a narrative analysis paragraph starting with "### {Field Name}" with citation markers like [S1.c1] and [R48.5.11].
-- Then call the 'submitCheckResult' tool with the structured result containing the field value, citations, and verdict.
-- CRITICAL: The tool parameters are the source of truth for rendering badges. Every [Sx.cx] marker in the narrative MUST have a matching entry in the 'sourceCitation' parameter. Every [Rx.x.x] marker MUST have a matching entry in the 'citationRef' parameter. Markers without parameter entries will be silently discarded.
+- Then output a JSON code block with the structured result containing the field value and citations.
 `;
 
     logPipeline(`  [LLM+TOOL] step=${step.number} promptLen=${systemPrompt.length}chars scripts=${scripts.length}`);
 
     const tools: Record<string, any> = {};
-
-    // submitCheckResult is always available — the LLM MUST call this to submit the structured result
-    const SubmitResultSchema = z.object({
-      value: z.string().min(1).describe("Narrative finding for this assessment field"),
-      sourceCitation: z.array(z.string()).describe("Source chunk IDs cited — every [Sx.cx] in the narrative MUST appear here"),
-      citationRef: z.array(z.string()).describe("Regulation reference IDs cited — every [Rx.x.x] in the narrative MUST appear here"),
-      verdict: z.enum(["PASS", "FAIL"]).describe("Compliance verdict"),
-    });
-    tools.submitCheckResult = tool({
-      description: "Submit the structured assessment result for this step. YOU MUST CALL THIS TOOL to complete the step.",
-      inputSchema: SubmitResultSchema,
-      execute: async (input: z.infer<typeof SubmitResultSchema>) => input,
-    });
 
     // Always register compliance-check builtin when there are checks that need it
     const hasNumericalChecks = ctx.skill.checks.some(
@@ -119,27 +105,18 @@ ${retryContext}
     }[] = [];
 
     const humanField = step.title.replace("Evaluate: ", "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-    const userMessage = `Execute step ${step.number}: ${step.title}. Write a narrative analysis starting with "### ${humanField}". Then call the submitCheckResult tool with these exact fields: value (narrative text with citations), sourceCitation (array of chunk IDs), citationRef (array of regulation IDs), and verdict (PASS or FAIL). The tool parameters are the source of truth for badge rendering — every [Sx.cx] marker in the narrative MUST appear in sourceCitation, and every [Rx.x.x] marker MUST appear in citationRef.`;
-
-    let submittedResult: { value: string; sourceCitation: string[]; citationRef: string[]; verdict: string } | null = null;
+    const userMessage = `Execute step ${step.number}: ${step.title}. Write a narrative analysis starting with "### ${humanField}". Then output a JSON code block with this exact structure:\n\`\`\`json\n{"${step.title.replace("Evaluate: ", "")}": {"value": "narrative text with citations", "sourceCitation": ["S1.c1", "S1.c2"], "citationRef": ["R48.5.11"], "verdict": "PASS"}}\n\`\`\`\n\nThe JSON MUST include all fields: value, sourceCitation (array), citationRef (array), and verdict. Arrays can be empty but must be present.`;
 
     const result = streamText({
       model: createModel(),
       system: toolSystemPrompt,
       messages: [{ role: "user", content: userMessage }],
       tools: Object.keys(tools).length > 0 ? tools : undefined,
-      toolChoice: "required",
       ...(step.temperature !== undefined ? { temperature: step.temperature } : {}),
       onStepFinish: (event) => {
         logPipeline(`  [LLM+TOOL] step=${step.number} onStepFinish: toolResults=${event.toolResults?.length ?? 0} textLen=${(event.text ?? "").length}`);
         if (event.toolResults?.length) {
           for (const tr of event.toolResults) {
-            if (tr.toolName === "submitCheckResult" && tr.output) {
-              submittedResult = tr.output as typeof submittedResult;
-              if (submittedResult) logPipeline(`  [LLM+TOOL] submitCheckResult: verdict=${submittedResult.verdict} citations=${submittedResult.citationRef.length} source=${submittedResult.sourceCitation.length} valueLen=${submittedResult.value.length}`);
-              continue;
-            }
-
             const checksInput = (tr.input as Record<string, unknown>)?.checks as Record<string, unknown>[] ?? [];
             const resultsOutput = (typeof tr.output === "object" && tr.output !== null)
               ? ((tr.output as Record<string, unknown>).results as Record<string, unknown>[] ?? [])
@@ -192,12 +169,11 @@ ${retryContext}
 
     logPipeline(`  [LLM+TOOL] step=${step.number} finalText=${fullText.length}chars preview=${truncate(fullText, 150)}`);
 
+    // Retry only when numerical checks exist AND tool should have been called for this step
     const currentCheck = ctx.skill.checks[step.number - 1];
     const stepNeedsTool = currentCheck && (currentCheck.type.kind === "number" || currentCheck.constraint);
-
-    // Numerical steps: compliance tool results are the primary data; submitCheckResult is optional
-    if (stepNeedsTool && collectedToolRuns.length === 0) {
-      logPipeline(`  [LLM+TOOL] compliance tool was NOT called for numerical step — will retry`);
+    if (stepNeedsTool && Object.keys(tools).length > 0 && collectedToolRuns.length === 0) {
+      logPipeline(`  [LLM+TOOL] tool was NOT called for numerical step — will retry with error context`);
       return {
         success: false,
         error: `Step ${step.number}: You MUST call the compliance tool for all numerical checks. Extract values from the file data and pass them as structured check objects to the tool.`,
@@ -205,33 +181,26 @@ ${retryContext}
       };
     }
 
-    // Qualitative steps: submitCheckResult is required
-    if (collectedToolRuns.length === 0 && !submittedResult) {
-      logPipeline(`  [LLM+TOOL] submitCheckResult was NOT called — will retry`);
-      return {
-        success: false,
-        error: `Step ${step.number}: You MUST call the submitCheckResult tool with the field value, sourceCitation (array), citationRef (array), and verdict (PASS or FAIL).`,
-        errorCode: "LLM_ERROR",
-      };
-    }
-
-    const checkDef = ctx.skill.checks[step.number - 1];
-    const checkName = checkDef?.field ?? `step-${step.number}`;
-    const checkType = checkDef?.type.kind === "number" ? ("numerical" as const) : ("qualitative" as const);
+    // Always parse narrative from LLM text output
+    const textResults = ctx.skill.checks.length > 0
+      ? extractCheckResultsFromText(fullText, ctx.skill.checks, step.number)
+      : [];
 
     if (collectedToolRuns.length > 0) {
-      // Build CheckResults from compliance tool output; merge narrative if submitCheckResult was also called
+      // Build CheckResults from tool output, merge narrative from text
       const palette = ctx.palette.getCitationPalette();
       const allResults = collectedToolRuns.flatMap(run => run.outputs);
       const mergedResults = allResults.map((r, i) => {
+        const name = (r.name as string) ?? `check-${i + 1}`;
+        const narrative = textResults.find(tr => tr.name === name);
         const clause = (r.clause as string) ?? "";
         return {
-          name: (r.name as string) ?? `check-${i + 1}`,
+          name,
           type: "numerical" as const,
-          finding: submittedResult?.value ?? `${r.name}: ${r.value} ${r.comparison} → ${r.status}`,
+          finding: narrative?.finding ?? `${r.name}: ${r.value} ${r.comparison} → ${r.status}`,
           verdict: r.status === "pass" ? ("PASS" as const) : ("FAIL" as const),
-          citationRef: submittedResult && submittedResult.citationRef.length > 0 ? submittedResult.citationRef : resolveCitationRef(palette, clause),
-          sourceCitation: submittedResult?.sourceCitation ?? [],
+          citationRef: narrative?.citationRef ?? resolveCitationRef(palette, clause),
+          sourceCitation: narrative?.sourceCitation ?? [],
           toolResult: {
             value: r.value as number,
             limit: r.limit as number,
@@ -241,21 +210,11 @@ ${retryContext}
         };
       });
       ctx.checks.addResults(mergedResults);
-      logPipeline(`  [LLM+TOOL] merged ${mergedResults.length} CheckResult(s) from compliance tool` +
-        (submittedResult ? " + submitCheckResult narrative" : ""));
-    } else {
-      // No compliance tool calls — use submitCheckResult (guard at line 208 ensures it's non-null)
-      const sr = submittedResult!;
-      const result: CheckResult = {
-        name: checkName,
-        type: checkType,
-        finding: sr.value,
-        verdict: sr.verdict as "PASS" | "FAIL",
-        citationRef: sr.citationRef,
-        sourceCitation: sr.sourceCitation,
-      };
-      ctx.checks.addResults([result]);
-      logPipeline(`  [LLM+TOOL] extracted CheckResult from submitCheckResult: verdict=${result.verdict}`);
+      logPipeline(`  [LLM+TOOL] merged ${mergedResults.length} CheckResult entry(ies) from tool + narrative`);
+    } else if (textResults.length > 0) {
+      // No tool calls — use narrative results directly (qualitative checks)
+      ctx.checks.addResults(textResults);
+      logPipeline(`  [LLM+TOOL] extracted ${textResults.length} CheckResult(s) from LLM text output`);
     }
 
     storeOutput(ctx, step.number, fullText);
@@ -378,10 +337,9 @@ function buildCitationGuide(ctx: PipelineContext): string {
   if (citationPalette.length > 0 || sourcePalette.length > 0) {
     parts.push("");
     parts.push("# Citation Format");
-    parts.push("The submitCheckResult tool parameters MUST include both citation arrays:");
+    parts.push("Every field entry in the JSON block MUST include these two arrays:");
     parts.push("- `citationRef`: regulation references — use the EXACT IDs from Available Citations (e.g., \"R48.5.11\")");
     parts.push("- `sourceCitation`: source chunk IDs — use the EXACT chunk IDs from source palette (e.g., [\"S1.c3\", \"S2.c1\"])");
-    parts.push("CRITICAL: Every `[Sx.cx]` marker in the narrative MUST appear in `sourceCitation`. Every `[Rx.x.x]` marker MUST appear in `citationRef`. Arrays are the source of truth for badge rendering — markers without corresponding array entries are silently discarded.");
     parts.push("Arrays can be empty if not applicable, but must be present.");
   }
 
@@ -398,4 +356,78 @@ function buildCitationGuide(ctx: PipelineContext): string {
   return parts.join("\n");
 }
 
+/**
+ * Parse the LLM's JSON output and extract a CheckResult for the current step.
+ *
+ * Expected JSON format (per field):
+ *   {"field_name": {"value": "narrative...", "sourceCitation": ["S1.c1"], "citationRef": ["R48.5.11"], "verdict": "PASS"}}
+ */
+const CheckFieldEntrySchema = z.object({
+  value: z.string().min(1),
+  sourceCitation: z.array(z.string()),
+  citationRef: z.array(z.string()),
+  verdict: z.string(),
+});
 
+function extractCheckResultsFromText(
+  text: string,
+  checks: ParsedCheck[],
+  stepNumber: number
+): CheckResult[] {
+  let cleaned = text.trim();
+  const startFence = cleaned.indexOf("```");
+  if (startFence !== -1) {
+    const endFence = cleaned.indexOf("```", startFence + 3);
+    if (endFence !== -1) {
+      cleaned = cleaned.substring(startFence + 3, endFence).trim();
+      const jsonIdx = cleaned.indexOf("json");
+      if (jsonIdx === 0) cleaned = cleaned.substring(4).trim();
+    }
+  }
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    return [];
+  }
+
+  if (typeof parsed !== "object" || Array.isArray(parsed)) return [];
+
+  const checkDef = checks[stepNumber - 1];
+  if (!checkDef) return [];
+
+  const field = checkDef.field;
+  const entry = (parsed as Record<string, unknown>)[field];
+  if (!entry || typeof entry !== "object") return [];
+
+  const e = entry as Record<string, unknown>;
+  const validation = CheckFieldEntrySchema.safeParse(e);
+  if (!validation.success) {
+    logPipeline(`  [LLM] invalid check field entry for "${field}": ${validation.error.message}`);
+    return [];
+  }
+
+    const data = validation.data;
+  const verdict = data.verdict.toUpperCase() === "FAIL" ? "FAIL" as const : "PASS" as const;
+
+  if (!data.value) return [];
+
+  return [{
+    name: field,
+    type: checkDef.type.kind === "number" ? "numerical" as const : "qualitative" as const,
+    finding: data.value,
+    verdict,
+    citationRef: data.citationRef,
+    sourceCitation: data.sourceCitation,
+  }];
+}
+
+function deriveRegulation(clause: string, regulationIds: string[]): string {
+  if (regulationIds.length === 1) return regulationIds[0];
+  for (const id of regulationIds) {
+    if (clause.startsWith(id) || clause.includes(id)) return id;
+  }
+  if (regulationIds.length > 0) return regulationIds[0];
+  return "";
+}
