@@ -1,4 +1,4 @@
-import { streamText, tool } from "ai";
+import { stepCountIs, streamText, tool } from "ai";
 import { z } from "zod";
 import { createModel } from "@/lib/agent/llm/factory";
 import { runScript } from "./script-runner";
@@ -39,8 +39,8 @@ ${retryContext}
 - Use the uploaded files and available context above to complete this step.
 - Extract all relevant information from the files — do not ask the user to provide information that is already in the files.
 - You MUST call the available tools to execute compliance checks. Numerical checks require the tool.
-- Output a narrative analysis paragraph starting with "### {Field Name}" with citation markers like [S1.c1] and [R48.5.11].
-- Then output a JSON code block with the structured result containing the field value and citations.
+- Output ONLY one JSON code block. Do not write prose outside the JSON block.
+- The JSON field 'value' is the single narrative source of truth and MUST start with "### {Field Name}". Include citation markers like [S1.c1] and [R48.5.11] inside 'value'.
 `;
 
     logPipeline(`  [LLM+TOOL] step=${step.number} promptLen=${systemPrompt.length}chars scripts=${scripts.length}`);
@@ -105,13 +105,14 @@ ${retryContext}
     }[] = [];
 
     const humanField = step.title.replace("Evaluate: ", "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-    const userMessage = `Execute step ${step.number}: ${step.title}. Write a narrative analysis starting with "### ${humanField}". Then output a JSON code block with this exact structure:\n\`\`\`json\n{"${step.title.replace("Evaluate: ", "")}": {"value": "narrative text with citations", "sourceCitation": ["S1.c1", "S1.c2"], "citationRef": ["R48.5.11"], "verdict": "PASS"}}\n\`\`\`\n\nThe JSON MUST include all fields: value, sourceCitation (array), citationRef (array), and verdict. Arrays can be empty but must be present.`;
+    const userMessage = `Execute step ${step.number}: ${step.title}. Output ONLY this JSON code block shape — no prose before or after it:\n\`\`\`json\n{"${step.title.replace("Evaluate: ", "")}": {"value": "### ${humanField}\\nNarrative assessment text with citations like [S1.c1] and [R48.5.11]", "sourceCitation": ["S1.c1", "S1.c2"], "citationRef": ["R48.5.11"], "verdict": "PASS"}}\n\`\`\`\n\nThe JSON MUST include exactly these fields: value (non-empty string), sourceCitation (array), citationRef (array), and verdict (PASS or FAIL). The value is the only narrative; every [Sx.cx] marker in value MUST appear in sourceCitation, and every [Rx.x.x] marker MUST appear in citationRef.`;
 
     const result = streamText({
       model: createModel(),
       system: toolSystemPrompt,
       messages: [{ role: "user", content: userMessage }],
       tools: Object.keys(tools).length > 0 ? tools : undefined,
+      stopWhen: stepCountIs(3),
       ...(step.temperature !== undefined ? { temperature: step.temperature } : {}),
       onStepFinish: (event) => {
         logPipeline(`  [LLM+TOOL] step=${step.number} onStepFinish: toolResults=${event.toolResults?.length ?? 0} textLen=${(event.text ?? "").length}`);
@@ -181,10 +182,19 @@ ${retryContext}
       };
     }
 
-    // Always parse narrative from LLM text output
-    const textResults = ctx.skill.checks.length > 0
+    // Parse the single JSON output. The JSON value is the narrative source of truth.
+    const parsedText = ctx.skill.checks.length > 0
       ? extractCheckResultsFromText(fullText, ctx.skill.checks, step.number)
-      : [];
+      : { results: [] as CheckResult[] };
+    if (parsedText.error) {
+      logPipeline(`  [LLM+TOOL] invalid JSON result — will retry: ${parsedText.error}`);
+      return {
+        success: false,
+        error: `Step ${step.number}: ${parsedText.error}. Output ONLY a valid JSON code block with value, sourceCitation, citationRef, and verdict.`,
+        errorCode: "LLM_ERROR",
+      };
+    }
+    const textResults = parsedText.results;
 
     if (collectedToolRuns.length > 0) {
       // Build CheckResults from tool output, merge narrative from text
@@ -251,19 +261,17 @@ function storeOutput(ctx: PipelineContext, stepNumber: number, text: string): vo
 function resolveCitationRef(palette: readonly CitationPaletteEntry[], clause: string): string[] {
   if (!clause) return [];
   if (palette.some(e => e.id === clause)) return [clause];
-  const dot = clause.indexOf(".");
-  const reg = dot !== -1 ? clause.substring(0, dot) : "";
-  if (!reg) return [];
-  const fallback = palette.find(e => e.id.startsWith(reg + "."));
-  return fallback ? [fallback.id] : [`${reg}.0`];
+  // Use the clause itself as fallback — even if not in the palette,
+  // check-store will create a minimal entry for it
+  return [clause];
 }
 
 export function buildDomainSchemaGuide(checks: ParsedCheck[]): string {
   const parts: string[] = [];
   parts.push("");
   parts.push("# Expected Data Schema");
-  parts.push("Output your response as a JSON object matching this schema.");
-  parts.push("Extract every listed field from the uploaded files. Do not skip fields.");
+  parts.push("Output ONLY one JSON code block matching this schema; do not write prose outside JSON.");
+  parts.push("Extract every listed field from the uploaded files. Do not skip fields. Put the narrative assessment in the JSON value field.");
   parts.push("");
   for (const check of checks) {
     let line = `- \`${check.field}\` (${check.type.kind}`;
@@ -341,6 +349,7 @@ function buildCitationGuide(ctx: PipelineContext): string {
     parts.push("- `citationRef`: regulation references — use the EXACT IDs from Available Citations (e.g., \"R48.5.11\")");
     parts.push("- `sourceCitation`: source chunk IDs — use the EXACT chunk IDs from source palette (e.g., [\"S1.c3\", \"S2.c1\"])");
     parts.push("Arrays can be empty if not applicable, but must be present.");
+    parts.push("The JSON value field is the only narrative source. Every `[Sx.cx]` marker in value MUST appear in `sourceCitation`; every `[Rx.x.x]` marker in value MUST appear in `citationRef`.");
   }
 
   const hasChunks = ctx.files.getFiles().some(f => f.chunks && f.chunks.length > 0);
@@ -366,61 +375,68 @@ const CheckFieldEntrySchema = z.object({
   value: z.string().min(1),
   sourceCitation: z.array(z.string()),
   citationRef: z.array(z.string()),
-  verdict: z.string(),
-});
+  verdict: z.enum(["PASS", "FAIL"]),
+}).strict();
 
 function extractCheckResultsFromText(
   text: string,
   checks: ParsedCheck[],
   stepNumber: number
-): CheckResult[] {
+): { results: CheckResult[]; error?: string } {
   let cleaned = text.trim();
   const startFence = cleaned.indexOf("```");
-  if (startFence !== -1) {
-    const endFence = cleaned.indexOf("```", startFence + 3);
-    if (endFence !== -1) {
-      cleaned = cleaned.substring(startFence + 3, endFence).trim();
-      const jsonIdx = cleaned.indexOf("json");
-      if (jsonIdx === 0) cleaned = cleaned.substring(4).trim();
-    }
+  if (startFence === -1) {
+    return { results: [], error: "Missing JSON code block" };
   }
+
+  const endFence = cleaned.indexOf("```", startFence + 3);
+  if (endFence === -1) {
+    return { results: [], error: "Unclosed JSON code block" };
+  }
+
+  cleaned = cleaned.substring(startFence + 3, endFence).trim();
+  const jsonIdx = cleaned.indexOf("json");
+  if (jsonIdx === 0) cleaned = cleaned.substring(4).trim();
 
   let parsed: Record<string, unknown>;
   try {
     parsed = JSON.parse(cleaned);
-  } catch {
-    return [];
+  } catch (err) {
+    return { results: [], error: `Invalid JSON: ${err instanceof Error ? err.message : String(err)}` };
   }
 
-  if (typeof parsed !== "object" || Array.isArray(parsed)) return [];
+  if (typeof parsed !== "object" || Array.isArray(parsed) || parsed === null) {
+    return { results: [], error: "JSON root must be an object" };
+  }
 
   const checkDef = checks[stepNumber - 1];
-  if (!checkDef) return [];
+  if (!checkDef) return { results: [] };
 
   const field = checkDef.field;
   const entry = (parsed as Record<string, unknown>)[field];
-  if (!entry || typeof entry !== "object") return [];
-
-  const e = entry as Record<string, unknown>;
-  const validation = CheckFieldEntrySchema.safeParse(e);
-  if (!validation.success) {
-    logPipeline(`  [LLM] invalid check field entry for "${field}": ${validation.error.message}`);
-    return [];
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    return { results: [], error: `JSON must include object field "${field}"` };
   }
 
-    const data = validation.data;
-  const verdict = data.verdict.toUpperCase() === "FAIL" ? "FAIL" as const : "PASS" as const;
+  const validation = CheckFieldEntrySchema.safeParse(entry);
+  if (!validation.success) {
+    const msg = `Field "${field}" schema validation failed: ${validation.error.message}`;
+    logPipeline(`  [LLM] ${msg}`);
+    return { results: [], error: msg };
+  }
 
-  if (!data.value) return [];
+  const data = validation.data;
 
-  return [{
-    name: field,
-    type: checkDef.type.kind === "number" ? "numerical" as const : "qualitative" as const,
-    finding: data.value,
-    verdict,
-    citationRef: data.citationRef,
-    sourceCitation: data.sourceCitation,
-  }];
+  return {
+    results: [{
+      name: field,
+      type: checkDef.type.kind === "number" ? "numerical" as const : "qualitative" as const,
+      finding: data.value,
+      verdict: data.verdict,
+      citationRef: data.citationRef,
+      sourceCitation: data.sourceCitation,
+    }],
+  };
 }
 
 function deriveRegulation(clause: string, regulationIds: string[]): string {

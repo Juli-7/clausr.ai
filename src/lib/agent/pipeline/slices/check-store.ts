@@ -63,13 +63,9 @@ export class CheckStore {
       for (const ref of check.citationRef) {
         if (!citationMap.has(ref)) {
           const entry = citationPalette.find((e) => e.id === ref);
-          if (entry) {
-            citationMap.set(ref, {
-              ref: entry.id,
-              regulation: entry.regulation,
-              clause: entry.clause,
-            });
-          }
+          citationMap.set(ref, entry
+            ? { ref: entry.id, regulation: entry.regulation, clause: entry.clause }
+            : { ref, regulation: "", clause: ref });
         }
       }
 
@@ -141,14 +137,10 @@ export class CheckStore {
     for (const claim of this.claims) {
       if (claim.citationRef.startsWith("R") && !citationMap.has(claim.citationRef)) {
         const entry = citationPalette.find((e) => e.id === claim.citationRef);
-        if (entry) {
-          citationMap.set(claim.citationRef, {
-            ref: entry.id,
-            regulation: entry.regulation,
-            clause: entry.clause,
-          });
-          logPipeline(`  [CHECK-STORE] added citation ${claim.citationRef} from claims`);
-        }
+        citationMap.set(claim.citationRef, entry
+          ? { ref: entry.id, regulation: entry.regulation, clause: entry.clause }
+          : { ref: claim.citationRef, regulation: "", clause: claim.citationRef });
+        logPipeline(`  [CHECK-STORE] added citation ${claim.citationRef} from claims`);
       }
       if (claim.sourceCitation && !sourceMap.has(claim.sourceCitation)) {
         const entry = sourcePalette.find((e) => e.id === claim.sourceCitation);
@@ -191,14 +183,11 @@ export class CheckStore {
     for (const marker of [...new Set(regulationMarkers)]) {
       if (!citationRefs.has(marker)) {
         const entry = citationPalette.find((e) => e.id === marker);
-        if (entry) {
-          this.compiledCitations.push({
-            ref: entry.id,
-            regulation: entry.regulation,
-            clause: entry.clause,
-          });
-          logPipeline(`  [CHECK-STORE] supplemented citation ${marker} from content`);
-        }
+        this.compiledCitations.push(entry
+          ? { ref: entry.id, regulation: entry.regulation, clause: entry.clause }
+          : { ref: marker, regulation: "", clause: marker });
+        logPipeline(`  [CHECK-STORE] supplemented citation ${marker} from content`);
+        citationRefs.add(marker);
       }
     }
 
