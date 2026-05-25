@@ -48,6 +48,22 @@ function extractParagraphs(mammothHtml: string): ParagraphInfo[] {
 const MAX_CHUNK_SIZE = 2000;
 const OVERLAP_CHARS = 120;
 
+function splitLargeText(text: string): string[] {
+  const sentences = text.match(/[^。！？\n.!?]+[。！？\n.!?]?/g) || [text];
+  const chunks: string[] = [];
+  let current = "";
+  for (const s of sentences) {
+    if (current.length + s.length > MAX_CHUNK_SIZE && current.length > 0) {
+      chunks.push(current.trim());
+      current = s;
+    } else {
+      current += s;
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+  return chunks;
+}
+
 function buildChunks(paragraphs: ParagraphInfo[]): TextChunk[] {
   const merged: { text: string; html: string }[] = [];
   let current: ParagraphInfo[] = [];
@@ -64,7 +80,10 @@ function buildChunks(paragraphs: ParagraphInfo[]): TextChunk[] {
   for (const para of paragraphs) {
     if (para.text.length > MAX_CHUNK_SIZE) {
       flushCurrent();
-      merged.push({ text: para.text, html: para.html });
+      const parts = splitLargeText(para.text);
+      for (const part of parts) {
+        merged.push({ text: part, html: `<p>${part}</p>` });
+      }
       continue;
     }
     const wouldBeTooLong =

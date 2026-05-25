@@ -22,6 +22,6 @@ function buildFieldInstructions(c: ParsedCheck): string {
     parts.push("You MUST call the compliance-check tool to validate numerical constraints.");
   }
   if (c.sample) parts.push(`Example output:\n\`\`\`json\n{"${c.field}": {"value": "${c.sample.replace(/"/g, "'")}", "sourceCitation": ["S1.c1", "S1.c2"], "citationRef": ["${c.clause || ""}"], "verdict": "PASS"}}\n\`\`\``);
-  parts.push("Output ONLY one JSON code block. Put the narrative assessment in the JSON value field; do not write prose outside the JSON block.");
+  parts.push("Output your analysis as a narrative paragraph, then output a JSON code block with the structured result.");
   return parts.join("\n");
 }
