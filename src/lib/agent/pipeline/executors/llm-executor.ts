@@ -39,8 +39,8 @@ ${retryContext}
 - Use the uploaded files and available context above to complete this step.
 - Extract all relevant information from the files — do not ask the user to provide information that is already in the files.
 - You MUST call the available tools to execute compliance checks. Numerical checks require the tool.
-- Output a narrative analysis paragraph starting with "### {Field Name}" with citation markers like [S1.c1] and [R48.5.11].
-- Then output a JSON code block with the structured result containing the field value and citations.
+- Output ONLY a JSON code block. Put the narrative assessment in the JSON "value" field; do not write prose outside the JSON block.
+- Include citation markers like [S1.c1] and [R48.5.11] inside the "value" field of the JSON.
 `;
 
     logPipeline(`  [LLM+TOOL] step=${step.number} promptLen=${systemPrompt.length}chars scripts=${scripts.length}`);
@@ -105,7 +105,7 @@ ${retryContext}
     }[] = [];
 
     const humanField = step.title.replace("Evaluate: ", "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-    const userMessage = `Execute step ${step.number}: ${step.title}. Write a narrative analysis starting with "### ${humanField}". Then output a JSON code block with this exact structure:\n\`\`\`json\n{"${step.title.replace("Evaluate: ", "")}": {"value": "narrative text with citations", "sourceCitation": ["S1.c1", "S1.c2"], "citationRef": ["R48.5.11"], "verdict": "PASS"}}\n\`\`\`\n\nThe JSON MUST include all fields: value, sourceCitation (array), citationRef (array), and verdict. Arrays can be empty but must be present.`;
+    const userMessage = `Execute step ${step.number}: ${step.title}. Output a JSON code block with this exact structure:\n\`\`\`json\n{"${step.title.replace("Evaluate: ", "")}": {"value": "narrative text with citations [S1.c1] [R48.5.11]", "sourceCitation": ["S1.c1", "S1.c2"], "citationRef": ["R48.5.11"], "verdict": "PASS"}}\n\`\`\`\n\nPut all narrative assessment inside the "value" field, including citation markers. The JSON MUST include all fields: value, sourceCitation (array), citationRef (array), and verdict. Arrays can be empty but must be present.`;
 
     const result = streamText({
       model: createModel(),
