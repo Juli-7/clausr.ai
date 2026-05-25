@@ -89,6 +89,17 @@ function seedData(db: Database.Database): void {
     verStmt.run("R48", "07", "2023-01-01", 1, "07 series amendments — LED and adaptive driving beam provisions");
     clauseStmt.run("r48-5", "R48", "5", "General specifications", "All lighting and light-signalling devices shall be installed so that the vehicle complies with the requirements of this Regulation under normal conditions of use.", null);
     clauseStmt.run("r48-5.1", "R48", "5.1", "General", "Devices shall be securely fixed and shall not be affected by vibrations encountered in normal use.", null);
+    clauseStmt.run("r48-5.2", "R48", "5.2", "Light source categories", "Replaceable light sources shall belong to an approved category listed in the relevant UN Regulation.", null);
+    clauseStmt.run("r48-5.3", "R48", "5.3", "Electrical connections", "The electrical connections shall be such that no lighting device can be switched off individually by a manual control, except as otherwise permitted.", null);
+    clauseStmt.run("r48-5.4", "R48", "5.4", "Colour of lights", "The colour of the light emitted by each device shall conform to the requirements specified in paragraph 2.17.", null);
+    clauseStmt.run("r48-5.5", "R48", "5.5", "Number of lamps", "The number of lamps fitted to a vehicle shall be as specified for each lighting function.", null);
+    clauseStmt.run("r48-5.6", "R48", "5.6", "Installation requirements", "Devices shall be installed so that they can be correctly adjusted and maintained.", null);
+    clauseStmt.run("r48-5.7", "R48", "5.7", "Switching requirements", "The switching of lighting devices shall comply with the sequences specified in paragraph 2.12.", null);
+    clauseStmt.run("r48-5.8", "R48", "5.8", "Tell-tales", "Each mandatory lamp shall be provided with an operating tell-tale.", null);
+    clauseStmt.run("r48-5.9", "R48", "5.9", "Conformity of production", "Procedures for conformity of production shall comply with those set out in the Agreement, Appendix 2.", null);
+    clauseStmt.run("r48-5.10", "R48", "5.10", "Vertical inclination", "The vertical inclination of the passing beam shall be set in accordance with the requirements of Annex 5.", null);
+    clauseStmt.run("r48-5.11", "R48", "5.11", "Auto-leveling", "Vehicles equipped with LED headlamps or light sources exceeding a specified luminous flux shall be fitted with an automatic headlamp leveling device that maintains the correct beam inclination regardless of vehicle load.", null);
+    clauseStmt.run("r48-5.12", "R48", "5.12", "Headlamp cleaning", "Headlamps with a light source having a luminous flux exceeding a specified threshold shall be equipped with a headlamp cleaning device.", null);
     clauseStmt.run("r48-6", "R48", "6", "Individual specifications", "The installation of each type of device shall conform to the requirements specified in the following paragraphs.", null);
     clauseStmt.run("r48-6.1", "R48", "6.1", "Headlamps — Mounting height", "The mounting height of headlamps shall be not less than 500 mm and not more than 1,200 mm above the ground for vehicles of category M1 and N1.", null);
     clauseStmt.run("r48-6.2", "R48", "6.2", "Headlamps — Number", "The number of headlamps shall be two for vehicles of a width exceeding 1,300 mm, and one for vehicles of a width not exceeding 1,300 mm.", null);
@@ -111,6 +122,9 @@ function seedData(db: Database.Database): void {
     clauseStmt.run("r112-5", "R112", "5", "General specifications", "Each headlamp shall be so manufactured as to conform to the specifications set out in this Regulation.", null);
     clauseStmt.run("r112-5.1", "R112", "5.1", "General — Markings", "Headlamps shall bear the applicant's trade name or mark and the designation 'HC' or 'HC/R'.", null);
     clauseStmt.run("r112-5.2", "R112", "5.2", "General — Materials", "Lenses shall be made of glass or plastic material that meets the requirements of this Regulation.", null);
+    clauseStmt.run("r112-5.3", "R112", "5.3", "Cut-off angle", "The passing beam cut-off angle shall be such that the horizontal inclination does not exceed 0.57° when measured under the conditions specified in Annex 4.", null);
+    clauseStmt.run("r112-5.4", "R112", "5.4", "Luminous flux", "Each headlamp shall produce a luminous flux of not less than 150 lumens when measured in accordance with the procedure described in Annex 3.", null);
+    clauseStmt.run("r112-5.5", "R112", "5.5", "Colour temperature limits", "The colour temperature of the headlamp beam shall not exceed 6,000 K. The chromaticity coordinates of the light emitted shall lie within the boundaries specified in Annex 7.", null);
     clauseStmt.run("r112-6", "R112", "6", "Illumination specifications", "Headlamps shall meet the photometric requirements specified in Annex 3.", null);
     clauseStmt.run("r112-6.1", "R112", "6.1", "Passing beam — Cut-off", "The passing beam shall have a distinct cut-off line. The horizontal portion shall be at an angle of 0° to 0.5° below the horizontal plane.", null);
     clauseStmt.run("r112-6.2", "R112", "6.2", "Passing beam — Intensity", "The maximum intensity of the passing beam shall not exceed the values specified in Table 1 of Annex 3.", null);
@@ -126,7 +140,9 @@ function seedData(db: Database.Database): void {
     clauseStmt.run("r83-5", "R83", "5", "Application for approval", "The application for approval shall be submitted by the vehicle manufacturer.", null);
     clauseStmt.run("r83-5.1", "R83", "5.1", "Application — Test vehicle", "A vehicle representative of the type to be approved shall be submitted to the technical service.", null);
     clauseStmt.run("r83-5.2", "R83", "5.2", "Application — Documentation", "The application shall include a description of the engine, fuel system, and emission control devices.", null);
-    clauseStmt.run("r83-5.3", "R83", "5.3", "OBD system documentation", "Documentation describing the OBD system architecture, monitored components, and malfunction indicators.", null);
+    clauseStmt.run("r83-5.3", "R83", "5.3", "Vehicle mass and CO2 limits", "The CO2 emission limit applicable to a vehicle shall be determined by its reference mass in running order, following the formula specified in Annex 3.", null);
+    clauseStmt.run("r83-5.4", "R83", "5.4", "NOx emission limits", "The NOx emission limit shall not exceed the values specified in Table 2 of Annex 3. Stricter limits apply for compression-ignition engines.", null);
+    clauseStmt.run("r83-5.5", "R83", "5.5", "OBD system requirements", "Vehicles shall be equipped with an on-board diagnostic (OBD) system capable of detecting malfunctions of emission-related components and illuminating a malfunction indicator.", null);
     clauseStmt.run("r83-6", "R83", "6", "Specifications and tests", "The vehicle shall be tested according to the procedures described in Annex 4.", null);
     clauseStmt.run("r83-6.1", "R83", "6.1", "Exhaust emissions — Type I test", "The Type I test shall measure CO, HC, NOx, and PM emissions over the applicable driving cycle.", null);
     clauseStmt.run("r83-6.2", "R83", "6.2", "Exhaust emissions — Type III test", "The Type III test (crankcase emissions) shall verify that no crankcase gases are discharged to the atmosphere.", null);

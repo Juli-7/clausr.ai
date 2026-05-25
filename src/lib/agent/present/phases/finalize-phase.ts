@@ -102,15 +102,15 @@ function formatContent(
   const sections: string[] = [];
 
   for (let i = 0; i < checks.length; i++) {
+    const result = checkResults.find(r => r.name === checks[i].field);
     const stepNum = i + 1;
     const output = stepOutputs[stepNum];
-    if (!output || typeof output !== "string") continue;
+    const outputText = typeof output === "string" ? output.trim() : "";
+    const text = result?.finding ?? outputText;
+    if (!text) continue;
 
-    const text = output.trim();
     let narrative = text.replace(/```[\s\S]*?```/g, "").trim();
     if (narrative.length === 0) continue;
-
-    const result = checkResults.find(r => r.name === checks[i].field);
 
     // Strip any lingering [R48.5.11] markers from narrative (now rendered as badges below)
     if (result) {

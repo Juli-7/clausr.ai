@@ -1,5 +1,6 @@
 import type { Citation, Claim, SourceCitation } from "@/lib/agent/shared/schemas";
 import type { CheckResult, CitationPaletteEntry, SourcePaletteEntry } from "../pipeline-context";
+import type { PaletteStore } from "./palette-store";
 import { logPipeline } from "../logger";
 
 export class CheckStore {
@@ -223,6 +224,71 @@ export class CheckStore {
         }
       }
     }
+  }
+
+  crossCheck(
+    checks: { field: string; clause: string | null }[],
+    paletteStore: PaletteStore,
+    content: string,
+    stepNumber: number
+  ): void {
+    const stepCheck = checks[stepNumber - 1];
+    if (!stepCheck) {
+      logPipeline(`  [CROSS-CHECK] Step ${stepNumber}: no check definition, skipping`);
+      return;
+    }
+
+    const expectedRefs: string[] = [];
+    if (stepCheck.clause && /^[A-Z]/.test(stepCheck.clause)) {
+      expectedRefs.push(stepCheck.clause);
+    }
+
+    const declaredRefs = this.checkResults
+      .filter((r) => r.name === stepCheck.field)
+      .flatMap((r) => r.citationRef);
+
+    const valueRefs = [
+      ...content.matchAll(/\[(R\d+\.\d+(?:\.\d+)*)\]/g),
+    ].map((m) => m[1]);
+
+    const allRefs = new Set([...expectedRefs, ...declaredRefs, ...valueRefs]);
+
+    for (const ref of allRefs) {
+      const inExpected = expectedRefs.includes(ref);
+      const inDeclared = declaredRefs.includes(ref);
+      const inValue = valueRefs.includes(ref);
+      const inPalette = !!paletteStore.findCitation(ref);
+      const inSummaries = !!paletteStore.findSummaryForRef(ref);
+
+      if (!inExpected && (inDeclared || inValue) && !inPalette && !inSummaries) {
+        logPipeline(
+          `  [CROSS-CHECK] \u26A0 Step ${stepNumber}: citation "${ref}" not found in any regulation summary (possible hallucination)`
+        );
+      }
+      if (inExpected && !inDeclared && !inValue) {
+        logPipeline(
+          `  [CROSS-CHECK] \u26A0 Step ${stepNumber}: expected clause "${ref}" (from check) missing from both citationRef and narrative`
+        );
+      }
+      if (inExpected && !inPalette && !inSummaries) {
+        logPipeline(
+          `  [CROSS-CHECK] \u26A0 Step ${stepNumber}: expected clause "${ref}" does not exist in any loaded regulation`
+        );
+      }
+    }
+
+    if (allRefs.size > 0) {
+      const extraRefs = [...allRefs].filter((r) => !expectedRefs.includes(r));
+      if (extraRefs.length > 0 && extraRefs.every((r) => paletteStore.findSummaryForRef(r))) {
+        logPipeline(
+          `  [CROSS-CHECK] Step ${stepNumber}: LLM loaded ${extraRefs.length} extra clause(s) beyond the check definition \u2713`
+        );
+      }
+    }
+
+    logPipeline(
+      `  [CROSS-CHECK] Step ${stepNumber}: ${expectedRefs.length} expected, ${declaredRefs.length} declared, ${valueRefs.length} in narrative`
+    );
   }
 
   computeVerdict(): "PASS" | "FAIL" {

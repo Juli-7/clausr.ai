@@ -1,7 +1,7 @@
 import { executeLlmToolStep } from "./executors/llm-executor";
 import { restoreContext } from "./pipeline-context";
 import { getDocStore } from "@/lib/agent/user-info/vector-store";
-import { loadReferences } from "./builtins";
+import { loadRegulationSummaries } from "./builtins";
 import { initPipelineTurn } from "@/lib/agent/loading/phases/init-phase";
 import { identifyRevisionTarget, identifyRevisionTargets } from "@/lib/agent/loading/phases/revision-phase";
 import { saveContextSnapshot, getResponseCount } from "@/lib/agent/shared/memory/repository";
@@ -43,8 +43,8 @@ export async function* orchestratePipeline(
     logPipeline(`loaded ${storedFiles.length} file(s) with ${storedFiles.reduce((s, f) => s + f.chunks.length, 0)} chunk(s) from doc store`);
   }
 
-  await loadReferences(ctx);
-  logPipeline(`loaded ${ctx.palette.getCitationPalette().length} citation(s) from regulation API`);
+  await loadRegulationSummaries(ctx);
+  logPipeline(`loaded ${ctx.palette.getSummaries().length} regulation summaries + ${ctx.palette.getCitationPalette().length} pre-loaded citation(s)`);
 
   // ── Per-turn initialization ──
   await initPipelineTurn(ctx, sessionId, message, correlationId);
@@ -121,12 +121,25 @@ export async function* orchestratePipeline(
 
     if (ctx.checks.getResults().length > 0) {
       logPipeline(`  → ctx.checks now has ${ctx.checks.getResults().length} entries (from step ${step.number})`);
+
+      // Tier 3: Lazily resolve any citationRefs from check results that aren't in the palette yet
+      const checkRefs = ctx.checks.getResults().flatMap((r) => r.citationRef);
+      await ctx.palette.resolveMissingRefs(checkRefs);
+
+      // Also resolve any [R48.x.x] markers from the narrative text
+      const fullContent = result.streamedTokens?.join("") ?? "";
+      if (fullContent) {
+        const contentRefs = [...fullContent.matchAll(/\[(R\d+\.\d+(?:\.\d+)*)\]/g)].map((m) => m[1]);
+        await ctx.palette.resolveMissingRefs(contentRefs);
+      }
+
+      // Compile citations (deterministic — already resolved above)
       ctx.checks.compileCitations(
         [...ctx.palette.getCitationPalette()],
         ctx.files.getSourcePalette()
       );
+
       // Backfill any chunk references in the narrative that the LLM forgot to include in sourceCitation
-      const fullContent = result.streamedTokens?.join("") ?? "";
       if (fullContent) {
         ctx.checks.supplementFromContent(
           fullContent,
@@ -134,6 +147,9 @@ export async function* orchestratePipeline(
           ctx.files.getSourcePalette()
         );
       }
+
+      // Cross-check: expected vs declared vs value refs
+      ctx.checks.crossCheck(ctx.skill.checks, ctx.palette, fullContent, step.number);
     }
 
     if (result.contextSnapshot) {

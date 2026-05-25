@@ -24,7 +24,7 @@
                                    │
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                    SEGMENT 2: USER-INFO LAYER (EXTRACTION + STORAGE)                  │
+│                    SEGMENT 2: SESSION INPUT LAYER (EXTRACTION + STORAGE)               │
 │                                                                                      │
 │  user-info/extractors/ (real — OCR/pdf.js/mammoth)      user-info/vector-store/      │
 │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐     ┌───────────────────────┐    │
@@ -66,7 +66,7 @@
 │  │                               ReportAssembler(sections)                        │  │
 │  │  3. inputPhase()         → calls docStore.processFile() (vector-store layer)     │  │
 │  │     (returns extractedText[]; no ctx.files population)                           │  │
-│  │  4. skillGenPhase(fileTexts) → if auto, generate SKILL.md, accepts file texts   │  │
+│  │  4. skillGenPhase(ctx, message, fileTexts) → if auto, generate SKILL.md        │  │
 │  │     as param (no longer reads from ctx.files)                                   │  │
 │  │  5. generateStepsFromChecks() → ExecutableStep[] 1:1 from ##Checks              │  │
 │  │  6. saveSessionSetup()   → persist skill + steps + file metadata to              │  │
@@ -109,7 +109,7 @@
 │  PROVIDES: session_setup persistence — PipelineContext (FileRegistry has metadata    │
 │    only, no chunks; PaletteStore empty — pipeline loads regs; StepMemory with        │
 │    step definitions), plus ExecutableStep[]                                           │
-│  CONSIDERS FROM: User-Info (processFile), Shared (DB persistence)                  │
+│  CONSIDERS FROM: Session Input (processFile), Shared (DB persistence)               │
 │  CONSUMED BY: POST /api/setup → setupSession()                                        │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                    │
@@ -165,7 +165,7 @@
 │                                                                                      │
 │  PROVIDES: StepResult[], streamed PipelineEvents                                      │
 │  CONSIDERS FROM: Pipeline slices (via restoreContext), session_setup (DB),              │
-│    User-Info (getFiles for chunks), Knowledge (loadReferences for regs)            │
+│    Session Input (getFiles for chunks), Knowledge (loadReferences for regs)         │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
@@ -291,8 +291,9 @@ HTTP POST /api/setup
   └─ setupSession({skillName?, sessionId, files?, message?})
        │  [loads everything, persists to session_setup DB]
        │
+       ├─ generateCorrelationId()                                       → corr-{ts}-{n}
+       │
        ├─ initSession(skillName, sessionId)
-       │    ├─ generateCorrelationId()                                    → corr-{ts}-{n}
        │    ├─ loadSkill(skillName)              ◄── loading/skill/loader.ts
        │    │    ├─ matter(SKILL.md)              → frontmatter + body
        │    │    ├─ parseChecks(skillmd)          ◄── loading/skill/check-parser.ts
@@ -302,9 +303,6 @@ HTTP POST /api/setup
        │    │    │    └─ getScriptDescription()   → Python docstring
        │    │    └─ load template.json (optional) → ReportTemplate
         │    ├─ getOrCreateSession(sessionId, skillName)  ◄── shared/memory/repository.ts
-        │    ├─ pruneOldSessions()                        ◄── loading/cleanup.ts
-        │    │    ├─ getSetting("retention_days")
-        │    │    └─ deleteSessionCascade() for expired
         │    └─ [skill loaded into memory — no context created yet]
        │
        ├─ createPipelineContext(name, skillmd, checks, sessionId, cid)
@@ -341,8 +339,9 @@ HTTP POST /api/setup
         ├─ generateStepsFromChecks(ctx.skill.checks)  ◄── loading/generate-steps.ts
         │    └─ Steps 1..N: llm+tool (one per check field, with field instructions)
         │
-        └─ saveSessionSetup(sessionId, {ctx, steps, skillName, correlationId})
-             └─ INSERT ctx JSON + steps JSON into session_setup table
+        └─ saveSessionSetup(sessionId, {skillName, skillmd, checks, scripts,
+                regulationIds, steps, paletteReferences, paletteCitations, fileRegistry})
+             └─ INSERT into session_setup table (skill + steps + file metadata)
                 (palette + file chunks loaded by pipeline layer on each turn)
 ```
 
@@ -434,10 +433,12 @@ HTTP POST /api/chat
        │  │    ├─ [on success]
        │  │    │    ├─ yield {type: "token", text, stepNumber}  for each streamedToken
        │  │    │    ├─ yield {type: "tool-result", stepNumber, results}
-       │  │    │    ├─ if ctx.checks.getResults().length > 0:
-       │  │    │    │    └─ ctx.checks.compileCitations(citationPalette, sourcePalette)
-       │  │    │    │         └─ lookup + deduplicate + sort
-       │  │    │    └─ saveContextSnapshot({sessionId, turnNumber, stepNumber, ...})
+        │  │    │    ├─ if ctx.checks.getResults().length > 0:
+        │  │    │    │    ├─ ctx.checks.compileCitations(citationPalette, sourcePalette)
+        │  │    │    │    │    └─ lookup + deduplicate + sort
+        │  │    │    │    └─ ctx.checks.supplementFromContent(fullContent, ...)
+        │  │    │    │         └─ backfill [R...] / [SN] markers from narrative
+        │  │    │    └─ saveContextSnapshot({sessionId, turnNumber, stepNumber, ...})
        │  │    │         └─ saves full context state for debugging
        │  │
        │  └─ [after all steps]
@@ -452,14 +453,15 @@ HTTP POST /api/chat
             │    files, steps, skill})
             │    ├─ buildFindings(checkResults)    ◄── evaluation/summary.ts
             │    │    └─ map per check (FAIL only): "field → finding → VERDICT [citation]"
-            │    ├─ computeConfidence(input)       ◄── evaluation/confidence.ts
-            │    │    ├─ avgOcr = average of file ocrConfidence
-            │    │    ├─ ocrPenalty = (1 - avgOcr/100) * 30
-            │    │    ├─ pdfPenalty from extractorUsed (pdf-parse=5, fallback=10)
-            │    │    ├─ baseScore = 100 - ocrPenalty - pdfPenalty
-            │    │    ├─ llmMultiplier from step outputs
-            │    │    └─ finalScore = baseScore * llmMultiplier
-            │    │         → Confidence{score, ocrConfidence, llmMultiplier, needsExpert}
+             │    ├─ computeConfidence(input)       ◄── evaluation/confidence.ts
+             │    │    ├─ avgOcr = average of file ocrConfidence
+             │    │    ├─ ocrPenalty = (1 - avgOcr/100) * 30
+             │    │    ├─ pdfPenalty from extractorUsed (pdfjs-dist=5, tesseract/fallback=10)
+             │    │    ├─ validationPenalty = (validationErrors.length) * 5
+             │    │    ├─ baseScore = max(0, 100 - ocrPenalty - pdfPenalty - validationPenalty)
+             │    │    ├─ llmMultiplier from step outputs (clamped 0.5-1.0)
+             │    │    └─ finalScore = round(baseScore * llmMultiplier * 10) / 10
+             │    │         → Confidence{score, ocrConfidence, llmMultiplier, needsExpert}
             │    └─ validate({claims, citations, sourceCitations, ...})
             │         ◄── evaluation/validate.ts
             │         ├─ [for each claim] validate citation refs in palette
@@ -467,7 +469,7 @@ HTTP POST /api/chat
             │         ├─ content markers match compiled citations
             │         └─ auto-supplement missing citations from sourcePalette
             │
-            ├─ verdict = ctx.checks.computeVerdict()  → PASS | FAIL
+            ├─ verdict = ctx.checks.getResults().some(c => c.verdict === "FAIL") ? "FAIL" : "PASS"
             │
             ├─ Build responseData:
             │    ├─ content = formatContent(stepOutputs, checks, results, palette)
@@ -499,9 +501,9 @@ HTTP POST /api/chat
 | Segment | Provides To | Interface (Types + Functions) | Consumes From |
 |---------|------------|-------------------------------|---------------|
 | **1. Knowledge** | Pipeline | `IRegulationApi`, `getRegulationApi()` | — |
-| **2. User-Info** | Loading, Pipeline | `IDocStore.processFile()` (real extraction + raw file storage), `IDocStore.getFiles()` (mock vecDB retrieval — returns all chunks), extractors + chunkers (real) | Shared (chunk_store DB) |
-| **3. Loading** | Pipeline (via session_setup DB) | `setupSession()`, `initSession()`, `inputPhase()`, `skillGenPhase()`, `generateStepsFromChecks()`, `saveSessionSetup()`, `SkillLoader`, `ParsedCheck[]`, `ExecutableStep[]` | User-Info (processFile), Shared (repository) |
-| **4. Pipeline** | Evaluation, Present | `orchestratePipeline(sessionId, msg, revisionFields?)`, `restoreContext()`, `initPipelineTurn()`, `StepResult`, `PipelineEvent` (streaming) | Shared (repository), session_setup DB, User-Info (getFiles), Knowledge (loadReferences) |
+| **2. Session Input** | Loading, Pipeline | `IDocStore.processFile()` (real extraction + raw file storage), `IDocStore.getFiles()` (mock vecDB retrieval — returns all chunks), extractors + chunkers (real) | Shared (chunk_store DB) |
+| **3. Loading** | Pipeline (via session_setup DB) | `setupSession()`, `initSession()`, `inputPhase()`, `skillGenPhase()`, `generateStepsFromChecks()`, `saveSessionSetup()`, `SkillLoader`, `ParsedCheck[]`, `ExecutableStep[]` | Session Input (processFile), Shared (repository) |
+| **4. Pipeline** | Evaluation, Present | `orchestratePipeline(sessionId, msg, revisionFields?)`, `restoreContext()`, `initPipelineTurn()`, `StepResult`, `PipelineEvent` (streaming) | Shared (repository), session_setup DB, Session Input (getFiles), Knowledge (loadReferences) |
 | **5. Evaluation** | Present | `evaluate()`, `EvaluationResult` | Pipeline (CheckStore), Shared (schemas) |
 | **6. Present** | External | `finalizePhase()` → `AgentResponse`, `generateDocx()` → `.docx Blob` | Pipeline, Evaluation, Shared (schemas/repository) |
 | **7. API Routes** | HTTP clients | 14 route handlers; consumes Pipeline + Shared | Pipeline, Shared (repository/schemas) |
@@ -510,7 +512,7 @@ HTTP POST /api/chat
 
 1. **Knowledge ↔ Pipeline**: `PipelineContext.skill` carries loaded skill metadata. `IRegulationApi` is swappable (mock ↔ real).
 
-2. **User-Info ↔ Loading/Pipeline**: `IDocStore` is swappable (mock ↔ real vecDB), but only for the `getFiles()` retrieval part. Extraction + chunking + raw file storage (`processFile`) is always clausr.ai's responsibility — the extractors are real production code, not mock stand-ins. The mock vecDB returns all chunks; the real vecDB will embed a query and return top-k chunk IDs.
+2. **Session Input ↔ Loading/Pipeline**: `IDocStore` is swappable (mock ↔ real vecDB), but only for the `getFiles()` retrieval part. Extraction + chunking + raw file storage (`processFile`) is always clausr.ai's responsibility — the extractors are real production code, not mock stand-ins. The mock vecDB returns all chunks; the real vecDB will embed a query and return top-k chunk IDs.
 
 3. **Loading ↔ Pipeline**: Loading runs once per session (via `POST /api/setup`) and persists skill + steps to `session_setup`. Pipeline restores from DB, then independently loads chunks from the doc store and regulation clauses from the Knowledge API before executing steps.
 
@@ -530,7 +532,7 @@ This section traces the complete function call chain from user input to final ou
 
 ---
 
-### 1. User-Info Layer — Extraction + Chunking + Raw File Storage (with mock vecDB retrieval)
+### 1. Session Input Layer — Extraction + Chunking + Raw File Storage (with mock vecDB retrieval)
 
 Extraction and chunking are always done by clausr.ai (for bounding boxes, OCR confidence, deterministic chunk IDs). The `IDocStore.getFiles()` is the only mock vector-DB seam — today it returns all chunks; a real vecDB would embed and return top-k.
 
@@ -636,16 +638,16 @@ generateStepsFromChecks(checks)              [loading/generate-steps.ts]
 
 #### End of Loading — Everything Ready
 
-After `saveSessionSetup()` persists to DB, the `session_setup` table contains:
+After `saveSessionSetup()` persists to DB, data is split across stores:
 
-| Asset | Where it lives |
-|---|---|
-| Source file chunks | Doc store (loaded by pipeline via `docStore.getFiles()`) |
-| Regulation clauses | Knowledge API (loaded by pipeline via `loadReferences()`) |
-| Step definitions | `ExecutableStep[]` (serialized in `session_setup`) |
-| Skill metadata | `PipelineContext.skill` (serialized in `session_setup`) |
+| Asset | Where it lives | Loaded by pipeline via |
+|---|---|---|
+| Steps + skill metadata + scripts + checks | `session_setup` table (serialized JSON) | `restoreContext()` / `loadSessionSetup()` |
+| File metadata (empty at setup — populated later) | `session_setup.file_registry_json` | `FileRegistry.fromJSON()` |
+| Source file chunks | `chunk_store` DB table | `docStore.getFiles(sessionId)` |
+| Regulation clauses | Knowledge API (mock SQLite / real regulation DB) | `loadReferences(ctx)` (calls `getRegulationApi()`) |
 
-The pipeline restores skill + steps from `session_setup`, then loads chunks from the doc store and regulation clauses from the Knowledge API before executing steps.
+The pipeline restores skill + steps from `session_setup`, then loads file chunks from `chunk_store` and regulation clauses from the Knowledge API before executing steps. Palette references and citations are stored as empty arrays at setup — the pipeline populates them.
 
 ---
 
@@ -732,6 +734,8 @@ executeStepWithRetry(step, ctx, maxRetries=1)   [pipeline/orchestrator-v2.ts]
        │
        ├─ Merge tool + narrative CheckResults into CheckStore
        │    ctx.checks.compileCitations(citationPalette, sourcePalette)
+       │    ctx.checks.supplementFromContent(fullContent, citationPalette, sourcePalette)
+       │    ← backfill [R...] / [SN] markers found in narrative but not in check results
        │
        ├─ storeOutput(ctx, step.number, fullText)
        │
@@ -752,13 +756,13 @@ evaluate({checkResults, citationPalette, sourcePalette, files, stepOutputs,
   └── evaluation/index.ts
 
        ├─ computeConfidence(input)                   [evaluation/confidence.ts]
-       │    formula: baseScore = 100 - ocrPenalty - pdfPenalty
+       │    formula: baseScore = max(0, 100 - ocrPenalty - pdfPenalty - validationPenalty)
        │    ocrPenalty = (1 - avgOcr/100) * 30
-       │    pdfPenalty: pdf-parse=5, fallback=10
+       │    pdfPenalty: pdfjs-dist=5, tesseract/fallback=10
+       │    validationPenalty = (validationErrors.length) * 5
        │    llmMultiplier from step outputs (clamped 0.5-1.0)
-       │    finalScore = baseScore * llmMultiplier
+       │    finalScore = round(baseScore * llmMultiplier * 10) / 10
        │    needsExpert = finalScore < 50
-       │    → Confidence{score, ocrConfidence, llmMultiplier, needsExpert, ...}
        │
        ├─ buildFindings(checkResults)                [evaluation/summary.ts]
        │    FAIL-only: field → "finding → VERDICT [citation]"
@@ -826,12 +830,12 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 | `MockDocStore` (class + all methods) | `user-info/vector-store/mock-store.ts` |
 | `getDocStore()` / `setDocStore()` | `user-info/vector-store/index.ts` |
 
-#### Shared/Memory Utilities (called internally, not in main flow)
+#### Shared/Repository Utilities (called internally, not in main flow)
 
 | Function | Module |
 |----------|--------|
 | `getDb()` / `getSetting()` / `setSetting()` | `shared/memory/database.ts` |
-| `getConversationHistory()` / `getFileContents()` / `getFileChunks()` | `shared/memory/repository.ts` |
+| `getConversationHistory()` / `getChunksBySession()` / `getFileChunks()` | `shared/memory/repository.ts` |
 | `deleteSession()` / `removeUploadDir()` | `shared/memory/repository.ts` / `loading/cleanup.ts` |
 | `isValidSessionId()` | `loading/cleanup.ts` |
 | `hasSessionSetup()` (gate in `/api/chat`) | `shared/memory/repository.ts` |
@@ -895,9 +899,9 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 
 ---
 
-### SEGMENT 2 — User-Info Layer (`src/lib/agent/user-info/`)
+### SEGMENT 2 — Session Input Layer (`src/lib/agent/user-info/`)
 
-The user-info layer handles everything before semantic search: extraction, chunking, raw file storage. The `extractors/` are the **real** extraction engine (clausr.ai owns these — they're not mock code). The `vector-store/` sub-directory wraps them into the `IDocStore` interface and provides mock vecDB retrieval in `getFiles()`.
+The session input layer handles everything before semantic search: extraction, chunking, raw file storage. The `extractors/` are the **real** extraction engine (clausr.ai owns these — they're not mock code). The `vector-store/` sub-directory wraps them into the `IDocStore` interface and provides mock vecDB retrieval in `getFiles()`.
 
 #### `user-info/extractors/index.ts`
 | Function | Description |
@@ -990,7 +994,7 @@ The user-info layer handles everything before semantic search: extraction, chunk
 #### `loading/phases/init-phase.ts`
 | Function | Description |
 |----------|-------------|
-| `initSession(skillName?, sessionId)` | **Once-per-session.** Generates correlation ID, loads skill (or sets auto-skill flag), gets/creates session, prunes old sessions via `loading/cleanup.ts`. Returns `{correlationId, isAutoSkill}`. (Does NOT create context — that happens in setupSession.) |
+| `initSession(skillName?, sessionId)` | **Once-per-session.** Loads skill (or sets auto-skill flag), gets/creates session. Returns `{skill, isAutoSkill}`. (Correlation ID generated by orchestrator — does NOT create context.) |
 | `initPipelineTurn(ctx, sessionId, message, correlationId)` | **Per-turn.** Adds user message to DB, restores previous step outputs from DB (file chunks, snapshots), loads previous turns. Used by pipeline on every POST /api/chat. |
 
 #### `loading/phases/input-phase.ts`
@@ -1266,10 +1270,12 @@ The shared layer contains only what is genuinely cross-layer: type definitions, 
 | `addAssistantResponse(sessionId, response)` | INSERT assistant message + full response record. |
 | `getConversationHistory(sessionId)` | SELECT messages ordered by id. |
 | `getResponseCount(sessionId)` | COUNT of responses. |
-| `saveFileContents(sessionId, fileContents)` | UPDATE `sessions.file_contents`. |
-| `getFileContents(sessionId)` | SELECT `file_contents`. |
-| `saveFileChunks(sessionId, chunksJson)` | UPDATE `sessions.file_chunks`. |
-| `getFileChunks(sessionId)` | SELECT `file_chunks`. |
+| `saveChunks(sessionId, fileId, chunks)` | INSERT chunks into `chunk_store` table. |
+| `getChunksByIds(ids)` | SELECT chunks by ID list. |
+| `getChunksBySession(sessionId)` | SELECT all chunks for a session. |
+| `deleteChunksBySession(sessionId)` | DELETE all chunks for a session. |
+| `saveFileChunks(sessionId, chunksJson)` | UPDATE `sessions.file_chunks` with file metadata JSON. |
+| `getFileChunks(sessionId)` | SELECT `file_chunks` — file metadata JSON. |
 | `deleteSession(sessionId)` | CASCADE delete session + all related records. |
 | `getAllSessions()` | SELECT all sessions with metadata. |
 | `getResponsesForSession(sessionId)` | SELECT all responses with parsed JSON fields. |
@@ -1326,7 +1332,7 @@ The shared layer contains only what is genuinely cross-layer: type definitions, 
 | Segment | Files | Functions |
 |---------|-------|-----------|
 | **1. Knowledge** | 3 | ~8 |
-| **2. User-Info** | 8 | ~18 |
+| **2. Session Input** | 8 | ~18 |
 | **3. Loading** | 10 | ~12 |
 | **4. Pipeline** | 13 | ~21 |
 | **5. Evaluation** | 5 | ~7 |
@@ -1337,4 +1343,4 @@ The shared layer contains only what is genuinely cross-layer: type definitions, 
 | **Total (agent engine)** | **47** | **~107** |
 | **Total (all source)** | **59** | **~123** |
 
-*Updated 2026-05-24: restructured SEGMENT 2 from "Vector-Store" to "User-Info" layer. vector-store/ moved into user-info/ as a sub-directory. Extraction + chunking are always clausr.ai's responsibility (real code, not mock). Only `IDocStore.getFiles()` is mock vecDB retrieval (returns all chunks today; real vecDB to embed query + return top-k later). Added raw file persistence to disk in processFile().*
+*Updated 2026-05-25: restructured SEGMENT 2 from "Vector-Store" → "User-Info" → "Session Input" layer. vector-store/ moved into user-info/ as a sub-directory. Extraction + chunking are always clausr.ai's responsibility (real code, not mock). Only `IDocStore.getFiles()` is mock vecDB retrieval (returns all chunks today; real vecDB to embed query + return top-k later). Added raw file persistence to disk in processFile().*
