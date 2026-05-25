@@ -178,7 +178,7 @@ Arrays can be empty if not applicable, but must be present.`;
       logPipeline(`  [LLM+TOOL] tool was NOT called for numerical step — will retry with error context`);
       return {
         success: false,
-        error: `Step ${step.number}: You MUST call the compliance tool for all numerical checks. Extract values from the file data and pass them as structured check objects to the tool.`,
+        error: `Step ${step.number}: This step requires the compliance-check tool (type: ${currentCheck.type.kind}) but it was not called.`,
         errorCode: "LLM_ERROR",
       };
     }
@@ -217,6 +217,10 @@ Arrays can be empty if not applicable, but must be present.`;
       // No tool calls — use narrative results directly (qualitative checks)
       ctx.checks.addResults(textResults);
       logPipeline(`  [LLM+TOOL] extracted ${textResults.length} CheckResult(s) from LLM text output`);
+    } else if (fullText) {
+      logPipeline(`  [LLM+TOOL] ⚠ step ${step.number}: LLM produced text but no parseable JSON results`);
+    } else {
+      logPipeline(`  [LLM+TOOL] ⚠ step ${step.number}: no tool calls and no text output — check may be missing`);
     }
 
     storeOutput(ctx, step.number, fullText);
@@ -238,7 +242,9 @@ Arrays can be empty if not applicable, but must be present.`;
 // ── Helpers ──
 
 function storeOutput(ctx: PipelineContext, stepNumber: number, text: string): void {
-  const trimmed = text.trim();
+  let trimmed = text.trim();
+  const fenceMatch = trimmed.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/);
+  if (fenceMatch) trimmed = fenceMatch[1].trim();
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
     try {
       ctx.steps.write(stepNumber, JSON.parse(trimmed));
@@ -250,14 +256,9 @@ function storeOutput(ctx: PipelineContext, stepNumber: number, text: string): vo
   }
 }
 
-function resolveCitationRef(palette: readonly CitationPaletteEntry[], clause: string): string[] {
+function resolveCitationRef(_palette: readonly CitationPaletteEntry[], clause: string): string[] {
   if (!clause) return [];
-  if (palette.some(e => e.id === clause)) return [clause];
-  const dot = clause.indexOf(".");
-  const reg = dot !== -1 ? clause.substring(0, dot) : "";
-  if (!reg) return [];
-  const fallback = palette.find(e => e.id.startsWith(reg + "."));
-  return fallback ? [fallback.id] : [`${reg}.0`];
+  return [clause];
 }
 
 export function buildDomainSchemaGuide(checks: ParsedCheck[]): string {
