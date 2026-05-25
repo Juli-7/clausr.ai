@@ -3,12 +3,12 @@ import type { TextChunk } from "./index";
 
 const HTML_ENTITIES: Record<string, string> = {
   "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'",
-  "&nbsp;": " ", "&mdash;": "—", "&ndash;": "–", "&euro;": "€",
-  "&copy;": "©", "&reg;": "®", "&trade;": "™", "&hellip;": "…",
-  "&bull;": "•", "&middot;": "·", "&deg;": "°", "&plusmn;": "±",
-  "&times;": "×", "&divide;": "÷", "&frac12;": "½", "&frac14;": "¼",
-  "&frac34;": "¾", "&laquo;": "«", "&raquo;": "»", "&lsquo;": "'",
-  "&rsquo;": "'", "&ldquo;": "\"", "&rdquo;": "\"",
+  "&nbsp;": " ", "&mdash;": "\u2014", "&ndash;": "\u2013", "&euro;": "\u20AC",
+  "&copy;": "\u00A9", "&reg;": "\u00AE", "&trade;": "\u2122", "&hellip;": "\u2026",
+  "&bull;": "\u2022", "&middot;": "\u00B7", "&deg;": "\u00B0", "&plusmn;": "\u00B1",
+  "&times;": "\u00D7", "&divide;": "\u00F7", "&frac12;": "\u00BD", "&frac14;": "\u00BC",
+  "&frac34;": "\u00BE", "&laquo;": "\u00AB", "&raquo;": "\u00BB", "&lsquo;": "\u2018",
+  "&rsquo;": "\u2019", "&ldquo;": "\u201C", "&rdquo;": "\u201D",
 };
 
 export interface DocxResult {
@@ -28,64 +28,62 @@ function stripHtml(html: string): string {
   return text.trim();
 }
 
-function splitParagraphs(html: string): string[] {
-  const cleaned = html.replace(/<\/p>/gi, "</p>\n");
+interface ParagraphInfo {
+  text: string;
+  html: string;
+}
+
+function extractParagraphs(mammothHtml: string): ParagraphInfo[] {
+  const cleaned = mammothHtml.replace(/<\/p>/gi, "</p>\n");
   const parts = cleaned.split(/<\/p>\s*\n?/i);
   return parts
-    .map((p) => stripHtml(p))
-    .filter((t) => t.length > 0);
+    .filter((p) => p.trim().length > 0)
+    .map((p) => {
+      const fullHtml = p.trim() + "</p>";
+      const text = stripHtml(fullHtml);
+      return { text, html: fullHtml };
+    });
 }
 
 const MAX_CHUNK_SIZE = 2000;
 const OVERLAP_CHARS = 120;
 
-function splitLargeText(text: string): string[] {
-  if (text.length <= MAX_CHUNK_SIZE) return [text];
+function buildChunks(paragraphs: ParagraphInfo[]): TextChunk[] {
+  const merged: { text: string; html: string }[] = [];
+  let current: ParagraphInfo[] = [];
 
-  const byDoubleNewline = text.split(/\n\s*\n/).filter((s) => s.trim().length > 0);
-  if (byDoubleNewline.length > 1) {
-    return byDoubleNewline.flatMap((part) => splitLargeText(part));
+  function flushCurrent(): void {
+    if (current.length === 0) return;
+    merged.push({
+      text: current.map((p) => p.text).join("\n"),
+      html: current.map((p) => p.html).join("\n"),
+    });
+    current = [];
   }
 
-  const byNewline = text.split("\n").filter((s) => s.trim().length > 0);
-  if (byNewline.length > 1) {
-    return byNewline.flatMap((part) => splitLargeText(part));
-  }
-
-  const parts: string[] = [];
-  let start = 0;
-  while (start < text.length) {
-    let end = Math.min(start + MAX_CHUNK_SIZE, text.length);
-    if (end < text.length) {
-      const searchStart = Math.max(end - 100, start);
-      const lastSpace = text.lastIndexOf(" ", end);
-      if (lastSpace > searchStart) end = lastSpace;
+  for (const para of paragraphs) {
+    if (para.text.length > MAX_CHUNK_SIZE) {
+      flushCurrent();
+      merged.push({ text: para.text, html: para.html });
+      continue;
     }
-    parts.push(text.slice(start, end).trim());
-    start = end;
+    const wouldBeTooLong =
+      current.reduce((s, p) => s + p.text.length + 1, 0) + para.text.length >
+      MAX_CHUNK_SIZE;
+    if (wouldBeTooLong) flushCurrent();
+    current.push(para);
   }
-  return parts.filter((s) => s.length > 0);
-}
+  flushCurrent();
 
-export async function extractDocxText(dataUrl: string): Promise<DocxResult> {
-  const base64 = dataUrl.split(",")[1] ?? dataUrl;
-  const buffer = Buffer.from(base64, "base64");
+  const chunks: TextChunk[] = merged.map((chunk, i) => {
+    const id = `c${i + 1}`;
+    return {
+      id,
+      text: chunk.text,
+      html: `<div data-chunk-id="${id}">\n${chunk.html}\n</div>`,
+    };
+  });
 
-  const result = await mammoth.convertToHtml({ buffer });
-  if (result.messages && result.messages.length > 0) {
-    for (const msg of result.messages) {
-      console.warn(`[docx-extract] mammoth: ${msg.type} — ${msg.message}`);
-    }
-  }
-  const paragraphs = splitParagraphs(result.value);
-
-  const rawChunks = paragraphs.flatMap((text) => splitLargeText(text));
-  let chunks: TextChunk[] = rawChunks.map((text, i) => ({
-    id: `c${i + 1}`,
-    text,
-  }));
-
-  // Apply overlap between adjacent chunks for retrieval context
   for (let i = 1; i < chunks.length; i++) {
     const prev = chunks[i - 1];
     if (prev.text.length <= OVERLAP_CHARS) continue;
@@ -97,6 +95,23 @@ export async function extractDocxText(dataUrl: string): Promise<DocxResult> {
       text: overlap + "\n" + chunks[i].text,
     };
   }
+
+  return chunks;
+}
+
+export async function extractDocxText(dataUrl: string): Promise<DocxResult> {
+  const base64 = dataUrl.split(",")[1] ?? dataUrl;
+  const buffer = Buffer.from(base64, "base64");
+
+  const result = await mammoth.convertToHtml({ buffer });
+  if (result.messages && result.messages.length > 0) {
+    for (const msg of result.messages) {
+      console.warn(`[docx-extract] mammoth: ${msg.type} \u2014 ${msg.message}`);
+    }
+  }
+
+  const paragraphs = extractParagraphs(result.value);
+  const chunks = buildChunks(paragraphs);
 
   return {
     text: chunks.map((c) => c.text).join("\n"),

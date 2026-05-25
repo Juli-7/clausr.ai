@@ -12,6 +12,7 @@ export interface WordBox {
 export interface HighlightChunk {
   id: string;
   text: string;
+  html?: string;
   bbox?: WordBox;
   wordBoxes?: WordBox[];
   pageNumber?: number;
@@ -159,8 +160,10 @@ export function SourceCitationCard({
             </button>
           </div>
           <div className="flex gap-4 p-3.5">
-            {/* Preview panel — image */}
-            {fileType === "image" && fileUrl && !imageError && (
+            {/* Preview panel — HTML content (format-agnostic) */}
+            {highlightChunk?.html ? (
+              <PreviewHtmlContent html={highlightChunk.html} chunkId={highlightChunk.id} filename={filename} />
+            ) : fileType === "image" && fileUrl && !imageError ? (
               <PreviewImage
                 ref={imgRef}
                 src={fileUrl}
@@ -171,13 +174,9 @@ export function SourceCitationCard({
                 onError={() => setImageError(true)}
                 highlightRects={highlightRects}
               />
-            )}
-            {fileType === "image" && ((fileUrl && imageError) || !fileUrl) && (
+            ) : fileType === "image" && ((fileUrl && imageError) || !fileUrl) ? (
               <PreviewUnavailable filename={filename} />
-            )}
-
-            {/* Preview panel — PDF with highlight */}
-            {(fileType === "pdf") && highlightChunk?.pageNumber && fileUrl && (
+            ) : (fileType === "pdf") && highlightChunk?.pageNumber && fileUrl ? (
               <PdfPreviewPage
                 pageUrl={fileUrlToPageUrl(fileUrl, highlightChunk.pageNumber)}
                 filename={filename}
@@ -185,14 +184,11 @@ export function SourceCitationCard({
                 ref={imgRef}
                 onDisplaySizeChange={setImgDisplaySize}
               />
-            )}
-            {(fileType === "pdf") && !highlightChunk?.pageNumber && (
+            ) : (fileType === "pdf") && !highlightChunk?.pageNumber ? (
+              <PreviewFallback filename={filename} pageNumber={pageNumber} fileUrl={fileUrl} />
+            ) : (
               <PreviewFallback filename={filename} pageNumber={pageNumber} fileUrl={fileUrl} />
             )}
-
-            {fileType === "docx" || fileType === "unknown" ? (
-              <PreviewFallback filename={filename} pageNumber={pageNumber} fileUrl={fileUrl} />
-            ) : null}
 
             {/* Text panel */}
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -372,6 +368,44 @@ const PdfPreviewPage = React.forwardRef<
     </div>
   );
 });
+
+function PreviewHtmlContent({
+  html,
+  chunkId,
+  filename,
+}: {
+  html: string;
+  chunkId: string;
+  filename: string;
+}) {
+  return (
+    <div style={{ flexShrink: 0 }}>
+      <div
+        className="rounded-lg overflow-auto p-2.5"
+        style={{
+          width: 180,
+          height: 130,
+          background: "var(--color-bg-dark)",
+          border: "1px solid var(--color-border-default)",
+          fontSize: 11,
+          lineHeight: 1.4,
+        }}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+      <div className="text-[10px] text-center mt-1" style={{ color: "var(--color-text-muted)" }}>
+        {filename} &mdash; {chunkId}
+      </div>
+      <style>{`
+        [data-chunk-id="${chunkId}"] {
+          background: rgba(255, 180, 50, 0.3);
+          border-left: 3px solid rgba(255, 150, 30, 0.8);
+          padding-left: 4px;
+          border-radius: 2px;
+        }
+      `}</style>
+    </div>
+  );
+}
 
 function PreviewUnavailable({ filename }: { filename: string }) {
   return (

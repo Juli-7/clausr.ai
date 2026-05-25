@@ -667,6 +667,36 @@ function SourceCitationPopoverImage({
   filename: string;
   highlightChunk: HighlightChunk;
 }) {
+  // Prefer HTML rendering when available (format-agnostic)
+  if (highlightChunk.html) {
+    return (
+      <div className="px-4 py-3">
+        <div className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={{ color: "var(--color-text-muted)" }}>
+          Source region
+        </div>
+        <div
+          className="rounded overflow-auto p-2.5"
+          style={{
+            maxHeight: 200,
+            background: "var(--color-bg-dark)",
+            border: "1px solid var(--color-border-default)",
+            fontSize: 12,
+            lineHeight: 1.5,
+          }}
+          dangerouslySetInnerHTML={{ __html: highlightChunk.html }}
+        />
+        <style>{`
+          [data-chunk-id="${highlightChunk.id}"] {
+            background: rgba(255, 180, 50, 0.3);
+            border-left: 3px solid rgba(255, 150, 30, 0.8);
+            padding-left: 4px;
+            border-radius: 2px;
+          }
+        `}</style>
+      </div>
+    );
+  }
+
   const isPdf = filename.toLowerCase().endsWith(".pdf");
   const pageUrl = isPdf && highlightChunk.pageNumber
     ? `${fileUrl.replace(/\/+$/, "")}/page/${highlightChunk.pageNumber}`

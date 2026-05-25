@@ -12,6 +12,7 @@ export interface WordBox {
 export interface TextChunk {
   id: string;
   text: string;
+  html?: string;  // <div data-chunk-id="cX">formatted content from source</div>
   bbox?: WordBox;
   wordBoxes?: WordBox[];
   pageNumber?: number;

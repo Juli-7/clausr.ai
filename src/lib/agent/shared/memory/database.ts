@@ -115,6 +115,7 @@ export function getDb(): Database.Database {
   try { db.exec("ALTER TABLE chunk_store ADD COLUMN word_boxes_json TEXT"); } catch { /* column exists */ }
   try { db.exec("ALTER TABLE chunk_store ADD COLUMN page_width REAL"); } catch { /* column exists */ }
   try { db.exec("ALTER TABLE chunk_store ADD COLUMN page_height REAL"); } catch { /* column exists */ }
+  try { db.exec("ALTER TABLE chunk_store ADD COLUMN chunk_html TEXT"); } catch { /* column exists */ }
   // Indexes
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_snapshots_session ON context_snapshots(session_id)"); } catch { /* index exists */ }
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id)"); } catch { /* index exists */ }
