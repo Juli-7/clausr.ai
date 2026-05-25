@@ -32,7 +32,7 @@ You are an expert in executing information handling jobs in general.
 - When the step type is "number", you MUST call the available compliance-check tool to execute compliance checks.
 - Output ONLY the JSON format specified in # Output Format below — do not write any prose outside the JSON block.
 
-# Available Context
+# Session Context
 ${contextSummary}
 ${retryContext}
 
@@ -110,7 +110,9 @@ Arrays can be empty if not applicable, but must be present.`;
       note?: string;
     }[] = [];
 
-    const userMessage = `### Step ${step.number}: ${step.title}\n\n${step.instructions}`;
+    const fileChunks = ctx.files.buildContextSummary();
+    const userMessage = `### Step ${step.number}: ${step.title}\n\n${step.instructions}` +
+      (fileChunks ? `\n\n# Available Chunks\n${fileChunks}` : "");
 
     const result = streamText({
       model: createModel(),
@@ -261,40 +263,8 @@ function resolveCitationRef(_palette: readonly CitationPaletteEntry[], clause: s
   return [clause];
 }
 
-export function buildDomainSchemaGuide(checks: ParsedCheck[]): string {
-  const parts: string[] = [];
-  parts.push("");
-  parts.push("# Domain Schema");
-  parts.push("All fields in this assessment:");
-  parts.push("");
-  for (const check of checks) {
-    let line = `- \`${check.field}\` (${check.type.kind}`;
-    if (check.type.kind === "enum") {
-      line += `: ${check.type.values.join("|")}`;
-    }
-    line += ")";
-    if (check.constraint) line += ` — ${check.constraint}`;
-    if (check.clause) line += ` — ${check.clause}`;
-    if (check.dependsOn) line += ` — conditional on ${check.dependsOn}`;
-    if (check.description) line += ` — ${check.description}`;
-    parts.push(line);
-  }
-  return parts.join("\n");
-}
-
 function buildContextSummary(ctx: PipelineContext): string {
   const parts: string[] = [];
-
-  const fileSummary = ctx.files.buildContextSummary();
-  if (fileSummary) parts.push(fileSummary);
-
-  const latestStep = ctx.steps.latest();
-  if (latestStep) {
-    const text = typeof latestStep.value === "string"
-      ? latestStep.value
-      : JSON.stringify(latestStep.value, null, 2);
-    parts.push(`Previous Step Output:\n[Step ${latestStep.stepNumber} Output]\n${text.slice(0, 500)}`);
-  }
 
   const citationSummary = ctx.palette.formatContextSummary();
   if (citationSummary) parts.push(citationSummary);
@@ -306,15 +276,18 @@ function buildContextSummary(ctx: PipelineContext): string {
     parts.push(`Check Results:\n${summary}`);
   }
 
-  if (ctx.skill.checks.length > 0) {
-    const guide = buildDomainSchemaGuide(ctx.skill.checks);
-    if (guide) parts.push(guide);
-  }
-
   const sourcePalette = ctx.files.getSourcePalette();
   if (sourcePalette.length > 0) {
     const summary = ctx.palette.formatSourceSummary(sourcePalette);
     if (summary) parts.push(summary);
+  }
+
+  const latestStep = ctx.steps.latest();
+  if (latestStep) {
+    const text = typeof latestStep.value === "string"
+      ? latestStep.value
+      : JSON.stringify(latestStep.value, null, 2);
+    parts.push(`Previous Step Output:\n[Step ${latestStep.stepNumber} Output]\n${text.slice(0, 500)}`);
   }
 
   if (ctx.previousTurns.length > 0) {
