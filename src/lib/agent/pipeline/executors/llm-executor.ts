@@ -25,23 +25,27 @@ export async function executeLlmToolStep(
       : "";
 
     const systemPrompt = `# Role
-${ctx.skill.skillmd}
+You are an expert in executing information handling jobs in general.
 
-# Current Step: ${step.number}. ${step.title}
-
-${step.instructions}
+# Instructions
+- Retrieve relevant chunks according to the step description provided in the user's message.
+- When the step type is "number", you MUST call the available compliance-check tool to execute compliance checks.
+- Output ONLY the JSON format specified in # Output Format below — do not write any prose outside the JSON block.
 
 # Available Context
 ${contextSummary}
 ${retryContext}
 
-# Instructions
-- Use the uploaded files and available context above to complete this step.
-- Extract all relevant information from the files — do not ask the user to provide information that is already in the files.
-- You MUST call the available tools to execute compliance checks. Numerical checks require the tool.
-- Output ONLY a JSON code block. Put the narrative assessment in the JSON "value" field; do not write prose outside the JSON block.
-- Include citation markers like [S1.c1] and [R48.5.11] inside the "value" field of the JSON.
-`;
+# Output Format
+\`\`\`json
+{"{step_name}": {"value": "narrative assessment with citation markers like [S1.c1] and [R48.5.11]", "sourceCitation": ["S1.c1", "S1.c2"], "citationRef": ["R48.5.11"], "verdict": "PASS"}}
+\`\`\`
+
+The JSON MUST include all fields:
+- value: string — your narrative assessment with citation markers
+- sourceCitation: string[] — source chunk references like "S1.c3"
+- citationRef: string[] — exact regulation references like "R48.5.11"
+- verdict: string — "PASS" or "FAIL"`;
 
     logPipeline(`  [LLM+TOOL] step=${step.number} promptLen=${systemPrompt.length}chars scripts=${scripts.length}`);
 
@@ -104,8 +108,7 @@ ${retryContext}
       note?: string;
     }[] = [];
 
-    const humanField = step.title.replace("Evaluate: ", "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-    const userMessage = `Execute step ${step.number}: ${step.title}. Output a JSON code block with this exact structure:\n\`\`\`json\n{"${step.title.replace("Evaluate: ", "")}": {"value": "narrative text with citations [S1.c1] [R48.5.11]", "sourceCitation": ["S1.c1", "S1.c2"], "citationRef": ["R48.5.11"], "verdict": "PASS"}}\n\`\`\`\n\nPut all narrative assessment inside the "value" field, including citation markers. The JSON MUST include all fields: value, sourceCitation (array), citationRef (array), and verdict. Arrays can be empty but must be present.`;
+    const userMessage = `### Step ${step.number}: ${step.title}\n\n${step.instructions}`;
 
     const result = streamText({
       model: createModel(),
@@ -261,9 +264,8 @@ function resolveCitationRef(palette: readonly CitationPaletteEntry[], clause: st
 export function buildDomainSchemaGuide(checks: ParsedCheck[]): string {
   const parts: string[] = [];
   parts.push("");
-  parts.push("# Expected Data Schema");
-  parts.push("Output your response as a JSON object matching this schema.");
-  parts.push("Extract every listed field from the uploaded files. Do not skip fields.");
+  parts.push("# Domain Schema");
+  parts.push("All fields in this assessment:");
   parts.push("");
   for (const check of checks) {
     let line = `- \`${check.field}\` (${check.type.kind}`;
@@ -277,10 +279,6 @@ export function buildDomainSchemaGuide(checks: ParsedCheck[]): string {
     if (check.description) line += ` — ${check.description}`;
     parts.push(line);
   }
-  parts.push("");
-  parts.push("For numerical checks, use the compliance-check tool to validate. Include the tool result.");
-  parts.push("For conditional checks, evaluate the condition first before including the result.");
-  parts.push("Every field entry MUST include citationRef (regulation reference) and sourceCitation (source chunk ID).");
   return parts.join("\n");
 }
 
