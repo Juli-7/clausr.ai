@@ -57,11 +57,10 @@ Arrays can be empty if not applicable, but must be present.`;
 
     const tools: Record<string, any> = {};
 
-    // Always register compliance-check builtin when there are checks that need it
-    const hasNumericalChecks = ctx.skill.checks.some(
-      c => c.type.kind === "number" || c.constraint
-    );
-    if (hasNumericalChecks) {
+    // Register compliance-check tool only when current step is numerical
+    const currentCheck = ctx.skill.checks[step.number - 1];
+    const stepNeedsTool = currentCheck && (currentCheck.type.kind === "number" || currentCheck.constraint);
+    if (stepNeedsTool) {
       tools.checkCompliance = tool({
         description: "Run numerical compliance checks. Pass multiple checks as a JSON array.",
         inputSchema: ComplianceCheckSchema,
@@ -167,18 +166,15 @@ Arrays can be empty if not applicable, but must be present.`;
     });
 
     const tokens: string[] = [];
-    let fullText = "";
-    for await (const chunk of result.textStream) {
-      fullText += chunk;
-      tokens.push(chunk);
+    for await (const token of result.textStream) {
+      tokens.push(token);
     }
+    const fullText = tokens.join("");
 
     logPipeline(`  [LLM+TOOL] step=${step.number} finalText=${fullText.length}chars preview=${truncate(fullText, 150)}`);
 
-    // Retry only when numerical checks exist AND tool should have been called for this step
-    const currentCheck = ctx.skill.checks[step.number - 1];
-    const stepNeedsTool = currentCheck && (currentCheck.type.kind === "number" || currentCheck.constraint);
-    if (stepNeedsTool && Object.keys(tools).length > 0 && collectedToolRuns.length === 0) {
+    // Retry when tool should have been called but wasn't
+    if (stepNeedsTool && collectedToolRuns.length === 0) {
       logPipeline(`  [LLM+TOOL] tool was NOT called for numerical step — will retry with error context`);
       return {
         success: false,
