@@ -199,6 +199,43 @@ function formatLoadingMessage(stepStatus?: string | null): string {
   }
 }
 
+interface Section {
+  header: string;
+  body: string;
+}
+
+function parseSections(content: string): Section[] {
+  const sections: Section[] = [];
+  const headerRegex = /^### (.+)$/gm;
+  let lastIndex = 0;
+  let lastHeader = "";
+  let match: RegExpExecArray | null;
+
+  while ((match = headerRegex.exec(content)) !== null) {
+    if (lastHeader) {
+      sections.push({
+        header: lastHeader,
+        body: content.slice(lastIndex, match.index).replace(/^### .+\n?/, "").trim(),
+      });
+    } else if (match.index > 0) {
+      sections.push({ header: "", body: content.slice(0, match.index).trim() });
+    }
+    lastHeader = match[1].trim();
+    lastIndex = match.index;
+  }
+
+  if (lastHeader) {
+    sections.push({
+      header: lastHeader,
+      body: content.slice(lastIndex).replace(/^### .+\n?/, "").trim(),
+    });
+  } else if (content.trim()) {
+    sections.push({ header: "", body: content.trim() });
+  }
+
+  return sections;
+}
+
 function findHighlightChunk(
   sourceCitation: { chunks?: { id: string; text: string; html?: string; bbox?: HighlightChunk["bbox"]; wordBoxes?: HighlightChunk["wordBoxes"]; pageNumber?: number; pageWidth?: number; pageHeight?: number }[] } | undefined,
   claims: { sourceCitation?: string }[] | undefined,
@@ -277,33 +314,14 @@ function DocumentCard({
     [normalizedContent, pendingComments]
   );
 
-  // Inject revision checkboxes before each ### field_name header
-  const contentWithCheckboxes = useMemo(() => {
-    if (!revisionFlags || !highlightedContent.includes("### ")) return highlightedContent;
-    return highlightedContent.replace(/^### (.+)$/gm, (match, field) => {
-      const fieldName = field.trim();
-      const checked = revisionFlags[fieldName] ?? false;
-      const label = humanize(fieldName);
-      return `<div class="revision-row" style="display:flex;gap:10px;align-items:flex-start;margin-top:24px">` +
-        `<input type="checkbox" class="revision-toggle" data-field="${fieldName}" ${checked ? 'checked' : ''} ` +
-        `style="flex-shrink:0;margin-top:3px;cursor:pointer;accent-color:var(--color-accent-blue)" ` +
-        `title="${checked ? 'Flagged for revision' : 'Field looks correct'}" />` +
-        `<span class="revision-label" style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--color-text-muted)">${label}</span></div>`;
-    });
-  }, [highlightedContent, revisionFlags]);
+  // Parse content into sections by ### header for per-section rendering
+  const sections = useMemo(
+    () => parseSections(highlightedContent),
+    [highlightedContent]
+  );
 
   function handleContentClick(e: React.MouseEvent) {
     const target = e.target as HTMLElement;
-
-    // Handle revision checkbox toggle
-    if (target.matches("input.revision-toggle")) {
-      const field = target.getAttribute("data-field");
-      if (field && onToggleFlag) {
-        const flagged = (target as HTMLInputElement).checked;
-        onToggleFlag(turnIndex, field, flagged);
-      }
-      return;
-    }
 
     const cite = target.closest("cite.citation-marker") as HTMLElement | null;
     if (cite) {
@@ -433,13 +451,44 @@ function DocumentCard({
         <style>{citationStyles}</style>
 
         {/* Narrative report from LLM analysis */}
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          rehypePlugins={[rehypeRaw]}
-          components={markdownComponents}
-        >
-          {contentWithCheckboxes}
-        </ReactMarkdown>
+        {revisionFlags ? (
+          sections.map((sec, i) => {
+            if (!sec.header) {
+              return (
+                <ReactMarkdown key={i} remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={markdownComponents}>
+                  {sec.body}
+                </ReactMarkdown>
+              );
+            }
+            const fieldName = sec.header;
+            const checked = revisionFlags?.[fieldName] ?? false;
+            return (
+              <div key={i}>
+                <div className="revision-row" style={{ display: "flex", gap: 10, alignItems: "flex-start", marginTop: 24 }}>
+                  <input
+                    type="checkbox"
+                    className="revision-toggle"
+                    data-field={fieldName}
+                    checked={checked}
+                    onChange={(e) => onToggleFlag?.(turnIndex, fieldName, e.target.checked)}
+                    style={{ flexShrink: 0, marginTop: 3, cursor: "pointer", accentColor: "var(--color-accent-blue)" }}
+                    title={checked ? "Flagged for revision" : "Field looks correct"}
+                  />
+                  <span style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted)" }}>
+                    {humanize(fieldName)}
+                  </span>
+                </div>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={markdownComponents}>
+                  {sec.body}
+                </ReactMarkdown>
+              </div>
+            );
+          })
+        ) : (
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={markdownComponents}>
+            {highlightedContent}
+          </ReactMarkdown>
+        )}
 
         {/* Findings section (FAIL-only) — no checkboxes, display only */}
         {response.sections?.findings !== undefined && typeof response.sections.findings === "object" && (
