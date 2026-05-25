@@ -134,15 +134,9 @@ export const SetupRequestSchema = z.object({
 // ── Script tools ──
 
 export const ComplianceCheckSchema = z.object({
-  checks: z.array(
-    z.object({
-      name: z.string(),
-      value: z.number(),
-      limit: z.union([z.number(), z.string()]),
-      operator: z.enum([">=", ">", "<=", "<", "range"]),
-      clause: z.string(),
-    })
-  ),
+  value: z.number(),
+  limit: z.union([z.number(), z.string()]),
+  operator: z.enum([">=", ">", "<=", "<", "range"]),
 });
 
 // ── Reference map (e.g. references.json) ──

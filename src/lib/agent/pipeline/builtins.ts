@@ -1,5 +1,4 @@
 import { getRegulationApi } from "@/lib/agent/knowledge/regulation-api";
-import type { ComplianceCheckInput } from "@/lib/agent/shared/schemas";
 import type {
   PipelineContext,
   CitationPaletteEntry,
@@ -130,59 +129,53 @@ export async function loadRegulationSummaries(ctx: PipelineContext): Promise<Ste
   }
 }
 
-// ── Compliance check builtin (replaces compliance-check.py) ──
+// ── Compliance check builtin ──
 
 export interface ComplianceCheckResult {
-  name: string;
-  value: number;
-  limit: number | string;
-  comparison: string;
   status: "pass" | "fail";
+  comparison: string;
   note: string;
 }
 
-export function executeComplianceCheck(input: ComplianceCheckInput): { results: ComplianceCheckResult[] } {
-  const results: ComplianceCheckResult[] = [];
+export function executeComplianceCheck(
+  value: number,
+  limit: number | string,
+  operator: string
+): ComplianceCheckResult {
+  let status: "pass" | "fail" = "pass";
+  let note = "";
+  let comparison = "";
 
-  for (const check of input.checks) {
-    const { name, value, limit, operator } = check;
-    let status: "pass" | "fail" = "pass";
-    let note = "";
-    let comparison = "";
-
-    if (operator === "range" && typeof limit === "string") {
-      const parts = limit.split("-");
-      const lo = parseFloat(parts[0]);
-      const hi = parseFloat(parts[1]);
-      comparison = `${value} in [${lo}, ${hi}]`;
-      if (value < lo || value > hi) {
-        status = "fail";
-        note = `Value ${value} outside range [${lo}, ${hi}]`;
-      }
-    } else {
-      const limitVal = typeof limit === "string" ? parseFloat(limit) : limit;
-      switch (operator) {
-        case ">=":
-          comparison = `${value} >= ${limitVal}`;
-          if (value < limitVal) { status = "fail"; note = `${value} < ${limitVal}`; }
-          break;
-        case "<=":
-          comparison = `${value} <= ${limitVal}`;
-          if (value > limitVal) { status = "fail"; note = `${value} > ${limitVal}`; }
-          break;
-        case ">":
-          comparison = `${value} > ${limitVal}`;
-          if (value <= limitVal) { status = "fail"; note = `${value} <= ${limitVal}`; }
-          break;
-        case "<":
-          comparison = `${value} < ${limitVal}`;
-          if (value >= limitVal) { status = "fail"; note = `${value} >= ${limitVal}`; }
-          break;
-      }
+  if (operator === "range" && typeof limit === "string") {
+    const parts = limit.split("-");
+    const lo = parseFloat(parts[0]);
+    const hi = parseFloat(parts[1]);
+    comparison = `${value} in [${lo}, ${hi}]`;
+    if (value < lo || value > hi) {
+      status = "fail";
+      note = `Value ${value} outside range [${lo}, ${hi}]`;
     }
-
-    results.push({ name, value, limit, comparison, status, note });
+  } else {
+    const limitVal = typeof limit === "string" ? parseFloat(limit) : limit;
+    switch (operator) {
+      case ">=":
+        comparison = `${value} >= ${limitVal}`;
+        if (value < limitVal) { status = "fail"; note = `${value} < ${limitVal}`; }
+        break;
+      case "<=":
+        comparison = `${value} <= ${limitVal}`;
+        if (value > limitVal) { status = "fail"; note = `${value} > ${limitVal}`; }
+        break;
+      case ">":
+        comparison = `${value} > ${limitVal}`;
+        if (value <= limitVal) { status = "fail"; note = `${value} <= ${limitVal}`; }
+        break;
+      case "<":
+        comparison = `${value} < ${limitVal}`;
+        if (value >= limitVal) { status = "fail"; note = `${value} >= ${limitVal}`; }
+        break;
+    }
   }
 
-  return { results };
+  return { status, comparison, note };
 }

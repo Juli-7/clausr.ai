@@ -105,60 +105,35 @@ describe("parseChecks", () => {
 
 describe("executeComplianceCheck", () => {
   it("passes >= check when value meets limit", () => {
-    const result = executeComplianceCheck({
-      checks: [{ name: "mounting_height", value: 650, limit: 500, operator: ">=", clause: "6.1" }],
-    });
-    expect(result.results).toHaveLength(1);
-    expect(result.results[0].name).toBe("mounting_height");
-    expect(result.results[0].status).toBe("pass");
+    const result = executeComplianceCheck(650, 500, ">=");
+    expect(result.status).toBe("pass");
+    expect(result.comparison).toBe("650 >= 500");
   });
 
   it("fails >= check when value below limit", () => {
-    const result = executeComplianceCheck({
-      checks: [{ name: "mounting_height", value: 400, limit: 500, operator: ">=", clause: "6.1" }],
-    });
-    expect(result.results[0].status).toBe("fail");
-    expect(result.results[0].note).toContain("400 < 500");
+    const result = executeComplianceCheck(400, 500, ">=");
+    expect(result.status).toBe("fail");
+    expect(result.note).toContain("400 < 500");
   });
 
   it("passes <= check when value under limit", () => {
-    const result = executeComplianceCheck({
-      checks: [{ name: "colour_temp", value: 5500, limit: 6000, operator: "<=", clause: "5.11" }],
-    });
-    expect(result.results[0].status).toBe("pass");
+    const result = executeComplianceCheck(5500, 6000, "<=");
+    expect(result.status).toBe("pass");
   });
 
   it("fails <= check when value exceeds limit", () => {
-    const result = executeComplianceCheck({
-      checks: [{ name: "colour_temp", value: 6500, limit: 6000, operator: "<=", clause: "5.11" }],
-    });
-    expect(result.results[0].status).toBe("fail");
+    const result = executeComplianceCheck(6500, 6000, "<=");
+    expect(result.status).toBe("fail");
   });
 
   it("passes range check when value in range", () => {
-    const result = executeComplianceCheck({
-      checks: [{ name: "beam_cutoff", value: 15, limit: "10-20", operator: "range", clause: "6.2" }],
-    });
-    expect(result.results[0].status).toBe("pass");
+    const result = executeComplianceCheck(15, "10-20", "range");
+    expect(result.status).toBe("pass");
   });
 
   it("fails range check when value out of range", () => {
-    const result = executeComplianceCheck({
-      checks: [{ name: "beam_cutoff", value: 25, limit: "10-20", operator: "range", clause: "6.2" }],
-    });
-    expect(result.results[0].status).toBe("fail");
-  });
-
-  it("handles multiple checks", () => {
-    const result = executeComplianceCheck({
-      checks: [
-        { name: "a", value: 100, limit: 50, operator: ">=", clause: "1" },
-        { name: "b", value: 10, limit: 100, operator: "<=", clause: "2" },
-      ],
-    });
-    expect(result.results).toHaveLength(2);
-    expect(result.results[0].status).toBe("pass");
-    expect(result.results[1].status).toBe("pass");
+    const result = executeComplianceCheck(25, "10-20", "range");
+    expect(result.status).toBe("fail");
   });
 });
 

@@ -146,30 +146,29 @@ describe("ChatRequestSchema", () => {
 });
 
 describe("ComplianceCheckSchema", () => {
-  it("accepts valid compliance checks", () => {
+  it("accepts valid compliance check", () => {
     const result = ComplianceCheckSchema.safeParse({
-      checks: [
-        { name: "mounting-height", value: 650, limit: 500, operator: ">=", clause: "6.1" },
-        { name: "colour-temp", value: 5500, limit: 6000, operator: "<=", clause: "5.11" },
-      ],
+      value: 650,
+      limit: 500,
+      operator: ">=",
     });
     expect(result.success).toBe(true);
   });
 
-  it("accepts range operator", () => {
+  it("accepts range operator with string limit", () => {
     const result = ComplianceCheckSchema.safeParse({
-      checks: [
-        { name: "beam-cutoff", value: 15, limit: "10-20", operator: "range", clause: "6.2" },
-      ],
+      value: 15,
+      limit: "10-20",
+      operator: "range",
     });
     expect(result.success).toBe(true);
   });
 
   it("rejects invalid operator", () => {
     const result = ComplianceCheckSchema.safeParse({
-      checks: [
-        { name: "test", value: 10, limit: 10, operator: "==", clause: "1.1" },
-      ],
+      value: 10,
+      limit: 10,
+      operator: "==",
     });
     expect(result.success).toBe(false);
   });

@@ -7,7 +7,7 @@ import { ComplianceCheckSchema } from "@/lib/agent/shared/schemas";
  * POST /api/scripts/<name>
  * Executes a named script for a given skill.
  *
- * Body: { skillId: string, input: ComplianceCheckInput }
+ * Body: { skillId: string, input: { value: number; limit: number | string; operator: string } }
  */
 export async function POST(
   request: NextRequest,
