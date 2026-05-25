@@ -57,7 +57,7 @@ export async function setupSession(params: SetupSessionParams): Promise<{ correl
   }
 
   // 5. Generate steps from skill checks
-  const steps = generateStepsFromChecks(ctx.skill.checks);
+  const steps = generateStepsFromChecks(ctx.skill.checks, ctx.skill.regulationIds);
   logPipeline(`[SETUP] generated ${steps.length} step(s) from ${ctx.skill.checks.length} check(s)`);
 
   // 6. Persist everything to DB (palette is loaded by pipeline layer)

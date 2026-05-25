@@ -164,6 +164,44 @@ describe("ComplianceCheckSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("accepts tolerance operator with percent", () => {
+    const result = ComplianceCheckSchema.safeParse({
+      value: 104,
+      limit: "100±5%",
+      operator: "tolerance",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts tolerance operator with absolute", () => {
+    const result = ComplianceCheckSchema.safeParse({
+      value: 101,
+      limit: "100±2",
+      operator: "tolerance",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts rounding field as number", () => {
+    const result = ComplianceCheckSchema.safeParse({
+      value: 1.234,
+      limit: 1.2,
+      operator: ">=",
+      rounding: 2,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts rounding field as string with mode", () => {
+    const result = ComplianceCheckSchema.safeParse({
+      value: 1.234,
+      limit: 1.2,
+      operator: ">=",
+      rounding: "2:ceil",
+    });
+    expect(result.success).toBe(true);
+  });
+
   it("rejects invalid operator", () => {
     const result = ComplianceCheckSchema.safeParse({
       value: 10,

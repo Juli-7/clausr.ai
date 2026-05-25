@@ -140,10 +140,11 @@ function formatContent(
       }
     }
 
+    const header = `### ${checks[i].field}`;
     if (badges.length > 0) {
-      sections.push(narrative + "\n\n" + badges.join(" "));
+      sections.push(header + "\n\n" + narrative + "\n\n" + badges.join(" "));
     } else {
-      sections.push(narrative);
+      sections.push(header + "\n\n" + narrative);
     }
   }
 

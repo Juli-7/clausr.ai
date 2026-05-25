@@ -97,14 +97,13 @@
 │  │  tions(c)            │            │ inputPhase(ctx, {files, sessionId}) │        │
 │  └──────────────────────┘            │  → calls docStore.processFile()      │        │
 │                                      │    (vector-store: extract + chunk   │        │
-│  loading/phases/revision-phase.ts    │     + store, return extractedText)  │        │
-│  ┌──────────────────────────────────────┐  └──────────────────────────────────────┘   │
-│  │ identifyRevisionTarget(ctx, msg)   │                                                │
-│  │  → LLM determines which step redo  │                                                │
-│  │ identifyRevisionTargets(fields,    │                                                │
-│  │  checks)                           │                                                │
-│  │  → maps checkbox fields→step nums  │                                                │
-│  └──────────────────────────────────────┘                                                │
+│  pipeline/revision-phase.ts           │     + store, return extractedText)  │        │
+│  ┌──────────────────────────────┐                                                    │
+│  │ identifyRevisionTargets(field│                                                    │
+│  │  s, checks)                  │                                                    │
+│  │  → maps checkbox fields→step │                                                    │
+│  │    nums (PIPELINE runtime)   │                                                    │
+│  └──────────────────────────────┘                                                    │
 │                                                                                      │
 │  PROVIDES: session_setup persistence — PipelineContext (FileRegistry has metadata    │
 │    only, no chunks; PaletteStore empty — pipeline loads regs; StepMemory with        │
@@ -124,7 +123,7 @@
 │  │    ├─► docStore.getFiles(sessionId) → ctx.files.loadFiles() — populate      │    │
 │  │    │    chunks from doc store (mock: all chunks; real vecDB: per-step)       │    │
 │  │    ├─► initPipelineTurn()         — addUserMessage + restore previous turns   │    │
-│  │    ├─► identifyRevisionTarget(s)  — which step(s) to redo from fields/LLM   │    │
+│  │    ├─► identifyRevisionTargets()  — map field names → step numbers (user-driven)
 │  │    ├─► [loop] executeStepWithRetry — execute each step (llm+tool, retry 1x)  │    │
 │  │    │      └─► executeLlmToolStep() — core LLM+tool executor                  │    │
 │  │    └─► finalizePhase()             — evaluate + assemble + persist          │    │
@@ -387,11 +386,8 @@ HTTP POST /api/chat
        │  PIPELINE — REVISION + STEP EXECUTION LOOP
        │════════════════════════════════════════════════════════════════
        │
-       ├─ identifyRevisionTarget(s)  ◄── loading/phases/revision-phase.ts
-       │    ├─ [if revisionFields provided] → identifyRevisionTargets(fields, checks)
-       │    │    └─ maps field names to step numbers for targeted re-execution
-       │    └─ [if follow-up turn, no explicit fields] → identifyRevisionTarget(ctx, msg)
-       │         └─ LLM determines which step to redo from message analysis
+       ├─ identifyRevisionTargets(revisionFields, checks)  ◄── pipeline/revision-phase.ts
+       │    └─ maps field names (from UI checkboxes) to step numbers for targeted re-execution
        │
        ├─ ┌─ for each step in steps:
        │  │    │
@@ -685,12 +681,8 @@ initPipelineTurn(ctx, sessionId, message, correlationId)  [loading/phases/init-p
 
 ```
 identifyRevisionTargets(revisionFields, checks)  → Set<stepNumber>
-  └── loading/phases/revision-phase.ts
-      maps checkbox field names to step indices
-
-identifyRevisionTarget(ctx, userMessage)         → stepNumber | -1
-  └── loading/phases/revision-phase.ts
-      LLM decides which step to redo from message
+  └── pipeline/revision-phase.ts
+      maps checkbox field names (from UI) to step indices (user-driven — no LLM guessing)
 ```
 
 #### Step 3c — Step Execution Loop
@@ -1007,12 +999,7 @@ The session input layer handles everything before semantic search: extraction, c
 |----------|-------------|
 | `skillGenPhase(ctx, message, fileTexts)` | Calls `generateSkill()` with user message + file texts (passed as param, no longer reads from ctx.files). Replaces `ctx.skill` with the auto-generated skill. |
 
-#### `loading/phases/revision-phase.ts`
-| Function | Description |
-|----------|-------------|
-| `identifyRevisionTarget(ctx, userMessage)` | On follow-up turns, calls LLM to determine which step number to redo based on user's follow-up message. Returns step number or `-1`. |
-| `identifyRevisionTargets(revisionFields, checks)` | Maps explicit field names from UI checkboxes to step numbers (1-indexed from checks order). Used for targeted re-execution. |
-
+*(revision-phase.ts moved to `pipeline/revision-phase.ts`)*
 ---
 
 ### SEGMENT 4 — Pipeline (`src/lib/agent/pipeline/`)
@@ -1021,7 +1008,7 @@ The session input layer handles everything before semantic search: extraction, c
 | Function | Description |
 |----------|-------------|
 | `orchestratePipeline(sessionId, message, revisionFields?)` | **Top-level entry point (per turn).** Async generator: restoreContext → **docStore.getFiles()** (populate ctx.files with chunks) → initPipelineTurn → revision → step-exec → finalize. Yields `PipelineEvent` for SSE streaming. State comes from `session_setup` DB + doc store. |
-| `executeStepWithRetry(step, ctx, maxRetries)` | Wraps `executeLlmToolStep()` with retry loop (default 1 retry). Returns `StepResult`. |
+| `executeStepWithRetry(step, ctx, maxRetries, revisionUserMessage?)` | Wraps `executeLlmToolStep()` with retry loop (default 1 retry). Passes `revisionUserMessage` as `revisionContext` when step is being revised. Returns `StepResult`. |
 
 #### `pipeline/pipeline-context.ts`
 | Function / Type | Description |
@@ -1040,12 +1027,17 @@ The session input layer handles everything before semantic search: extraction, c
 | `loadReferences(ctx)` | Loads regulation data into palette by extracting IDs from checks, fetching via API. Builds `CitationPaletteEntry[]`. Called by pipeline orchestrator (not loading layer). |
 | `executeComplianceCheck(input)` | Evaluates numerical checks against operators (`>=`, `<=`, `>`, `<`, `range`). Returns pass/fail results. Called as a registered tool handler. |
 
+#### `pipeline/revision-phase.ts`
+| Function | Description |
+|----------|-------------|
+| `identifyRevisionTargets(revisionFields, checks)` | Maps explicit field names from UI checkboxes to step numbers (1-indexed from checks order). Used for targeted re-execution. Sync only — no LLM guessing. |
+
 #### `pipeline/executors/llm-executor.ts`
 | Function | Description |
 |----------|-------------|
-| `executeLlmToolStep(step, ctx, previousError?)` | Runs an `llm+tool` step. Registers tools (compliance-check, scripts), streams LLM, processes tool results, stores output. |
+| `executeLlmToolStep(step, ctx, previousError?, revisionContext?)` | Runs an `llm+tool` step. Registers tools (compliance-check, scripts), streams LLM, processes tool results, stores output. Optional `revisionContext` enables revision-aware execution: excludes other CheckResults from context, uses user feedback as FTS5 query, injects revision context into user message. |
 | `buildDomainSchemaGuide(checks)` | Builds schema guide string from `ParsedCheck[]` for LLM prompts. |
-| `buildContextSummary(ctx)` | Builds composite context string: file summary, latest step output, citation summary, check results, domain schema guide, source summary, previous turns. |
+| `buildContextSummary(ctx, excludeCheckResults?)` | Builds composite context string: file summary, latest step output, citation summary, check results (skipped when `excludeCheckResults=true`), domain schema guide, source summary, previous turns. |
 | `buildCitationGuide(ctx)` | Builds citation format instructions for LLM (`[R48.5.11]` and `[SN]` markers). |
 
 #### `pipeline/executors/script-runner.ts`
@@ -1162,7 +1154,7 @@ The session input layer handles everything before semantic search: extraction, c
 | Function | Description |
 |----------|-------------|
 | `finalizePhase(ctx, steps, sessionId)` | Runs evaluation (`evaluate()`), computes verdict, builds `AgentResponseData`, validates with `AgentResponseSchema`, persists to DB. Returns `{response, validationErrors, confidence}`. |
-| `formatContent(stepOutputs, checks, checkResults, citationPalette)` | Per-check: strips JSON + `[R...]` markers from narrative, injects `<cite>` badges. |
+| `formatContent(stepOutputs, checks, checkResults, citationPalette)` | Per-check: prepends `### field_name` header, strips JSON + `[R...]` markers from narrative, injects `<cite>` badges. Produces sectioned markdown for frontend parsing. |
 
 #### `present/export/export-docx.ts`
 | Function | Description |

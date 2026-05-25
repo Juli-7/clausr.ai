@@ -277,8 +277,34 @@ function DocumentCard({
     [normalizedContent, pendingComments]
   );
 
+  // Inject revision checkboxes before each ### field_name header
+  const contentWithCheckboxes = useMemo(() => {
+    if (!revisionFlags || !highlightedContent.includes("### ")) return highlightedContent;
+    return highlightedContent.replace(/^### (.+)$/gm, (match, field) => {
+      const fieldName = field.trim();
+      const checked = revisionFlags[fieldName] ?? false;
+      const label = humanize(fieldName);
+      return `<div class="revision-row" style="display:flex;gap:10px;align-items:flex-start;margin-top:24px">` +
+        `<input type="checkbox" class="revision-toggle" data-field="${fieldName}" ${checked ? 'checked' : ''} ` +
+        `style="flex-shrink:0;margin-top:3px;cursor:pointer;accent-color:var(--color-accent-blue)" ` +
+        `title="${checked ? 'Flagged for revision' : 'Field looks correct'}" />` +
+        `<span class="revision-label" style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--color-text-muted)">${label}</span></div>`;
+    });
+  }, [highlightedContent, revisionFlags]);
+
   function handleContentClick(e: React.MouseEvent) {
     const target = e.target as HTMLElement;
+
+    // Handle revision checkbox toggle
+    if (target.matches("input.revision-toggle")) {
+      const field = target.getAttribute("data-field");
+      if (field && onToggleFlag) {
+        const flagged = (target as HTMLInputElement).checked;
+        onToggleFlag(turnIndex, field, flagged);
+      }
+      return;
+    }
+
     const cite = target.closest("cite.citation-marker") as HTMLElement | null;
     if (cite) {
       const regulation = cite.getAttribute("data-regulation") ?? "";
@@ -412,11 +438,11 @@ function DocumentCard({
           rehypePlugins={[rehypeRaw]}
           components={markdownComponents}
         >
-          {highlightedContent}
+          {contentWithCheckboxes}
         </ReactMarkdown>
 
-        {/* Fields table — checkboxes + findings */}
-        {response.sections?.findings && typeof response.sections.findings === "object" && (
+        {/* Findings section (FAIL-only) — no checkboxes, display only */}
+        {response.sections?.findings !== undefined && typeof response.sections.findings === "object" && (
           <div style={{ marginTop: 32, marginBottom: 20 }}>
             <div
               className="inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded mb-3"
@@ -424,21 +450,15 @@ function DocumentCard({
             >
               Findings
             </div>
-            <table className="w-full border-collapse text-xs mt-1 mb-3">
-              <tbody>
-                {(Object.entries(response.sections.findings) as [string, string][]).map(([field, value]) => {
-                  const flagged = revisionFlags?.[field] ?? false;
-                  return (
-                    <tr key={field} data-check-field={field} style={{ borderBottom: "1px solid var(--color-border-default)" }}>
-                      <td className="py-2 pr-1" style={{ width: 24, textAlign: "center" as const, verticalAlign: "middle" }}>
-                        <input
-                          type="checkbox"
-                          checked={flagged}
-                          onChange={() => onToggleFlag?.(turnIndex, field, !flagged)}
-                          style={{ cursor: "pointer", accentColor: "var(--color-accent-blue)" }}
-                          title={flagged ? "Flagged for revision" : "Field looks correct"}
-                        />
-                      </td>
+            {(Object.entries(response.sections.findings) as [string, string][]).length === 0 ? (
+              <div className="text-xs" style={{ color: "var(--color-text-muted)", marginTop: 8 }}>
+                All checks passed — no findings to report.
+              </div>
+            ) : (
+              <table className="w-full border-collapse text-xs mt-1 mb-3">
+                <tbody>
+                  {(Object.entries(response.sections.findings) as [string, string][]).map(([field, value]) => (
+                    <tr key={field} style={{ borderBottom: "1px solid var(--color-border-default)" }}>
                       <td className="py-2 pr-4" style={{ color: "var(--color-text-muted)", width: 180, whiteSpace: "nowrap" as const }}>
                         {humanize(field)}
                       </td>
@@ -446,10 +466,10 @@ function DocumentCard({
                         <span dangerouslySetInnerHTML={{ __html: applyHighlights(value, pendingComments) }} />
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  ))}
+                </tbody>
+              </table>
+            )}
             <div style={{ height: 1, background: "var(--color-border-default)", marginTop: 16 }} />
           </div>
         )}

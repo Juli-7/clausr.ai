@@ -136,7 +136,8 @@ export const SetupRequestSchema = z.object({
 export const ComplianceCheckSchema = z.object({
   value: z.number(),
   limit: z.union([z.number(), z.string()]),
-  operator: z.enum([">=", ">", "<=", "<", "range"]),
+  operator: z.enum([">=", ">", "<=", "<", "range", "tolerance"]),
+  rounding: z.union([z.number().int().min(0), z.string()]).optional(),
 });
 
 // ── Reference map (e.g. references.json) ──

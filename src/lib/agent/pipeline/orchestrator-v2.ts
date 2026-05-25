@@ -3,7 +3,7 @@ import { restoreContext } from "./pipeline-context";
 import { getDocStore } from "@/lib/agent/user-info/vector-store";
 import { loadRegulationSummaries } from "./builtins";
 import { initPipelineTurn } from "@/lib/agent/loading/phases/init-phase";
-import { identifyRevisionTarget, identifyRevisionTargets } from "@/lib/agent/loading/phases/revision-phase";
+import { identifyRevisionTargets } from "@/lib/agent/pipeline/revision-phase";
 import { saveContextSnapshot, getResponseCount } from "@/lib/agent/shared/memory/repository";
 import { finalizePhase } from "@/lib/agent/present/phases/finalize-phase";
 import { PipelineError, generateCorrelationId, formatPipelineError } from "./errors";
@@ -50,7 +50,7 @@ export async function* orchestratePipeline(
   await initPipelineTurn(ctx, sessionId, message, correlationId);
   const turnNumber = getResponseCount(sessionId);
 
-  // ── Revision identification ──
+  // ── Revision identification (user-driven only) ──
   yield { type: "status", phase: `executing-${steps.length}-steps` };
   let revisionTargets = new Set<number>();
   if (revisionFields && revisionFields.length > 0) {
@@ -58,17 +58,6 @@ export async function* orchestratePipeline(
     revisionTargets = new Set(stepNums);
     if (revisionTargets.size > 0) {
       yield { type: "status", phase: `revising-${revisionTargets.size}-steps` };
-    }
-  } else if (ctx.previousTurns.length > 0) {
-    try {
-      const target = await identifyRevisionTarget(ctx, message);
-      if (target > 0) {
-        revisionTargets = new Set([target]);
-        yield { type: "status", phase: `revising-step-${target}` };
-      }
-    } catch (err) {
-      logPipeline(`revision identification failed: ${err instanceof Error ? err.message : String(err)}`);
-      revisionTargets = new Set();
     }
   }
 
@@ -89,7 +78,7 @@ export async function* orchestratePipeline(
     const checkField = ctx.skill.checks[step.number - 1]?.field;
     const savedResults = checkField ? ctx.checks.removeResultsForField(checkField) : [];
 
-    const result = await executeStepWithRetry(step, ctx, 1);
+    const result = await executeStepWithRetry(step, ctx, 1, isTarget ? message : undefined);
 
     if (!result.success) {
       logPipeline(`✗ STEP ${step.number} FAILED: ${result.error}`);
@@ -194,13 +183,15 @@ export async function* orchestratePipeline(
 async function executeStepWithRetry(
   step: ExecutableStep,
   ctx: PipelineContext,
-  maxRetries = 1
+  maxRetries = 1,
+  revisionUserMessage?: string
 ): Promise<StepResult> {
   let lastError = "";
   let lastCode = "";
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const result = await executeLlmToolStep(step, ctx, lastError);
+    const revisionContext = revisionUserMessage ? { userFeedback: revisionUserMessage } : undefined;
+    const result = await executeLlmToolStep(step, ctx, lastError, revisionContext);
     if (result.success) return result;
 
     lastError = result.error ?? "";

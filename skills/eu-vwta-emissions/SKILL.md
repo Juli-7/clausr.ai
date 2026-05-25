@@ -13,7 +13,7 @@ regulation_ids:
 1. **type**: enum(ice, hybrid, electric, other)
 2. **attention**: powertrain type engine ICE hybrid electric
 3. **description**: Powertrain type determines which emission limits apply
-4. **clause**: (none)
+4. **clause**: R83.5.1
 5. **depends_on**: (none)
 6. **sample**: The vehicle has an internal combustion engine [S1.c1], so ICE emission limits under R83 apply.
 

@@ -86,14 +86,23 @@ export class PaletteStore {
     const entries: CitationPaletteEntry[] = [];
     for (const ref of toResolve) {
       const regCode = this.getRegulationForRef(ref);
-      if (!regCode) continue;
+      if (!regCode) {
+        logPipeline(`  [PALETTE] could not resolve regulation for ref "${ref}" — no matching summary`);
+        continue;
+      }
       const clauseNum = ref.substring(regCode.length + 1);
-      const result = await api.getClause({ regulationCode: regCode, clauseNumber: clauseNum });
-      if (result.success && result.data) {
-        const text = result.data.title
-          ? `\xA7${result.data.number} ${result.data.title}\n${result.data.text}`
-          : `\xA7${result.data.number}\n${result.data.text}`;
-        entries.push({ id: ref, regulation: regCode, clause: clauseNum, text });
+      try {
+        const result = await api.getClause({ regulationCode: regCode, clauseNumber: clauseNum });
+        if (result.success && result.data) {
+          const text = result.data.title
+            ? `\xA7${result.data.number} ${result.data.title}\n${result.data.text}`
+            : `\xA7${result.data.number}\n${result.data.text}`;
+          entries.push({ id: ref, regulation: regCode, clause: clauseNum, text });
+        } else {
+          logPipeline(`  [PALETTE] API returned failure for "${ref}": ${result.error ?? "unknown error"} — citation will be missing`);
+        }
+      } catch (err) {
+        logPipeline(`  [PALETTE] API exception resolving "${ref}": ${err instanceof Error ? err.message : String(err)} — citation will be missing`);
       }
     }
     if (entries.length > 0) {

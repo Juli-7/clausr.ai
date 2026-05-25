@@ -13,7 +13,7 @@ regulation_ids:
 1. **type**: enum(led, halogen, xenon, other)
 2. **attention**: headlamp light source type LED halogen xenon
 3. **description**: Determines which clauses apply for headlamp requirements
-4. **clause**: (none)
+4. **clause**: R48.6.1
 5. **depends_on**: (none)
 6. **sample**: The vehicle uses LED headlamps [S1.c1], which require auto-leveling under R48.5.11.
 

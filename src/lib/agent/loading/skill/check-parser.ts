@@ -9,6 +9,7 @@ export interface ParsedCheck {
   dependsOn: string | null;
   description: string | null;
   sample: string | null;
+  rounding: string | null;
 }
 
 export type CheckFieldType =
@@ -108,6 +109,7 @@ function buildCheck(raw: Record<string, string>): ParsedCheck {
     dependsOn: raw.depends_on || null,
     description: raw.description || null,
     sample: raw.sample || null,
+    rounding: raw.rounding || null,
   };
 }
 

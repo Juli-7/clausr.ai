@@ -137,44 +137,91 @@ export interface ComplianceCheckResult {
   note: string;
 }
 
+function parseRounding(rounding?: number | string): { places: number; mode: "standard" | "ceil" | "floor" } | null {
+  if (rounding === undefined) return null;
+  if (typeof rounding === "number") return { places: rounding, mode: "standard" };
+  const parts = rounding.split(":");
+  const places = parseInt(parts[0], 10);
+  if (isNaN(places) || places < 0) return null;
+  const mode = parts[1] === "ceil" ? "ceil" : parts[1] === "floor" ? "floor" : "standard";
+  return { places, mode };
+}
+
+function roundValue(value: number, places: number, mode: "standard" | "ceil" | "floor"): number {
+  const factor = 10 ** places;
+  switch (mode) {
+    case "ceil": return Math.ceil(value * factor) / factor;
+    case "floor": return Math.floor(value * factor) / factor;
+    default: return Math.round(value * factor) / factor;
+  }
+}
+
 export function executeComplianceCheck(
   value: number,
   limit: number | string,
-  operator: string
+  operator: string,
+  rounding?: number | string
 ): ComplianceCheckResult {
   let status: "pass" | "fail" = "pass";
   let note = "";
   let comparison = "";
 
+  const roundingConfig = parseRounding(rounding);
+  const compareValue = roundingConfig
+    ? roundValue(value, roundingConfig.places, roundingConfig.mode)
+    : value;
+
   if (operator === "range" && typeof limit === "string") {
     const parts = limit.split("-");
     const lo = parseFloat(parts[0]);
     const hi = parseFloat(parts[1]);
-    comparison = `${value} in [${lo}, ${hi}]`;
-    if (value < lo || value > hi) {
+    comparison = `${compareValue} in [${lo}, ${hi}]`;
+    if (compareValue < lo || compareValue > hi) {
       status = "fail";
-      note = `Value ${value} outside range [${lo}, ${hi}]`;
+      note = `Value ${compareValue} outside range [${lo}, ${hi}]`;
+    }
+  } else if (operator === "tolerance" && typeof limit === "string") {
+    const match = limit.match(/^([\d.]+)±([\d.]+)(%)?$/);
+    if (!match) {
+      status = "fail";
+      note = `Invalid tolerance format: ${limit}`;
+    } else {
+      const [, nominalStr, tolStr, isPercent] = match;
+      const nominal = parseFloat(nominalStr);
+      const tol = parseFloat(tolStr);
+      const delta = isPercent ? nominal * tol / 100 : tol;
+      const lo = nominal - delta;
+      const hi = nominal + delta;
+      comparison = `${compareValue} within ${isPercent ? `${tol}%` : `±${tol}`} of ${nominal} (${lo}-${hi})`;
+      if (compareValue < lo || compareValue > hi) {
+        status = "fail";
+        note = `Value ${compareValue} outside ±${isPercent ? `${tol}%` : tol} tolerance of ${nominal} (allowed: ${lo}-${hi})`;
+      }
     }
   } else {
     const limitVal = typeof limit === "string" ? parseFloat(limit) : limit;
     switch (operator) {
       case ">=":
-        comparison = `${value} >= ${limitVal}`;
-        if (value < limitVal) { status = "fail"; note = `${value} < ${limitVal}`; }
+        comparison = `${compareValue} >= ${limitVal}`;
+        if (compareValue < limitVal) { status = "fail"; note = `${compareValue} < ${limitVal}`; }
         break;
       case "<=":
-        comparison = `${value} <= ${limitVal}`;
-        if (value > limitVal) { status = "fail"; note = `${value} > ${limitVal}`; }
+        comparison = `${compareValue} <= ${limitVal}`;
+        if (compareValue > limitVal) { status = "fail"; note = `${compareValue} > ${limitVal}`; }
         break;
       case ">":
-        comparison = `${value} > ${limitVal}`;
-        if (value <= limitVal) { status = "fail"; note = `${value} <= ${limitVal}`; }
+        comparison = `${compareValue} > ${limitVal}`;
+        if (compareValue <= limitVal) { status = "fail"; note = `${compareValue} <= ${limitVal}`; }
         break;
       case "<":
-        comparison = `${value} < ${limitVal}`;
-        if (value >= limitVal) { status = "fail"; note = `${value} >= ${limitVal}`; }
+        comparison = `${compareValue} < ${limitVal}`;
+        if (compareValue >= limitVal) { status = "fail"; note = `${compareValue} >= ${limitVal}`; }
         break;
     }
+  }
+
+  if (compareValue !== value) {
+    note = note ? `${note}; Rounded from ${value}` : `Rounded from ${value}`;
   }
 
   return { status, comparison, note };

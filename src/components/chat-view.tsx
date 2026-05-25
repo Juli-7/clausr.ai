@@ -37,12 +37,22 @@ export function ChatView() {
 
   const [stepConfirmations, setStepConfirmations] = useState<Record<number, Record<string, boolean>>>({});
 
-  function initFlags(turnIndex: number, findings: Record<string, string> | Record<string, Record<string, string> | string> | undefined) {
-    if (!findings || typeof findings !== "object") return;
+  function extractFieldNamesFromContent(content: string): string[] {
+    const names: string[] = [];
+    const regex = /^### (.+)$/gm;
+    let match;
+    while ((match = regex.exec(content)) !== null) {
+      names.push(match[1].trim());
+    }
+    return names;
+  }
+
+  function initFlags(turnIndex: number, fieldNames: string[]) {
+    if (!fieldNames.length) return;
     setStepConfirmations((prev) => {
       if (prev[turnIndex]) return prev;
       const flags: Record<string, boolean> = {};
-      for (const field of Object.keys(findings)) {
+      for (const field of fieldNames) {
         flags[field] = false;
       }
       return { ...prev, [turnIndex]: flags };
@@ -103,10 +113,11 @@ export function ChatView() {
         if (reconstructed.length > 0) setIsSetup(true);
         const initialFlags: Record<number, Record<string, boolean>> = {};
         for (let idx = 0; idx < reconstructed.length; idx++) {
-          const findings = reconstructed[idx]?.response?.sections?.findings;
-          if (findings && typeof findings === "object") {
+          const content = reconstructed[idx]?.response?.content ?? "";
+          const fieldNames = extractFieldNamesFromContent(content);
+          if (fieldNames.length > 0) {
             const flags: Record<string, boolean> = {};
-            for (const field of Object.keys(findings)) flags[field] = false;
+            for (const field of fieldNames) flags[field] = false;
             initialFlags[idx] = flags;
           }
         }
@@ -320,9 +331,9 @@ export function ChatView() {
               });
             });
             if (updatedTurnIdx >= 0) {
-              const findings = doneEvent.response.sections?.findings;
-              if (findings && typeof findings === "object") {
-                initFlags(updatedTurnIdx, findings as Record<string, string>);
+              const fieldNames = extractFieldNamesFromContent(doneEvent.response.content ?? "");
+              if (fieldNames.length > 0) {
+                initFlags(updatedTurnIdx, fieldNames);
               }
             }
           } else if (event.type === "status") {

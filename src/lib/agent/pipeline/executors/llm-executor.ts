@@ -14,12 +14,14 @@ import { logPipeline, truncate } from "../logger";
 export async function executeLlmToolStep(
   step: ExecutableStep,
   ctx: PipelineContext,
-  previousError?: string
+  previousError?: string,
+  revisionContext?: { userFeedback: string }
 ): Promise<StepResult> {
   try {
     const scripts = ctx.skill.scripts;
 
-    const contextSummary = buildContextSummary(ctx);
+    const isRevision = !!revisionContext;
+    const contextSummary = buildContextSummary(ctx, isRevision);
     const retryContext = previousError
       ? `\n\nPREVIOUS ATTEMPT FAILED: ${previousError}\nPlease fix the issue and retry.`
       : "";
@@ -43,16 +45,16 @@ ${retryContext}
 \`\`\`
 
 The JSON MUST include all fields:
-- value: string — your narrative assessment with citation markers
-- sourceCitation: string[] — source chunk references like "S1.c3"
-- citationRef: string[] — exact regulation references like "R48.5.11"
+- value: string — your narrative assessment with citation markers like [S1.c1] and [R48.5.11]
+- sourceCitation: string[] — at least one source chunk reference (e.g., ["S1.c3"])
+- citationRef: string[] — at least one exact regulation reference (e.g., ["R48.5.11"])
 - verdict: string — "PASS" or "FAIL"
 
 # Citation Format
-Every field entry in the JSON block MUST include these two arrays:
+Every field entry MUST include citations — NEVER leave citationRef or sourceCitation empty:
 - \`citationRef\`: regulation references — use the EXACT IDs from Available Citations (e.g., "R48.5.11")
-- \`sourceCitation\`: source chunk IDs — use the EXACT chunk IDs from source palette (e.g., ["S1.c3", "S2.c1"])
-Arrays can be empty if not applicable, but must be present.`;
+- \`sourceCitation\`: source chunk IDs — use the EXACT chunk IDs from Available Chunks (e.g., ["S1.c3"])
+If the check does not specify a particular clause, cite the most relevant regulation clause from the Available Regulations section above.`;
 
     logPipeline(`  [LLM+TOOL] step=${step.number} promptLen=${systemPrompt.length}chars scripts=${scripts.length}`);
 
@@ -63,16 +65,17 @@ Arrays can be empty if not applicable, but must be present.`;
     const stepNeedsTool = currentCheck?.type.kind === "number";
     if (stepNeedsTool) {
       tools.checkCompliance = tool({
-        description: "Run a numerical compliance check. Provide the extracted value, the constraint limit, and the comparison operator.",
+        description: "Run a numerical compliance check. Provide the extracted value, the constraint limit, and the comparison operator. Optionally pass rounding (number of decimal places) to round the value before comparing.",
         inputSchema: ComplianceCheckSchema,
         execute: async (input) => {
-          const { value, limit, operator } = input as {
+          const { value, limit, operator, rounding } = input as {
             value: number;
             limit: number | string;
             operator: string;
+            rounding?: number | string;
           };
-          logPipeline(`  [TOOL EXEC] compliance-check: ${value} ${operator} ${limit}`);
-          const result = executeComplianceCheck(value, limit, operator);
+          logPipeline(`  [TOOL EXEC] compliance-check: ${value} ${operator} ${limit}${rounding !== undefined ? ` round=${rounding}` : ""}`);
+          const result = executeComplianceCheck(value, limit, operator, rounding);
           logPipeline(`  [TOOL EXEC] result: ${truncate(JSON.stringify(result), 200)}`);
           return result;
         },
@@ -113,10 +116,19 @@ Arrays can be empty if not applicable, but must be present.`;
       note?: string;
     }[] = [];
 
-    const attentionQuery = step.attention ?? step.title.replace(/^Evaluate: /, "");
+    const attentionQuery = revisionContext?.userFeedback ?? step.attention ?? step.title.replace(/^Evaluate: /, "");
     const fileChunks = ctx.files.searchRelevantChunks(ctx.sessionId, attentionQuery);
-    const userMessage = `### Step ${step.number}: ${step.title}\n\n${step.instructions}` +
-      (fileChunks ? `\n\n# Available Chunks\n${fileChunks}` : "");
+
+    let userMessage: string;
+    if (revisionContext) {
+      const prevOutput = ctx.steps.read(step.number);
+      const prevText = typeof prevOutput === "string" ? prevOutput : JSON.stringify(prevOutput, null, 2);
+      userMessage = `### Step ${step.number}: ${step.title} (REVISION)\n\n${step.instructions}\n\n# Revision Context\n\nThe user provided the following feedback about the previous assessment:\n"${revisionContext.userFeedback}"\n\nThe previous step output was:\n${prevText}` +
+        (fileChunks ? `\n\n# Available Chunks\n${fileChunks}` : "");
+    } else {
+      userMessage = `### Step ${step.number}: ${step.title}\n\n${step.instructions}` +
+        (fileChunks ? `\n\n# Available Chunks\n${fileChunks}` : "");
+    }
 
     const result = streamText({
       model: createModel(),
@@ -178,13 +190,25 @@ Arrays can be empty if not applicable, but must be present.`;
       const narrative = textResults.find(tr => tr.name === currentCheck?.field);
       const clause = currentCheck?.clause ?? "";
 
+      const citRef = narrative?.citationRef && narrative.citationRef.length > 0
+        ? narrative.citationRef
+        : resolveCitationRef(palette, clause);
+      const srcCit = narrative?.sourceCitation ?? [];
+
+      if (!narrative?.citationRef || narrative.citationRef.length === 0) {
+        logPipeline(`  [LLM+TOOL] ⚠ step ${step.number}: citationRef empty for "${currentCheck?.field}" — fell back to clause "${clause}"`);
+      }
+      if (!narrative?.sourceCitation || narrative.sourceCitation.length === 0) {
+        logPipeline(`  [LLM+TOOL] ⚠ step ${step.number}: sourceCitation empty for "${currentCheck?.field}"`);
+      }
+
       ctx.checks.addResults([{
         name: currentCheck?.field ?? "check",
         type: "numerical" as const,
         finding: narrative?.finding ?? `${currentCheck?.field}: ${run.value} ${run.comparison} → ${run.status}`,
         verdict: run.status === "pass" ? ("PASS" as const) : ("FAIL" as const),
-        citationRef: narrative?.citationRef ?? resolveCitationRef(palette, clause),
-        sourceCitation: narrative?.sourceCitation ?? [],
+        citationRef: citRef,
+        sourceCitation: srcCit,
         toolResult: {
           value: run.value,
           limit: run.limit as number,
@@ -195,6 +219,21 @@ Arrays can be empty if not applicable, but must be present.`;
       logPipeline(`  [LLM+TOOL] merged CheckResult from tool + narrative for "${currentCheck?.field}"`);
     } else if (textResults.length > 0) {
       // No tool calls — use narrative results directly (qualitative checks)
+      // Enforce non-empty citations: fill citationRef from clause when LLM omits it
+      for (const result of textResults) {
+        if (result.citationRef.length === 0) {
+          const clause = currentCheck?.clause;
+          if (clause) {
+            logPipeline(`  [LLM] ⚠ step ${step.number}: citationRef empty for "${result.name}" — filling from check clause "${clause}"`);
+            result.citationRef = [clause];
+          } else {
+            logPipeline(`  [LLM] ⚠ step ${step.number}: citationRef empty for "${result.name}" and no clause available`);
+          }
+        }
+        if (result.sourceCitation.length === 0) {
+          logPipeline(`  [LLM] ⚠ step ${step.number}: sourceCitation empty for "${result.name}"`);
+        }
+      }
       ctx.checks.addResults(textResults);
       logPipeline(`  [LLM+TOOL] extracted ${textResults.length} CheckResult(s) from LLM text output`);
     } else if (fullText) {
@@ -241,13 +280,13 @@ function resolveCitationRef(_palette: readonly CitationPaletteEntry[], clause: s
   return [clause];
 }
 
-function buildContextSummary(ctx: PipelineContext): string {
+function buildContextSummary(ctx: PipelineContext, excludeCheckResults = false): string {
   const parts: string[] = [];
 
   const citationSummary = ctx.palette.formatContextSummary();
   if (citationSummary) parts.push(citationSummary);
 
-  if (ctx.checks.getResults().length > 0) {
+  if (!excludeCheckResults && ctx.checks.getResults().length > 0) {
     const summary = ctx.checks.getResults()
       .map((c) => `${c.name}: ${c.verdict} — ${c.finding} [${c.citationRef.join(", ")}]`)
       .join("\n");

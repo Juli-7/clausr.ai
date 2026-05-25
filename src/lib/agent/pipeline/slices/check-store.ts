@@ -94,24 +94,6 @@ export class CheckStore {
       }
     }
 
-    if (sourceMap.size === 0 && sourcePalette.length > 0) {
-      for (const entry of sourcePalette) {
-        if (!sourceMap.has(entry.id)) {
-          sourceMap.set(entry.id, {
-            ref: entry.id,
-            fileId: entry.fileId,
-            filename: entry.filename,
-            fileUrl: entry.dataUrl,
-            extractedText: entry.extractedText,
-            keyExcerpt: entry.keyExcerpt,
-            chunks: entry.chunks,
-            boundingBox: entry.chunks?.[0]?.bbox,
-            pageNumber: entry.pageNumber,
-          });
-        }
-      }
-    }
-
     this.compiledCitations = Array.from(citationMap.values()).sort((a, b) =>
       a.ref.localeCompare(b.ref)
     );
@@ -187,9 +169,11 @@ export class CheckStore {
     sourcePalette: SourcePaletteEntry[]
   ): void {
     const citationRefs = new Set(this.compiledCitations.map((c) => c.ref));
-    const regulationMarkers = [...content.matchAll(/\[(R\d+\.\d+(?:\.\d+)*)\]/g)].map((m) => m[1]);
+    // Match any [...] bracket content against known citation palette entries
+    // Supports R48.5.11, GDPR.Art 4(7), Art 6, etc.
+    const allBracketRefs = [...content.matchAll(/\[([^\]]+)\]/g)].map((m) => m[1]);
 
-    for (const marker of [...new Set(regulationMarkers)]) {
+    for (const marker of [...new Set(allBracketRefs)]) {
       if (!citationRefs.has(marker)) {
         const entry = citationPalette.find((e) => e.id === marker);
         if (entry) {
@@ -247,9 +231,17 @@ export class CheckStore {
       .filter((r) => r.name === stepCheck.field)
       .flatMap((r) => r.citationRef);
 
-    const valueRefs = [
-      ...content.matchAll(/\[(R\d+\.\d+(?:\.\d+)*)\]/g),
-    ].map((m) => m[1]);
+    // Match any [...] bracket content that corresponds to a known regulation citation
+    const allBracketRefs = [...content.matchAll(/\[([^\]]+)\]/g)].map((m) => m[1]);
+    const valueRefs = allBracketRefs.filter(
+      (ref) => !!paletteStore.findCitation(ref) || !!paletteStore.findSummaryForRef(ref)
+    );
+    // Also include expected refs even if not yet in palette (fresh clause from SKILL.md)
+    for (const ref of expectedRefs) {
+      if (!valueRefs.includes(ref) && content.includes(`[${ref}]`)) {
+        valueRefs.push(ref);
+      }
+    }
 
     const allRefs = new Set([...expectedRefs, ...declaredRefs, ...valueRefs]);
 

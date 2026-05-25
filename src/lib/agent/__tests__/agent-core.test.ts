@@ -135,6 +135,88 @@ describe("executeComplianceCheck", () => {
     const result = executeComplianceCheck(25, "10-20", "range");
     expect(result.status).toBe("fail");
   });
+
+  it("rounds value before >= check when rounding is specified", () => {
+    const result = executeComplianceCheck(1.2345, 1.23, ">=", 2);
+    expect(result.status).toBe("pass");
+    expect(result.comparison).toBe("1.23 >= 1.23");
+  });
+
+  it("rounds value making borderline pass", () => {
+    const result = executeComplianceCheck(1.229, 1.23, ">=", 2);
+    expect(result.status).toBe("pass");
+    expect(result.comparison).toBe("1.23 >= 1.23");
+    expect(result.note).toContain("Rounded from 1.229");
+  });
+
+  it("includes rounding note when value was modified", () => {
+    const result = executeComplianceCheck(1.236, 1.23, ">=", 2);
+    expect(result.status).toBe("pass");
+    expect(result.note).toContain("Rounded from 1.236");
+  });
+
+  it("does not add rounding note when value unchanged", () => {
+    const result = executeComplianceCheck(1.23, 1.23, ">=", 2);
+    expect(result.status).toBe("pass");
+    expect(result.note).toBe("");
+  });
+
+  it("uses ceil rounding mode — rounds up past limit", () => {
+    const result = executeComplianceCheck(1.231, 1.23, "<=", "2:ceil");
+    expect(result.status).toBe("fail");
+    expect(result.comparison).toBe("1.24 <= 1.23");
+    expect(result.note).toContain("Rounded from 1.231");
+  });
+
+  it("uses floor rounding mode — rounds down below limit", () => {
+    const result = executeComplianceCheck(1.239, 1.24, ">=", "2:floor");
+    expect(result.status).toBe("fail");
+    expect(result.comparison).toBe("1.23 >= 1.24");
+    expect(result.note).toContain("Rounded from 1.239");
+  });
+
+  it("handles string rounding number without mode", () => {
+    const result = executeComplianceCheck(1.2345, 1.23, ">=", "2");
+    expect(result.status).toBe("pass");
+    expect(result.comparison).toBe("1.23 >= 1.23");
+    expect(result.note).toContain("Rounded from 1.2345");
+  });
+
+  it("passes tolerance check with percent", () => {
+    const result = executeComplianceCheck(104, "100±5%", "tolerance");
+    expect(result.status).toBe("pass");
+    expect(result.comparison).toContain("95-105");
+  });
+
+  it("fails tolerance check with percent", () => {
+    const result = executeComplianceCheck(106, "100±5%", "tolerance");
+    expect(result.status).toBe("fail");
+    expect(result.note).toContain("outside");
+  });
+
+  it("passes tolerance check with absolute", () => {
+    const result = executeComplianceCheck(101, "100±2", "tolerance");
+    expect(result.status).toBe("pass");
+    expect(result.comparison).toContain("98-102");
+  });
+
+  it("fails tolerance check with absolute", () => {
+    const result = executeComplianceCheck(103, "100±2", "tolerance");
+    expect(result.status).toBe("fail");
+  });
+
+  it("fails tolerance check on bad format", () => {
+    const result = executeComplianceCheck(100, "bad", "tolerance");
+    expect(result.status).toBe("fail");
+    expect(result.note).toContain("Invalid tolerance format");
+  });
+
+  it("rounds value before tolerance check", () => {
+    const result = executeComplianceCheck(105.3, "100±5%", "tolerance", 0);
+    expect(result.status).toBe("pass");
+    expect(result.comparison).toContain("105 within 5% of 100");
+    expect(result.note).toContain("Rounded from 105.3");
+  });
 });
 
 // ── computeConfidence ──

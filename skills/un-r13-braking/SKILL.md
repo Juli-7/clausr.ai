@@ -12,7 +12,7 @@ regulation_ids:
 1. **type**: enum(m1, m2, n1, n2)
 2. **attention**: vehicle category classification M1 M2 N1 N2
 3. **description**: The vehicle category determines which braking requirements apply
-4. **clause**: (none)
+4. **clause**: R13.5.1
 5. **depends_on**: (none)
 6. **sample**: The vehicle is classified as M1 (passenger vehicle) [S1.c1], which requires full braking compliance.
 
