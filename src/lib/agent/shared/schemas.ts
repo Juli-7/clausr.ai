@@ -11,6 +11,7 @@ export const CitationSchema = z.object({
 export const SourceChunkSchema = z.object({
   id: z.string(),
   text: z.string(),
+  html: z.string().optional(),
   bbox: z.object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() }).optional(),
   wordBoxes: z.array(z.object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() })).optional(),
   pageNumber: z.number().optional(),

@@ -58,6 +58,7 @@ export class MockDocStore implements IDocStore {
       chunkIds,
       chunks: extracted.chunks.map((c) => ({
         id: c.id,
+        html: c.html,
         pageNumber: c.pageNumber,
         bbox: c.bbox,
         wordBoxes: c.wordBoxes,
@@ -81,6 +82,7 @@ export class MockDocStore implements IDocStore {
       chunkIds: string[];
       chunks: {
         id: string;
+        html?: string;
         pageNumber?: number;
         bbox?: { x: number; y: number; width: number; height: number };
         wordBoxes?: { x: number; y: number; width: number; height: number }[];
@@ -95,6 +97,7 @@ export class MockDocStore implements IDocStore {
         return {
           id: cMeta.id,
           text: storedChunk?.text ?? "",
+          html: cMeta.html ?? storedChunk?.html,
           pageNumber: cMeta.pageNumber ?? storedChunk?.pageNumber,
           bbox: cMeta.bbox ?? asWordBox(storedChunk?.bbox),
           wordBoxes: cMeta.wordBoxes ?? asWordBoxes(storedChunk?.wordBoxes),

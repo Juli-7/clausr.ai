@@ -8,6 +8,7 @@ export interface WordBox {
 export interface ChunkInfo {
   id: string;
   text: string;
+  html?: string;
   pageNumber?: number;
   bbox?: WordBox;
   wordBoxes?: WordBox[];
