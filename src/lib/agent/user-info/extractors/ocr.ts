@@ -89,9 +89,11 @@ export async function extractImageText(dataUrl: string): Promise<OcrResult> {
   const rawChunks: TextChunk[] = lines.map((lineWords, idx) => {
     const wordBoxes = lineWords.map((w) => toWordBox(w.bbox));
     const lineText = lineWords.map((w) => w.text).join(" ");
+    const id = `c${idx + 1}`;
     return {
-      id: `c${idx + 1}`,
+      id,
       text: lineText,
+      html: `<div data-chunk-id="${id}"><p>${lineText}</p></div>`,
       bbox: mergeWordBoxes(wordBoxes),
       wordBoxes,
     };

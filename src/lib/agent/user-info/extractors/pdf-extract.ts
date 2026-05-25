@@ -189,8 +189,17 @@ function applyOverlap(chunks: TextChunk[]): TextChunk[] {
 }
 
 function finalizeChunks(chunks: TextChunk[]): TextChunk[] {
-  const withOverlap = applyOverlap(chunks);
-  return withOverlap.map((chunk, index) => ({ ...chunk, id: `c${index + 1}` }));
+  const withIds = chunks.map((chunk, index) => {
+    const id = `c${index + 1}`;
+    let html = chunk.html;
+    if (html) {
+      html = html.replace(/data-chunk-id="[^"]*"/, `data-chunk-id="${id}"`);
+    } else {
+      html = `<div data-chunk-id="${id}"><p>${chunk.text.replace(/\n/g, '<br>')}</p></div>`;
+    }
+    return { ...chunk, id, html };
+  });
+  return applyOverlap(withIds);
 }
 
 const PDF_MAGIC = /^%PDF/;
