@@ -3,6 +3,7 @@
 export interface ParsedCheck {
   field: string;
   type: CheckFieldType;
+  attention: string | null;
   constraint: string | null;
   clause: string | null;
   dependsOn: string | null;
@@ -101,6 +102,7 @@ function buildCheck(raw: Record<string, string>): ParsedCheck {
   return {
     field: raw.field,
     type: fieldType ?? { kind: "string" },
+    attention: raw.attention || null,
     constraint: raw.constraint || null,
     clause: raw.clause || null,
     dependsOn: raw.depends_on || null,

@@ -5,6 +5,7 @@ export interface ExecutableStep {
   title: string;
   type: "llm+tool";
   instructions: string;
+  attention?: string;
   temperature?: number;
 }
 

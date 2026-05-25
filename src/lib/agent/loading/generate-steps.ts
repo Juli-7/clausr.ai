@@ -7,6 +7,7 @@ export function generateStepsFromChecks(checks: ParsedCheck[]): ExecutableStep[]
     title: `Evaluate: ${c.field}`,
     type: "llm+tool" as const,
     instructions: buildFieldInstructions(c),
+    attention: c.attention ?? undefined,
   }));
 }
 

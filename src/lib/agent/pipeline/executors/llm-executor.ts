@@ -110,7 +110,8 @@ Arrays can be empty if not applicable, but must be present.`;
       note?: string;
     }[] = [];
 
-    const fileChunks = ctx.files.searchRelevantChunks(ctx.sessionId, step.instructions);
+    const attentionQuery = step.attention ?? step.title.replace(/^Evaluate: /, "");
+    const fileChunks = ctx.files.searchRelevantChunks(ctx.sessionId, attentionQuery);
     const userMessage = `### Step ${step.number}: ${step.title}\n\n${step.instructions}` +
       (fileChunks ? `\n\n# Available Chunks\n${fileChunks}` : "");
 
