@@ -169,6 +169,12 @@ export async function* orchestratePipeline(
     }
   }
 
+  // ── Final citation compilation across ALL CheckResults ──
+  ctx.checks.compileCitations(
+    [...ctx.palette.getCitationPalette()],
+    ctx.files.getSourcePalette()
+  );
+
   // ── Evaluate + finalize ──
   yield { type: "status", phase: "evaluating" };
   const result = await finalizePhase(ctx, steps, sessionId);

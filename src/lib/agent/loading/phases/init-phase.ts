@@ -91,21 +91,47 @@ export async function initPipelineTurn(
     logPipeline(`[PIPELINE-TURN] restored ${lastResponse.reasoningSteps.length} step output(s) from previous turn`);
   }
 
-  // Restore previous CheckResults from the most recent response's findings
-  if (lastResponse?.sections?.findings && typeof lastResponse.sections.findings === "object") {
-    const restoredResults: CheckResult[] = [];
-    for (const [field, finding] of Object.entries(lastResponse.sections.findings)) {
-      const checkDef = ctx.skill.checks.find((c) => c.field === field);
-      const regMatch = String(finding).match(/\[(R\d+\.\d+(?:\.\d+)*)\]/);
-      restoredResults.push({
-        name: field,
-        type: checkDef?.type.kind === "number" ? "numerical" : "qualitative",
-        finding: String(finding),
-        verdict: String(finding).startsWith("FAIL") ? "FAIL" : "PASS",
-        citationRef: regMatch?.[1] ? [regMatch[1]] : [],
-        sourceCitation: [],
-      });
+  // Restore previous CheckResults from the most recent response
+  // Findings only contain FAIL results — reconstruct PASS results from step outputs + clauses
+  if (lastResponse) {
+    const findingsMap: Record<string, string> = {};
+    if (lastResponse.sections?.findings && typeof lastResponse.sections.findings === "object") {
+      for (const [field, finding] of Object.entries(lastResponse.sections.findings)) {
+        findingsMap[field] = String(finding);
+      }
     }
+
+    const restoredResults: CheckResult[] = [];
+    for (const check of ctx.skill.checks) {
+      const stepNum = ctx.skill.checks.indexOf(check) + 1;
+      const stepOutput = ctx.steps.read(stepNum);
+      const finding = findingsMap[check.field];
+
+      if (finding) {
+        // FAIL — real finding from sections.findings
+        const regMatch = String(finding).match(/\[(R\d+\.\d+(?:\.\d+)*)\]/);
+        restoredResults.push({
+          name: check.field,
+          type: check.type.kind === "number" ? "numerical" : "qualitative",
+          finding: String(finding),
+          verdict: "FAIL",
+          citationRef: regMatch?.[1] ? [regMatch[1]] : check.clause ? [check.clause] : [],
+          sourceCitation: [],
+        });
+      } else if (stepOutput !== undefined) {
+        // PASS — reconstruct from step output + check's authoritative clause
+        const outputText = typeof stepOutput === "string" ? stepOutput : JSON.stringify(stepOutput);
+        restoredResults.push({
+          name: check.field,
+          type: check.type.kind === "number" ? "numerical" : "qualitative",
+          finding: outputText,
+          verdict: "PASS",
+          citationRef: check.clause ? [check.clause] : [],
+          sourceCitation: [],
+        });
+      }
+    }
+
     ctx.checks.addResults(restoredResults);
     logPipeline(`[PIPELINE-TURN] restored ${restoredResults.length} CheckResult(s) from previous turn`);
   }
