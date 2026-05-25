@@ -45,7 +45,13 @@ The JSON MUST include all fields:
 - value: string — your narrative assessment with citation markers
 - sourceCitation: string[] — source chunk references like "S1.c3"
 - citationRef: string[] — exact regulation references like "R48.5.11"
-- verdict: string — "PASS" or "FAIL"`;
+- verdict: string — "PASS" or "FAIL"
+
+# Citation Format
+Every field entry in the JSON block MUST include these two arrays:
+- \`citationRef\`: regulation references — use the EXACT IDs from Available Citations (e.g., "R48.5.11")
+- \`sourceCitation\`: source chunk IDs — use the EXACT chunk IDs from source palette (e.g., ["S1.c3", "S2.c1"])
+Arrays can be empty if not applicable, but must be present.`;
 
     logPipeline(`  [LLM+TOOL] step=${step.number} promptLen=${systemPrompt.length}chars scripts=${scripts.length}`);
 
@@ -91,8 +97,7 @@ The JSON MUST include all fields:
 
     logPipeline(`  [LLM+TOOL] step=${step.number} calling streamText with ${Object.keys(tools).length} tool(s)`);
 
-    const citationGuide = buildCitationGuide(ctx);
-    const toolSystemPrompt = systemPrompt + citationGuide;
+    const toolSystemPrompt = systemPrompt;
 
     const collectedToolRuns: {
       inputs: Record<string, unknown>[];
@@ -325,33 +330,6 @@ function buildContextSummary(ctx: PipelineContext): string {
   }
 
   return parts.join("\n\n");
-}
-
-function buildCitationGuide(ctx: PipelineContext): string {
-  const parts: string[] = [];
-  const citationPalette = ctx.palette.getCitationPalette();
-  const sourcePalette = ctx.files.getSourcePalette();
-
-  if (citationPalette.length > 0 || sourcePalette.length > 0) {
-    parts.push("");
-    parts.push("# Citation Format");
-    parts.push("Every field entry in the JSON block MUST include these two arrays:");
-    parts.push("- `citationRef`: regulation references — use the EXACT IDs from Available Citations (e.g., \"R48.5.11\")");
-    parts.push("- `sourceCitation`: source chunk IDs — use the EXACT chunk IDs from source palette (e.g., [\"S1.c3\", \"S2.c1\"])");
-    parts.push("Arrays can be empty if not applicable, but must be present.");
-  }
-
-  const hasChunks = ctx.files.getFiles().some(f => f.chunks && f.chunks.length > 0);
-  if (hasChunks) {
-    parts.push("");
-    parts.push("# Source Chunk References (sourceCitation)");
-    parts.push("Source text above is annotated with chunk IDs like [S1.c3]. Use these in claims:");
-    parts.push("- `sourceCitation` field: the source chunk ID that backs this claim (e.g., \"S1.c3\")");
-    parts.push("- `citationRef` field: the regulation reference (e.g., \"R48.5.11\")");
-    parts.push("Every factual claim MUST include a sourceCitation pointing to the source chunk that supports it.");
-  }
-
-  return parts.join("\n");
 }
 
 /**
