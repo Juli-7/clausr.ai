@@ -12,7 +12,7 @@ export function generateStepsFromChecks(checks: ParsedCheck[]): ExecutableStep[]
 
 function buildFieldInstructions(c: ParsedCheck): string {
   const parts: string[] = [];
-  parts.push(`Extract the value for '${c.field}' from the relevant chunks.`);
+  parts.push(`Retrieve relevant chunks. Search the context for "${c.field}".`);
   parts.push(`Type: ${c.type.kind}${c.type.kind === "enum" ? ` (${c.type.values.join("|")})` : ""}`);
   if (c.constraint) parts.push(`Constraint: ${c.constraint}`);
   if (c.clause) parts.push(`Regulation clause: ${c.clause}`);
