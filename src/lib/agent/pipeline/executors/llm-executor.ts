@@ -31,9 +31,9 @@ You are an expert in executing information handling jobs in general.
 
 # Instructions
 - Retrieve relevant chunks according to the step description provided in the user's message.
-- When the step type is "number", you MUST call the available compliance-check tool to execute compliance checks.
-- After calling the tool, you MUST still output the JSON format for this step — the JSON output is required in addition to the tool call.
-- Output ONLY the JSON format specified in # Output Format below — do not write any prose outside the JSON block.
+- You MUST output the JSON format specified in # Output Format below — this is always required.
+- For numerical steps: output the JSON FIRST with your narrative assessment, source chunk references, and regulation citation. THEN call the compliance-check tool to verify the numerical value against the constraint. The JSON output is always required regardless of tool calls.
+- Output ONLY the JSON format — do not write any prose outside the JSON block.
 
 # Session Context
 ${contextSummary}
@@ -193,13 +193,26 @@ If the check does not specify a particular clause, cite the most relevant regula
       const citRef = narrative?.citationRef && narrative.citationRef.length > 0
         ? narrative.citationRef
         : resolveCitationRef(palette, clause);
-      const srcCit = narrative?.sourceCitation ?? [];
+      let srcCit = narrative?.sourceCitation ?? [];
 
       if (!narrative?.citationRef || narrative.citationRef.length === 0) {
         logPipeline(`  [LLM+TOOL] ⚠ step ${step.number}: citationRef empty for "${currentCheck?.field}" — fell back to clause "${clause}"`);
       }
+
+      // When LLM produces no narrative JSON (tool-only response), backfill sourceCitation
+      // from the file chunks that were sent to the LLM — it extracted the value from them
+      if (!narrative || srcCit.length === 0) {
+        const extracted = fileChunks ? extractChunkIdsFromFileChunks(fileChunks) : [];
+        if (extracted.length > 0) {
+          srcCit = extracted;
+          logPipeline(`  [LLM+TOOL] ⚠ step ${step.number}: sourceCitation empty for "${currentCheck?.field}" — backfilled from available chunks: ${extracted.join(", ")}`);
+        }
+      }
+
       if (!narrative?.sourceCitation || narrative.sourceCitation.length === 0) {
-        logPipeline(`  [LLM+TOOL] ⚠ step ${step.number}: sourceCitation empty for "${currentCheck?.field}"`);
+        if (srcCit.length === 0) {
+          logPipeline(`  [LLM+TOOL] ⚠ step ${step.number}: sourceCitation empty for "${currentCheck?.field}" and no chunks available`);
+        }
       }
 
       ctx.checks.addResults([{
@@ -382,4 +395,14 @@ function extractCheckResultsFromText(
     citationRef: data.citationRef,
     sourceCitation: data.sourceCitation,
   }];
+}
+
+function extractChunkIdsFromFileChunks(fileChunks: string): string[] {
+  const ids = new Set<string>();
+  const regex = /\[(S\d+(?:\.\S+?))\]/g;
+  let match;
+  while ((match = regex.exec(fileChunks)) !== null) {
+    ids.add(match[1]);
+  }
+  return [...ids];
 }
