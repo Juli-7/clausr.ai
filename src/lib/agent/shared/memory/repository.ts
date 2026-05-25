@@ -50,6 +50,7 @@ export function saveChunks(
         null,
         Date.now()
       );
+      indexChunkFts5(sessionId, fileId, i, chunks[i].text);
     }
   });
   insert();
@@ -115,7 +116,56 @@ export function getChunksBySession(sessionId: string): StoredChunk[] {
 }
 
 export function deleteChunksBySession(sessionId: string): void {
-  getDb().prepare("DELETE FROM chunk_store WHERE session_id = ?").run(sessionId);
+  const db = getDb();
+  db.prepare("DELETE FROM chunk_store WHERE session_id = ?").run(sessionId);
+  try { db.prepare("DELETE FROM chunk_fts WHERE session_id = ?").run(sessionId); } catch { /* no FTS5 */ }
+}
+
+export interface Fts5Result {
+  fileId: string;
+  chunkIdx: number;
+  text: string;
+  rank: number;
+}
+
+/**
+ * Search chunks using FTS5 full-text search.
+ * Returns up to `limit` chunks ranked by relevance, ordered by rank ascending.
+ * Falls back to empty array if FTS5 is unavailable.
+ */
+export function searchChunksFts5(
+  sessionId: string,
+  query: string,
+  limit = 10
+): Fts5Result[] {
+  const db = getDb();
+  try {
+    const rows = db
+      .prepare(
+        `SELECT file_id, chunk_idx, text, rank
+         FROM chunk_fts
+         WHERE chunk_fts MATCH ? AND session_id = ?
+         ORDER BY rank
+         LIMIT ?`
+      )
+      .all(query, sessionId, limit) as { file_id: string; chunk_idx: number; text: string; rank: number }[];
+    return rows.map((r) => ({ fileId: r.file_id, chunkIdx: r.chunk_idx, text: r.text, rank: r.rank }));
+  } catch {
+    return [];
+  }
+}
+
+export function indexChunkFts5(
+  sessionId: string,
+  fileId: string,
+  chunkIdx: number,
+  text: string
+): void {
+  try {
+    getDb()
+      .prepare("INSERT INTO chunk_fts (session_id, file_id, chunk_idx, text) VALUES (?, ?, ?, ?)")
+      .run(sessionId, fileId, chunkIdx, text);
+  } catch { /* no FTS5 — silently skip */ }
 }
 
 export function addUserMessage(sessionId: string, content: string): void {

@@ -122,6 +122,10 @@ export function getDb(): Database.Database {
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_responses_session ON responses(session_id)"); } catch { /* index exists */ }
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_chunk_store_session ON chunk_store(session_id)"); } catch { /* index exists */ }
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_chunk_store_file ON chunk_store(session_id, file_id)"); } catch { /* index exists */ }
+
+  // FTS5 full-text search over chunks — try/catch for SQLite builds without FTS5
+  try { db.exec("CREATE VIRTUAL TABLE IF NOT EXISTS chunk_fts USING fts5(session_id UNINDEXED, file_id UNINDEXED, chunk_idx UNINDEXED, text, tokenize='unicode61')"); } catch { /* FTS5 not available */ }
+
   const insertSetting = db.prepare(
     "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)"
   );

@@ -1,5 +1,6 @@
 import type { TextChunk } from "@/lib/agent/user-info/extractors";
 import type { SourcePaletteEntry } from "../pipeline-context";
+import { searchChunksFts5 } from "@/lib/agent/shared/memory/repository";
 
 export interface UploadedFileEntry {
   fileId: string;
@@ -85,6 +86,37 @@ export class FileRegistry {
       }
       return `[File ${i + 1}: ${f.filename}]\n${f.extractedText}`;
     });
+
+    return `Uploaded Files:\n${fileBlocks.join("\n\n")}`;
+  }
+
+  /**
+   * Search chunks relevant to `query` using FTS5 full-text search.
+   * Falls back to all chunks if FTS5 is unavailable or returns nothing.
+   */
+  searchRelevantChunks(sessionId: string, query: string, topK = 10): string {
+    if (this.files.length === 0) return "";
+
+    const results = searchChunksFts5(sessionId, query, topK);
+    if (results.length === 0) return this.buildContextSummary();
+
+    const fileMap = new Map(this.files.map((f, i) => [f.fileId, i]));
+
+    const grouped = new Map<number, { idx: number; text: string }[]>();
+    for (const r of results) {
+      const fileIdx = fileMap.get(r.fileId);
+      if (fileIdx === undefined) continue;
+      if (!grouped.has(fileIdx)) grouped.set(fileIdx, []);
+      grouped.get(fileIdx)!.push({ idx: r.chunkIdx, text: r.text });
+    }
+
+    const fileBlocks: string[] = [];
+    for (const [fileIdx, chunkResults] of grouped) {
+      const f = this.files[fileIdx];
+      const sourceRef = `S${fileIdx + 1}`;
+      const lines = chunkResults.map((c) => `[${sourceRef}.c${c.idx}] ${c.text}`);
+      fileBlocks.push(`[File ${fileIdx + 1}: ${f.filename}]\n${lines.join("\n")}`);
+    }
 
     return `Uploaded Files:\n${fileBlocks.join("\n\n")}`;
   }
