@@ -97,8 +97,6 @@ Arrays can be empty if not applicable, but must be present.`;
 
     logPipeline(`  [LLM+TOOL] step=${step.number} calling streamText with ${Object.keys(tools).length} tool(s)`);
 
-    const toolSystemPrompt = systemPrompt;
-
     const collectedToolRuns: {
       inputs: Record<string, unknown>[];
       outputs: Record<string, unknown>[];
@@ -117,7 +115,7 @@ Arrays can be empty if not applicable, but must be present.`;
 
     const result = streamText({
       model: createModel(),
-      system: toolSystemPrompt,
+      system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],
       tools: Object.keys(tools).length > 0 ? tools : undefined,
       ...(step.temperature !== undefined ? { temperature: step.temperature } : {}),
@@ -228,7 +226,7 @@ Arrays can be empty if not applicable, but must be present.`;
     storeOutput(ctx, step.number, fullText);
     return {
       success: true,
-      contextSnapshot: { systemPrompt: toolSystemPrompt, userMessage, contextSummary },
+      contextSnapshot: { systemPrompt, userMessage, contextSummary },
       streamedTokens: tokens,
       toolResults: perCheckResults.length > 0 ? perCheckResults : undefined,
     };
@@ -397,13 +395,4 @@ function extractCheckResultsFromText(
     citationRef: data.citationRef,
     sourceCitation: data.sourceCitation,
   }];
-}
-
-function deriveRegulation(clause: string, regulationIds: string[]): string {
-  if (regulationIds.length === 1) return regulationIds[0];
-  for (const id of regulationIds) {
-    if (clause.startsWith(id) || clause.includes(id)) return id;
-  }
-  if (regulationIds.length > 0) return regulationIds[0];
-  return "";
 }
