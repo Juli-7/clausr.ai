@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 
 interface SkillData {
@@ -222,7 +222,7 @@ export function SkillsDrawer({
                         {detail.triggers.map((t) => (
                           <span
                             key={t}
-                            className="text-[11px] px-2 py-0.5 rounded"
+                            className="text-2xs px-2 py-0.5 rounded"
                             style={{
                               background: "var(--color-border-default)",
                               color: "var(--color-text-muted)",
@@ -271,7 +271,7 @@ export function SkillsDrawer({
                               <span style={{ fontWeight: 500, color: "var(--color-text-body)", flex: 1 }}>
                                 {s.name}
                               </span>
-                              <span className="text-[11px]" style={{ color: "var(--color-text-muted)" }}>{s.desc}</span>
+                              <span className="text-2xs" style={{ color: "var(--color-text-muted)" }}>{s.desc}</span>
                             </div>
                           ))}
                         </div>
@@ -364,7 +364,7 @@ function Section({
   return (
     <div style={{ marginBottom: 20 }}>
       <div
-        className="text-[11px] uppercase tracking-wider font-semibold mb-2"
+        className="text-2xs uppercase tracking-wider font-semibold mb-2"
         style={{ color: "var(--color-text-muted)" }}
       >
         {title}

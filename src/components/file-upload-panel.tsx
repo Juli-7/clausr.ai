@@ -71,7 +71,7 @@ export function FileUploadPanel({
             {setupDone ? "Files locked" : "Add documents"}
           </span>
           {setupDone && (
-            <span className="text-[10px]" style={{ color: "var(--color-success)" }}>
+            <span className="text-2xs" style={{ color: "var(--color-success)" }}>
               Setup complete
             </span>
           )}
@@ -105,7 +105,7 @@ export function FileUploadPanel({
         {attachedFiles.length > 0 && (
           <div className="flex flex-col gap-1.5">
             <span
-              className="text-[10px] font-semibold uppercase tracking-wider"
+              className="text-2xs font-semibold uppercase tracking-wider"
               style={{ color: "var(--color-text-muted)" }}
             >
               {attachedFiles.length} file{attachedFiles.length !== 1 ? "s" : ""}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, startTransition } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const PROVIDERS = [
@@ -27,7 +27,7 @@ export function SettingsPopover({
   // Load current settings on mount
   useEffect(() => {
     if (!open) return;
-    setLoading(true);
+    startTransition(() => setLoading(true));
     fetch("/api/settings")
       .then((r) => r.json())
       .then((data) => {

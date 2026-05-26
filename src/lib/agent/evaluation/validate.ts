@@ -46,7 +46,7 @@ export function validate({
           if (!citationRefs.has(part)) {
             const entry = citationPalette.find((e) => e.id === part);
             if (entry) {
-              mutableCitations.push(entry as any);
+              mutableCitations.push({ ref: entry.id, regulation: entry.regulation, clause: entry.clause });
               citationRefs.add(entry.id);
             } else {
               errors.push({
@@ -69,7 +69,7 @@ export function validate({
                 chunks: entry.chunks,
                 boundingBox: entry.chunks?.[0]?.bbox,
                 pageNumber: entry.pageNumber,
-              } as any);
+              } as SourceCitation);
               sourceRefs.add(part);
             }
           }

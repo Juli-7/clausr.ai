@@ -81,7 +81,8 @@ describe("AgentResponseSchema", () => {
   });
 
   it("rejects missing content", () => {
-    const { content, ...rest } = validResponse;
+    const { content: _, ...rest } = validResponse;
+    void _;
     const result = AgentResponseSchema.safeParse(rest);
     expect(result.success).toBe(false);
   });

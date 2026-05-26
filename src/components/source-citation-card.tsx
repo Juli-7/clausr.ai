@@ -105,6 +105,7 @@ export function SourceCitationCard({
   const [expanded, setExpanded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [imgDisplaySize, setImgDisplaySize] = useState<{ w: number; h: number; offsetX: number; offsetY: number } | null>(null);
+  const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const fileType = detectFileType(filename, ft);
 
@@ -113,8 +114,8 @@ export function SourceCitationCard({
   // Compute highlight rects scaled to the rendered image within the container
   const highlightRects: WordBox[] = [];
   if (highlightChunk?.wordBoxes && imgDisplaySize) {
-    const refWidth = highlightChunk.pageWidth ?? imgRef.current?.naturalWidth ?? 0;
-    const refHeight = highlightChunk.pageHeight ?? imgRef.current?.naturalHeight ?? 0;
+    const refWidth = highlightChunk.pageWidth ?? naturalSize?.w ?? 0;
+    const refHeight = highlightChunk.pageHeight ?? naturalSize?.h ?? 0;
     if (refWidth > 0 && refHeight > 0) {
       const sx = imgDisplaySize.w / refWidth;
       const sy = imgDisplaySize.h / refHeight;
@@ -168,9 +169,10 @@ export function SourceCitationCard({
                 ref={imgRef}
                 src={fileUrl}
                 alt={filename}
-                onLoad={(naturalW, naturalH) =>
-                  setImgDisplaySize(computeDisplaySize(naturalW, naturalH, 180, 130))
-                }
+                onLoad={(naturalW, naturalH) => {
+                  setNaturalSize({ w: naturalW, h: naturalH });
+                  setImgDisplaySize(computeDisplaySize(naturalW, naturalH, 180, 130));
+                }}
                 onError={() => setImageError(true)}
                 highlightRects={highlightRects}
               />
@@ -273,7 +275,7 @@ const PreviewImage = React.forwardRef<
           </div>
         )}
       </div>
-      <div className="text-[10px] text-center mt-1" style={{ color: "var(--color-text-muted)" }}>
+      <div className="text-2xs text-center mt-1" style={{ color: "var(--color-text-muted)" }}>
         {alt} {highlightRects.length > 0 ? "— highlighted" : ""}
       </div>
     </div>
@@ -361,7 +363,7 @@ const PdfPreviewPage = React.forwardRef<
           </div>
         )}
       </div>
-      <div className="text-[10px] text-center mt-1" style={{ color: "var(--color-text-muted)" }}>
+      <div className="text-2xs text-center mt-1" style={{ color: "var(--color-text-muted)" }}>
         {filename} — page {highlightChunk.pageNumber}
         {highlightRects.length > 0 ? " (highlighted)" : ""}
       </div>
@@ -392,7 +394,7 @@ function PreviewHtmlContent({
         }}
         dangerouslySetInnerHTML={{ __html: html }}
       />
-      <div className="text-[10px] text-center mt-1" style={{ color: "var(--color-text-muted)" }}>
+      <div className="text-2xs text-center mt-1" style={{ color: "var(--color-text-muted)" }}>
         {filename} &mdash; {chunkId}
       </div>
       <style>{`
@@ -464,7 +466,7 @@ function PreviewFallback({ filename, pageNumber, fileUrl }: { filename: string; 
 function Label({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="text-[10px] uppercase tracking-wider font-semibold mb-1"
+      className="text-2xs uppercase tracking-wider font-semibold mb-1"
       style={{ color: "var(--color-text-muted)" }}
     >
       {children}

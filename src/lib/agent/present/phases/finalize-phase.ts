@@ -58,7 +58,17 @@ export async function finalizePhase(
     sourceCitations: result.sourceCitations.length > 0 ? result.sourceCitations : undefined,
     round,
     sessionId,
-    sections: { findings: result.findings },
+    sections: {
+      findings: result.findings,
+      _checkResults: JSON.stringify(ctx.checks.getResults().map((r) => ({
+        name: r.name,
+        type: r.type,
+        finding: r.finding,
+        verdict: r.verdict,
+        citationRef: r.citationRef,
+        sourceCitation: r.sourceCitation,
+      }))),
+    },
     clauseTexts: Object.keys(clauseTexts).length > 0 ? clauseTexts : undefined,
   };
 

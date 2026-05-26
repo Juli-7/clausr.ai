@@ -82,7 +82,7 @@ export class PaletteStore {
     }
     if (toResolve.length === 0) return;
 
-    const api = getRegulationApi();
+    const api = await getRegulationApi();
     const entries: CitationPaletteEntry[] = [];
     for (const ref of toResolve) {
       const regCode = this.getRegulationForRef(ref);

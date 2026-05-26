@@ -1,6 +1,4 @@
 import type {
-  Regulation,
-  Clause,
   GetRegulationRequest,
   GetRegulationResponse,
   GetClauseRequest,
@@ -56,10 +54,9 @@ export interface IRegulationApi {
  */
 let _instance: IRegulationApi | null = null;
 
-export function getRegulationApi(): IRegulationApi {
+export async function getRegulationApi(): Promise<IRegulationApi> {
   if (!_instance) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { MockRegulationApi } = require("./mock-regulation-api");
+    const { MockRegulationApi } = await import("./mock-regulation-api");
     _instance = new MockRegulationApi();
   }
   return _instance as IRegulationApi;

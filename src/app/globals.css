@@ -18,12 +18,45 @@
   --color-amber: #d29922;
   --color-amber-bg: #d2992218;
   --color-amber-border: #d2992233;
+
+  /* Type scale */
+  --text-2xs: 0.625rem;
+
+  /* Shadcn semantic aliases (map to custom tokens above) */
+  --color-background: #0f1117;
+  --color-foreground: #e1e4e8;
+  --color-card: #161b22;
+  --color-card-foreground: #e1e4e8;
+  --color-popover: #161b22;
+  --color-popover-foreground: #e1e4e8;
+  --color-primary: #58a6ff;
+  --color-primary-foreground: #0f1117;
+  --color-secondary: #21262d;
+  --color-secondary-foreground: #e1e4e8;
+  --color-muted: #21262d;
+  --color-muted-foreground: #8b949e;
+  --color-accent: #1f6feb22;
+  --color-accent-foreground: #58a6ff;
+  --color-destructive: #f85149;
+  --color-destructive-foreground: #0f1117;
+  --color-border: #21262d;
+  --color-input: #30363d;
+  --color-ring: #58a6ff;
 }
 
 body {
-  background: #0f1117;
-  color: #e1e4e8;
+  background: var(--color-bg-primary);
+  color: var(--color-text-body);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
 }
 
 ::-webkit-scrollbar {

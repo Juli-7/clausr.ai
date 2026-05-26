@@ -6,7 +6,7 @@ import { initPipelineTurn } from "@/lib/agent/loading/phases/init-phase";
 import { identifyRevisionTargets } from "@/lib/agent/pipeline/revision-phase";
 import { saveContextSnapshot, getResponseCount } from "@/lib/agent/shared/memory/repository";
 import { finalizePhase } from "@/lib/agent/present/phases/finalize-phase";
-import { PipelineError, generateCorrelationId, formatPipelineError } from "./errors";
+import { generateCorrelationId } from "./errors";
 import { logPipeline, truncate } from "./logger";
 import type { PipelineEvent, ExecutableStep, StepResult } from "./types";
 import type { PipelineContext } from "./pipeline-context";

@@ -35,7 +35,7 @@ export function ReasoningPanel({ turns, loading, stepStatus }: ReasoningPanelPro
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div ref={containerRef} style={{ flex: 1, overflowY: "auto", padding: "0 12px 12px" }}>
         <div
-          className="text-[11px] uppercase tracking-wider font-semibold mb-4"
+          className="text-2xs uppercase tracking-wider font-semibold mb-4"
           style={{ color: "var(--color-text-muted)" }}
         >
           🧠 Audit Trail
@@ -53,7 +53,7 @@ export function ReasoningPanel({ turns, loading, stepStatus }: ReasoningPanelPro
             >
               <div className="flex items-center gap-2 mb-1.5">
                 <span
-                  className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                  className="text-2xs font-semibold px-1.5 py-0.5 rounded"
                   style={{
                     background: "var(--color-accent-blue-bg)",
                     color: "var(--color-accent-blue)",
@@ -191,7 +191,6 @@ function StepCard({
   subStep,
   action,
   children,
-  isFail,
   isStreaming,
 }: {
   stepNumber: number;
@@ -217,7 +216,7 @@ function StepCard({
     >
       <div className="flex items-center gap-2 mb-1.5">
         <div
-          className="w-5 h-5 rounded text-[11px] font-semibold flex items-center justify-center shrink-0"
+          className="w-5 h-5 rounded text-2xs font-semibold flex items-center justify-center shrink-0"
           style={{
             background: isStreaming
               ? "var(--color-accent-blue-bg)"

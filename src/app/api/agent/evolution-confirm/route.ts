@@ -37,7 +37,6 @@ export async function POST(request: NextRequest) {
         const sectionHeader = "## Lessons Learnt";
         if (content.includes(sectionHeader)) {
           const startIdx = content.indexOf(sectionHeader);
-          const afterHeader = content.substring(startIdx + sectionHeader.length).trimStart();
           const nextSection = content.indexOf("\n## ", startIdx + sectionHeader.length);
           const sectionEnd = nextSection !== -1 ? nextSection : content.length;
           const before = content.substring(0, sectionEnd);

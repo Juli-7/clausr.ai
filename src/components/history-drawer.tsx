@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, startTransition } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -50,7 +50,7 @@ export function HistoryDrawer({
   }, []);
 
   useEffect(() => {
-    if (open) fetchSessions();
+    if (open) startTransition(() => fetchSessions());
   }, [open, fetchSessions]);
 
   return (
@@ -114,7 +114,7 @@ export function HistoryDrawer({
                     </h4>
                     {session.confidenceScore != null ? (
                       <span
-                        className="text-[10px] font-semibold px-2 py-0.5 rounded flex-shrink-0"
+                        className="text-2xs font-semibold px-2 py-0.5 rounded flex-shrink-0"
                         style={{
                           color: session.confidenceColor ?? "#3fb950",
                           background: `${session.confidenceColor ?? "#3fb950"}18`,
@@ -124,7 +124,7 @@ export function HistoryDrawer({
                       </span>
                     ) : session.verdict && session.verdict !== "UNKNOWN" ? (
                       <span
-                        className="text-[10px] font-semibold px-2 py-0.5 rounded flex-shrink-0"
+                        className="text-2xs font-semibold px-2 py-0.5 rounded flex-shrink-0"
                         style={{
                           color: session.verdict === "FAIL" ? "#f85149" : "#3fb950",
                           background: session.verdict === "FAIL" ? "#f8514918" : "#3fb95018",
@@ -135,7 +135,7 @@ export function HistoryDrawer({
                     ) : null}
                   </div>
                   {session.needsExpert && (
-                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded mb-1 inline-block" style={{ color: "#f85149", background: "#f8514918" }}>
+                    <span className="text-2xs font-medium px-1.5 py-0.5 rounded mb-1 inline-block" style={{ color: "#f85149", background: "#f8514918" }}>
                       Expert review needed
                     </span>
                   )}
@@ -145,7 +145,7 @@ export function HistoryDrawer({
                   <p className="text-xs truncate pr-12" style={{ color: "var(--color-text-muted)" }}>
                     {session.lastMessage}
                   </p>
-                  <div className="flex items-center gap-2 mt-1.5 text-[10px]" style={{ color: "var(--color-text-muted)" }}>
+                  <div className="flex items-center gap-2 mt-1.5 text-2xs" style={{ color: "var(--color-text-muted)" }}>
                     <span>{session.roundCount} {session.roundCount === 1 ? "round" : "rounds"}</span>
                     <span>·</span>
                     <span>{new Date(session.timestamp).toLocaleDateString()}</span>

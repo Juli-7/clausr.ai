@@ -4,6 +4,7 @@ import { createModel } from "@/lib/agent/llm/factory";
 import { runScript } from "./script-runner";
 import { ComplianceCheckSchema } from "@/lib/agent/shared/schemas";
 import { executeComplianceCheck } from "@/lib/agent/pipeline/builtins";
+import { buildSystemPrompt, buildUserMessage } from "@/lib/agent/pipeline/prompts";
 import type { ExecutableStep } from "../types";
 import type { ParsedCheck } from "@/lib/agent/loading/skill/check-parser";
 import type { PipelineContext, CheckResult, CitationPaletteEntry } from "../pipeline-context";
@@ -22,45 +23,13 @@ export async function executeLlmToolStep(
 
     const isRevision = !!revisionContext;
     const contextSummary = buildContextSummary(ctx, isRevision);
-    const retryContext = previousError
-      ? `\n\nPREVIOUS ATTEMPT FAILED: ${previousError}\nPlease fix the issue and retry.`
-      : "";
-
-    const systemPrompt = `# Role
-You are an expert in executing information handling jobs in general.
-
-# Instructions
-- Retrieve relevant chunks according to the step description provided in the user's message.
-- You MUST output the JSON format specified in # Output Format below — this is always required.
-- For numerical steps: output the JSON FIRST with your narrative assessment, source chunk references, and regulation citation. Put "PASS" as a preliminary verdict — the final verdict is determined by the compliance-check tool result. THEN call the compliance-check tool to verify the numerical value against the constraint. The JSON output is always required regardless of tool calls.
-- Output ONLY the JSON format — do not write any prose outside the JSON block.
-
-# Session Context
-${contextSummary}
-${retryContext}
-
-# Output Format
-\`\`\`json
-{"{step_name}": {"value": "narrative assessment with citation markers like [S1.c1] and [R48.5.11]", "sourceCitation": ["S1.c1", "S1.c2"], "citationRef": ["R48.5.11"], "verdict": "PASS"}}
-\`\`\`
-
-The JSON MUST include all fields:
-- value: string — your narrative assessment with citation markers like [S1.c1] and [R48.5.11]
-- sourceCitation: string[] — at least one source chunk reference (e.g., ["S1.c3"])
-- citationRef: string[] — at least one exact regulation reference (e.g., ["R48.5.11"])
-- verdict: string — "PASS" or "FAIL"
-
-# Citation Format
-Every field entry MUST include citations — NEVER leave citationRef or sourceCitation empty:
-- \`citationRef\`: regulation references — use the EXACT IDs from Available Citations (e.g., "R48.5.11")
-- \`sourceCitation\`: source chunk IDs — use the EXACT chunk IDs from Available Chunks (e.g., ["S1.c3"])
-If the check does not specify a particular clause, cite the most relevant regulation clause from the Available Regulations section above.`;
+    const systemPrompt = buildSystemPrompt(contextSummary, previousError);
 
     logPipeline(`  [LLM+TOOL] step=${step.number} promptLen=${systemPrompt.length}chars scripts=${scripts.length}`);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tools: Record<string, any> = {};
 
-    // Register compliance-check tool only when current step is numerical
     const currentCheck = ctx.skill.checks[step.number - 1];
     const stepNeedsTool = currentCheck?.type.kind === "number";
     if (stepNeedsTool) {
@@ -82,7 +51,6 @@ If the check does not specify a particular clause, cite the most relevant regula
       });
     }
 
-    // Register generic script tools (compliance-check skipped — handled by builtin)
     for (const script of scripts) {
       if (script.name === "compliance-check") continue;
       logPipeline(`  [TOOL] registering generic tool "${script.name}"`);
@@ -119,16 +87,21 @@ If the check does not specify a particular clause, cite the most relevant regula
     const attentionQuery = revisionContext?.userFeedback ?? step.attention ?? step.title.replace(/^Evaluate: /, "");
     const fileChunks = ctx.files.searchRelevantChunks(ctx.sessionId, attentionQuery);
 
-    let userMessage: string;
-    if (revisionContext) {
-      const prevOutput = ctx.steps.read(step.number);
-      const prevText = typeof prevOutput === "string" ? prevOutput : JSON.stringify(prevOutput, null, 2);
-      userMessage = `### Step ${step.number}: ${step.title} (REVISION)\n\n${step.instructions}\n\n# Revision Context\n\nThe user provided the following feedback about the previous assessment:\n"${revisionContext.userFeedback}"\n\nThe previous step output was:\n${prevText}` +
-        (fileChunks ? `\n\n# Available Chunks\n${fileChunks}` : "");
-    } else {
-      userMessage = `### Step ${step.number}: ${step.title}\n\n${step.instructions}` +
-        (fileChunks ? `\n\n# Available Chunks\n${fileChunks}` : "");
-    }
+    const userMessage = buildUserMessage(
+      step.number,
+      step.title,
+      step.instructions,
+      fileChunks,
+      revisionContext
+        ? {
+            userFeedback: revisionContext.userFeedback,
+            previousOutput: (() => {
+              const prevOutput = ctx.steps.read(step.number);
+              return typeof prevOutput === "string" ? prevOutput : JSON.stringify(prevOutput, null, 2);
+            })(),
+          }
+        : undefined,
+    );
 
     const result = streamText({
       model: createModel(),
@@ -178,13 +151,11 @@ If the check does not specify a particular clause, cite the most relevant regula
 
     logPipeline(`  [LLM+TOOL] step=${step.number} finalText=${fullText.length}chars preview=${truncate(fullText, 150)}`);
 
-    // Always parse narrative from LLM text output
     const textResults = ctx.skill.checks.length > 0
       ? extractCheckResultsFromText(fullText, ctx.skill.checks, step.number)
       : [];
 
     if (toolCalled) {
-      // Build CheckResult from tool output, merge narrative from text
       const run = perCheckResults[0];
       const palette = ctx.palette.getCitationPalette();
       const narrative = textResults.find(tr => tr.name === currentCheck?.field);
@@ -199,8 +170,6 @@ If the check does not specify a particular clause, cite the most relevant regula
         logPipeline(`  [LLM+TOOL] ⚠ step ${step.number}: citationRef empty for "${currentCheck?.field}" — fell back to clause "${clause}"`);
       }
 
-      // When LLM produces no narrative JSON (tool-only response), backfill sourceCitation
-      // from the file chunks that were sent to the LLM — it extracted the value from them
       if (!narrative || srcCit.length === 0) {
         const extracted = fileChunks ? extractChunkIdsFromFileChunks(fileChunks) : [];
         if (extracted.length > 0) {
@@ -231,8 +200,6 @@ If the check does not specify a particular clause, cite the most relevant regula
       }]);
       logPipeline(`  [LLM+TOOL] merged CheckResult from tool + narrative for "${currentCheck?.field}"`);
     } else if (textResults.length > 0) {
-      // No tool calls — use narrative results directly (qualitative checks)
-      // Enforce non-empty citations: fill citationRef from clause when LLM omits it
       for (const result of textResults) {
         if (result.citationRef.length === 0) {
           const clause = currentCheck?.clause;
@@ -330,12 +297,6 @@ function buildContextSummary(ctx: PipelineContext, excludeCheckResults = false):
   return parts.join("\n\n");
 }
 
-/**
- * Parse the LLM's JSON output and extract a CheckResult for the current step.
- *
- * Expected JSON format (per field):
- *   {"field_name": {"value": "narrative...", "sourceCitation": ["S1.c1"], "citationRef": ["R48.5.11"], "verdict": "PASS"}}
- */
 const CheckFieldEntrySchema = z.object({
   value: z.string().min(1),
   sourceCitation: z.array(z.string()),

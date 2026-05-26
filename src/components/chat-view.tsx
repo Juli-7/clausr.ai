@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, startTransition } from "react";
 import { DocumentPanel } from "@/components/document-panel";
 import { ReasoningPanel } from "@/components/reasoning-panel";
 import { ChatInput } from "@/components/chat-input";
@@ -71,10 +71,12 @@ export function ChatView() {
     let cancelled = false;
     if (!activeSessionId) return;
     // Reset all state before loading a new session
-    setTurns([]);
-    setPendingComments([]);
-    setStepConfirmations({});
-    setError(null);
+    startTransition(() => {
+      setTurns([]);
+      setPendingComments([]);
+      setStepConfirmations({});
+      setError(null);
+    });
     fetch(`/api/sessions/${activeSessionId}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {

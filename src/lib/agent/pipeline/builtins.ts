@@ -19,7 +19,7 @@ export async function loadRegulationSummaries(ctx: PipelineContext): Promise<Ste
 
     logPipeline(`  [BUILTIN] load-summaries: ${regulationIds.join(", ")}`);
 
-    const api = getRegulationApi();
+    const api = await getRegulationApi();
     const regulations = (
       await Promise.all(
         regulationIds.map(async (id) => {

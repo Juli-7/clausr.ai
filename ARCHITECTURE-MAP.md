@@ -497,9 +497,9 @@ HTTP POST /api/chat
 | Segment | Provides To | Interface (Types + Functions) | Consumes From |
 |---------|------------|-------------------------------|---------------|
 | **1. Knowledge** | Pipeline | `IRegulationApi`, `getRegulationApi()` | — |
-| **2. Session Input** | Loading, Pipeline | `IDocStore.processFile()` (real extraction + raw file storage), `IDocStore.getFiles()` (mock vecDB retrieval — returns all chunks), extractors + chunkers (real) | Shared (chunk_store DB) |
+| **2. Session Input** | Loading, Pipeline | `IDocStore.processFile()` (real extraction + raw file storage), `IDocStore.getFiles()` (SQLite + FTS5 retrieval — returns all chunks), extractors + chunkers (real) | Shared (chunk_store DB) |
 | **3. Loading** | Pipeline (via session_setup DB) | `setupSession()`, `initSession()`, `inputPhase()`, `skillGenPhase()`, `generateStepsFromChecks()`, `saveSessionSetup()`, `SkillLoader`, `ParsedCheck[]`, `ExecutableStep[]` | Session Input (processFile), Shared (repository) |
-| **4. Pipeline** | Evaluation, Present | `orchestratePipeline(sessionId, msg, revisionFields?)`, `restoreContext()`, `initPipelineTurn()`, `StepResult`, `PipelineEvent` (streaming) | Shared (repository), session_setup DB, Session Input (getFiles), Knowledge (loadReferences) |
+| **4. Pipeline** | Evaluation, Present | `orchestratePipeline(sessionId, msg, revisionFields?)`, `restoreContext()`, `initPipelineTurn()`, `StepResult`, `PipelineEvent` (streaming) | Shared (repository), session_setup DB, Session Input (getFiles), Knowledge (loadRegulationSummaries) |
 | **5. Evaluation** | Present | `evaluate()`, `EvaluationResult` | Pipeline (CheckStore), Shared (schemas) |
 | **6. Present** | External | `finalizePhase()` → `AgentResponse`, `generateDocx()` → `.docx Blob` | Pipeline, Evaluation, Shared (schemas/repository) |
 | **7. API Routes** | HTTP clients | 14 route handlers; consumes Pipeline + Shared | Pipeline, Shared (repository/schemas) |
@@ -530,7 +530,7 @@ This section traces the complete function call chain from user input to final ou
 
 ### 1. Session Input Layer — Extraction + Chunking + Raw File Storage (with mock vecDB retrieval)
 
-Extraction and chunking are always done by clausr.ai (for bounding boxes, OCR confidence, deterministic chunk IDs). The `IDocStore.getFiles()` is the only mock vector-DB seam — today it returns all chunks; a real vecDB would embed and return top-k.
+Extraction and chunking are always done by clausr.ai (for bounding boxes, OCR confidence, deterministic chunk IDs). `IDocStore.getFiles()` retrieves chunks via SQLite + FTS5 full-text search — today it returns all chunks; a future real vector DB would embed and return top-k.
 
 ```
   SETUP (loading layer calls):
@@ -664,7 +664,7 @@ docStore.getFiles(sessionId)                  [user-info/vector-store/mock-store
   ├─ read file metadata + chunk texts from DB
   └─ ctx.files.loadFiles(ProcessedFile[])     ← populate chunks
 
-loadReferences(ctx)                           [pipeline/builtins.ts]
+loadRegulationSummaries(ctx)                   [pipeline/builtins.ts]
   ├─ extract regulationIds from ctx.skill.checks
   ├─ loadRegulations(ids) via getRegulationApi()
   │    api.resolveCode(id) → api.getRegulation({code})
@@ -695,15 +695,12 @@ executeStepWithRetry(step, ctx, maxRetries=1)   [pipeline/orchestrator-v2.ts]
                    [pipeline/executors/llm-executor.ts]
 
        ├─ buildContextSummary(ctx)
-       │    ├─ ctx.files.buildContextSummary()       — file chunks summary
-       │    ├─ ctx.steps.latest()                     — previous step output
        │    ├─ ctx.palette.formatContextSummary()     — regulation citations
        │    ├─ ctx.checks.getResults()                — prior check results
-       │    ├─ buildDomainSchemaGuide(ctx.skill.checks) — expected field schema
-       │    └─ ctx.palette.formatSourceSummary(sourcePalette) — source chunks
-       │
-       ├─ buildCitationGuide(ctx)
-       │    (instructions for [R48.5.11] and [S1.c3] markers)
+       │    ├─ ctx.files.buildContextSummary()        — file chunks summary
+       │    ├─ ctx.steps.latest()                     — previous step output
+       │    ├─ ctx.palette.formatSourceSummary(sourcePalette) — source chunks
+       │    └─ ctx.previousTurns[]                    — previous turn summaries
        │
         ├─ createModel()                              [llm/factory.ts]
        │    (reads provider/model from DB or env)
@@ -811,7 +808,7 @@ generateDocx(response, skillName?)        [present/export/export-docx.ts]
 | `GET /api/scripts` | `api/scripts/route.ts` |
 | `POST /api/scripts/[name]` | `api/scripts/[name]/route.ts` |
 | `GET /api/files/[sessionId]/[filename]` | `api/files/[sessionId]/[filename]/route.ts` |
-| `POST /api/agent/evolution-confirm` | `api/agent/evolution-confirm/route.ts` |
+| `POST /api/agent/evolution-confirm` | `api/agent/evolution-confirm/route.ts` (stub — appends text to SKILL.md; no pipeline-level learning) |
 
 #### Mock Layers (development stand-ins)
 
@@ -931,7 +928,7 @@ The session input layer handles everything before semantic search: extraction, c
 #### `user-info/vector-store/types.ts`
 | Type / Interface | Description |
 |-----------------|-------------|
-| `IDocStore` | Interface: `processFile(file, sessionId) → {extractedText}` (real extraction), `getFiles(sessionId) → ProcessedFile[]` (mock: returns all; real: embed query → top-k). |
+| `IDocStore` | Interface: `processFile(file, sessionId) → {extractedText}` (real extraction), `getFiles(sessionId) → ProcessedFile[]` (SQLite + FTS5: returns all; future: embed query → top-k). |
 | `ProcessedFile` | `{fileId, filename, extractedText, chunks, dataUrl?, pageCount?, ocrConfidence?, extractorUsed?}` |
 | `ChunkInfo` | `{id, text, pageNumber?}` |
 
@@ -944,7 +941,7 @@ The session input layer handles everything before semantic search: extraction, c
 #### `user-info/vector-store/mock-store.ts`
 | Function | Description |
 |----------|-------------|
-| `MockDocStore` (class) | Implements `IDocStore`. Runs real extraction + chunking (`processFile`), saves raw files to disk. Mock vecDB retrieval (`getFiles` — returns all chunks today; future: embed query → top-k). |
+| `MockDocStore` (class) | Implements `IDocStore`. Runs real extraction + chunking (`processFile`), saves raw files to disk. Chunk retrieval via SQLite + FTS5 (`getFiles` — returns all chunks today; future: embed query → top-k). |
 | `saveRawFile(sessionId, filename, dataUrl)` | Decodes base64 dataUrl and writes to `data/uploads/{sessionId}/{filename}`. Called by `processFile()`. |
 | `.processFile(file, sessionId)` | Deletes existing chunks for session, saves raw file to disk, calls `extractFileContent()`, saves chunks to `chunk_store` DB, stores file metadata in `sessions.file_chunks`. Returns `{extractedText}`. |
 | `.getFiles(sessionId)` | Reads file metadata from `sessions.file_chunks`, fetches chunk texts from `chunk_store` via `getChunksByIds()`. Returns `ProcessedFile[]` with all chunks. `dataUrl` is constructed as the serving URL `/api/files/{sessionId}/{filename}`. |
@@ -1024,7 +1021,7 @@ The session input layer handles everything before semantic search: extraction, c
 #### `pipeline/builtins.ts`
 | Function | Description |
 |----------|-------------|
-| `loadReferences(ctx)` | Loads regulation data into palette by extracting IDs from checks, fetching via API. Builds `CitationPaletteEntry[]`. Called by pipeline orchestrator (not loading layer). |
+| `loadRegulationSummaries(ctx)` | Loads regulation data into palette by extracting IDs from checks, fetching via API. Builds `CitationPaletteEntry[]`. Called by pipeline orchestrator (not loading layer). |
 | `executeComplianceCheck(input)` | Evaluates numerical checks against operators (`>=`, `<=`, `>`, `<`, `range`). Returns pass/fail results. Called as a registered tool handler. |
 
 #### `pipeline/revision-phase.ts`
@@ -1036,9 +1033,7 @@ The session input layer handles everything before semantic search: extraction, c
 | Function | Description |
 |----------|-------------|
 | `executeLlmToolStep(step, ctx, previousError?, revisionContext?)` | Runs an `llm+tool` step. Registers tools (compliance-check, scripts), streams LLM, processes tool results, stores output. Optional `revisionContext` enables revision-aware execution: excludes other CheckResults from context, uses user feedback as FTS5 query, injects revision context into user message. |
-| `buildDomainSchemaGuide(checks)` | Builds schema guide string from `ParsedCheck[]` for LLM prompts. |
-| `buildContextSummary(ctx, excludeCheckResults?)` | Builds composite context string: file summary, latest step output, citation summary, check results (skipped when `excludeCheckResults=true`), domain schema guide, source summary, previous turns. |
-| `buildCitationGuide(ctx)` | Builds citation format instructions for LLM (`[R48.5.11]` and `[SN]` markers). |
+| `buildContextSummary(ctx, excludeCheckResults?)` | Builds composite context string: file summary, latest step output, citation summary, check results (skipped when `excludeCheckResults=true`), source summary, previous turns. |
 
 #### `pipeline/executors/script-runner.ts`
 | Function | Description |
@@ -1335,4 +1330,4 @@ The shared layer contains only what is genuinely cross-layer: type definitions, 
 | **Total (agent engine)** | **47** | **~107** |
 | **Total (all source)** | **59** | **~123** |
 
-*Updated 2026-05-25: restructured SEGMENT 2 from "Vector-Store" → "User-Info" → "Session Input" layer. vector-store/ moved into user-info/ as a sub-directory. Extraction + chunking are always clausr.ai's responsibility (real code, not mock). Only `IDocStore.getFiles()` is mock vecDB retrieval (returns all chunks today; real vecDB to embed query + return top-k later). Added raw file persistence to disk in processFile().*
+*Updated 2026-05-25: restructured SEGMENT 2 from "Vector-Store" → "User-Info" → "Session Input" layer. vector-store/ moved into user-info/ as a sub-directory. Extraction + chunking are always clausr.ai's responsibility (real code, not mock). `IDocStore.getFiles()` retrieves all chunks from SQLite + FTS5 (future: real vector DB returns top-k). Added raw file persistence to disk in processFile().*
