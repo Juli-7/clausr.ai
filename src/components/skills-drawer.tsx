@@ -3,6 +3,17 @@
 import { useState, useEffect } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 
+interface ParsedCheck {
+  field: string;
+  type: { kind: string; values?: string[] };
+  attention: string | null;
+  constraint: string | null;
+  clause: string | null;
+  dependsOn: string | null;
+  description: string | null;
+  sample: string | null;
+}
+
 interface SkillData {
   name: string;
   description: string;
@@ -11,6 +22,7 @@ interface SkillData {
   regulationIds: string[];
   scripts: { name: string; path: string; desc: string; params: string }[];
   hasTemplate: boolean;
+  checks?: ParsedCheck[];
 }
 
 export function SkillsDrawer({
@@ -323,29 +335,60 @@ export function SkillsDrawer({
                       </div>
                     )}
 
-                    {/* SKILL.md */}
-                    <div className="mb-6">
-                      <div className="flex items-center gap-3 mb-2">
-                        <span className="text-2xs uppercase tracking-widest font-semibold" style={{ color: "var(--color-text-muted)" }}>
-                          Execution methodology
-                        </span>
-                        <div style={{ flex: 1, height: 1, background: "var(--color-border-default)" }} />
+                    {/* Execution summary */}
+                    {detail.checks && detail.checks.length > 0 && (
+                      <div className="mb-6">
+                        <div className="flex items-center gap-3 mb-3">
+                          <span className="text-2xs uppercase tracking-widest font-semibold" style={{ color: "var(--color-text-muted)" }}>
+                            Checks overview
+                          </span>
+                          <div style={{ flex: 1, height: 1, background: "var(--color-border-default)" }} />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          {detail.checks.map((c) => (
+                            <div
+                              key={c.field}
+                              className="rounded-lg text-xs"
+                              style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border-default)" }}
+                            >
+                              <div className="flex items-center gap-2 px-3.5 pt-2.5 pb-1.5">
+                                <span className="font-semibold" style={{ color: "var(--color-text-header)", fontFamily: "'JetBrains Mono', monospace" }}>
+                                  {c.field.replace(/_/g, " ")}
+                                </span>
+                                {c.clause && (
+                                  <span className="text-2xs px-1.5 py-0.5 rounded" style={{ background: "var(--color-accent-blue-bg)", color: "var(--color-accent-blue)", fontFamily: "'JetBrains Mono', monospace" }}>
+                                    {c.clause}
+                                  </span>
+                                )}
+                                {c.constraint && (
+                                  <span className="text-2xs px-1.5 py-0.5 rounded" style={{ background: "var(--color-amber-bg)", color: "var(--color-amber)", fontFamily: "'JetBrains Mono', monospace" }}>
+                                    {c.constraint}
+                                  </span>
+                                )}
+                              </div>
+                              {c.description && (
+                                <div className="px-3.5 pb-1" style={{ color: "var(--color-text-muted)" }}>
+                                  {c.description}
+                                </div>
+                              )}
+                              {c.attention && (
+                                <div className="px-3.5 pb-2.5 flex gap-1 flex-wrap">
+                                  {c.attention.split(/\s+/).map((w) => (
+                                    <span
+                                      key={w}
+                                      className="text-2xs px-1 py-0.5 rounded"
+                                      style={{ background: "rgba(226, 166, 169, 0.1)", color: "#E2A6A9" }}
+                                    >
+                                      {w}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <div
-                        className="rounded-lg text-xs leading-relaxed"
-                        style={{
-                          background: "var(--color-bg-card)",
-                          color: "var(--color-text-body)",
-                          fontFamily: "'DM Sans', sans-serif",
-                          whiteSpace: "pre-wrap",
-                          padding: "16px 18px",
-                          border: "1px solid var(--color-border-default)",
-                          lineHeight: 1.7,
-                        }}
-                      >
-                        {detail.skillmd}
-                      </div>
-                    </div>
+                    )}
 
                   </div>
 

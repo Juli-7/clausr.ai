@@ -23,6 +23,12 @@ export async function inputPhase(
     try {
       const { extractedText } = await store.processFile(f, sessionId);
       extractedTexts.push(extractedText);
+      ctx.files.addFile({
+        fileId: f.name,
+        filename: f.name,
+        dataUrl: `/api/files/${sessionId}/${encodeURIComponent(f.name)}`,
+        extractedText,
+      });
       logPipeline(`  processed "${f.name}": ${extractedText.length} chars`);
     } catch (err) {
       logPipeline(`  processing FAILED "${f.name}": ${err}`);

@@ -21,7 +21,7 @@ let tesseractWorkerReady: Promise<void> | null = null;
 async function getTesseractWorker(): Promise<Tesseract.Worker> {
   if (!tesseractWorker) {
     tesseractWorkerReady = (async () => {
-      tesseractWorker = await Tesseract.createWorker("eng");
+      tesseractWorker = await Tesseract.createWorker("eng", 1, { langPath: process.cwd() });
     })();
     await tesseractWorkerReady;
   } else if (tesseractWorkerReady) {

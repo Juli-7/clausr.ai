@@ -8,6 +8,25 @@ import {
 } from "docx";
 import type { AgentResponse } from "../../shared/types";
 
+// Maps underscored check field names to hyphenated template placeholder names.
+// A single check can map to multiple template placeholders.
+const FIELD_ALIASES: Record<string, string[]> = {
+  light_source: ["light-source"],
+  mounting_height: ["mounting-height"],
+  colour_temperature: ["colour-temp"],
+  luminous_flux: ["luminous-flux"],
+  beam_cutoff_angle: ["beam-pattern", "cutoff-sharpness"],
+  auto_leveling: ["levelling-deviation"],
+};
+
+// Default fallback values for template placeholders that have no corresponding
+// response data field (e.g. certifier info, vehicle metadata).
+const DEFAULT_PLACEHOLDER_FALLBACKS: Record<string, string> = {
+  "{vehicle-make-model}": "N/A",
+  "{certifier-name}": "N/A",
+  "{certification-date}": new Date().toISOString().split("T")[0],
+};
+
 export async function generateDocx(
   response: AgentResponse,
   skillName?: string
@@ -53,12 +72,13 @@ async function fillTemplateDocx(
 /**
  * Build {placeholder} → value map from response.sections.
  *
- * Primary: keys match response.sections directly:
- *   "{summary}"          → sections.summary
- *   "{mounting_height}"  → sections.findings.mounting_height
+ * For each field found in response.sections, emits:
+ *   - The raw underscored key:  "{mounting_height}"
+ *   - The dot-path key:         "{findings.mounting_height}"
+ *   - Any hyphenated aliases:   "{mounting-height}"  (via FIELD_ALIASES)
  *
- * Also emits dot-path keys for compatibility:
- *   "{findings.mounting_height}" → same value
+ * Placeholders that still have no value after iteration receive their
+ * DEFAULT_PLACEHOLDER_FALLBACKS (e.g. "{certifier-name}" → "N/A").
  */
 function buildPlaceholderMap(
   response: AgentResponse
@@ -73,14 +93,27 @@ function buildPlaceholderMap(
     } else if (typeof value === "object" && value !== null) {
       map[`{${sectionId}}`] = stripMarkdown(Object.values(value).join(" "));
       for (const [key, val] of Object.entries(value)) {
-        map[`{${key}}`] = stripMarkdown(String(val));
-        map[`{${sectionId}.${key}}`] = stripMarkdown(String(val));
+        const stripped = stripMarkdown(String(val));
+        map[`{${key}}`] = stripped;
+        map[`{${sectionId}.${key}}`] = stripped;
+        const aliases = FIELD_ALIASES[key];
+        if (aliases) {
+          for (const alias of aliases) {
+            map[`{${alias}}`] = stripped;
+          }
+        }
       }
     }
   }
 
   if (response.verdict) {
     map["{verdict}"] = response.verdict;
+  }
+
+  for (const [placeholder, fallback] of Object.entries(DEFAULT_PLACEHOLDER_FALLBACKS)) {
+    if (!(placeholder in map)) {
+      map[placeholder] = fallback;
+    }
   }
 
   return map;

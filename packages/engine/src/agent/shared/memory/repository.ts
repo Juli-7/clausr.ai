@@ -50,7 +50,7 @@ export function saveChunks(
         null,
         Date.now()
       );
-      indexChunkFts5(sessionId, fileId, i, chunks[i].text);
+      indexChunkFts5(sessionId, fileId, i + 1, chunks[i].text);
     }
   });
   insert();

@@ -144,7 +144,7 @@ export class PaletteStore {
     const summary = sourcePalette
       .flatMap((s) => {
         const chunks = s.chunks?.map((c) => `[${s.id}] ${s.filename} — ${c.text.slice(0, 80)}`) ?? [];
-        return chunks.length > 0 ? chunks : [`[S${s.id}] ${s.filename}`];
+        return chunks.length > 0 ? chunks : [`[${s.id}] ${s.filename}`];
       })
       .join("\n");
     return `Source Chunks:\n${summary}`;

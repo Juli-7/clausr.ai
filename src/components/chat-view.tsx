@@ -77,6 +77,8 @@ export function ChatView() {
       setPendingComments([]);
       setStepConfirmations({});
       setError(null);
+      setAttachedFiles([]);
+      setIsSetup(false);
     });
     fetch(`/api/sessions/${activeSessionId}`)
       .then((res) => (res.ok ? res.json() : null))
@@ -85,21 +87,27 @@ export function ChatView() {
         setSessionId(data.sessionId);
         const reconstructed: ChatTurn[] = [];
         const { messages, responses: responseList } = data;
+        const uniqueFiles = new Map<string, ChatRequestFile>();
         let respIdx = 0;
         for (const msg of messages) {
           if (msg.role === "user") {
             const resp = responseList[respIdx] ?? null;
-            const restoredFiles = resp?.sourceCitations
-              ? resp.sourceCitations.map((sc: { filename: string; fileUrl?: string }) => {
-                  const ext = sc.filename.split(".").pop()?.toLowerCase() ?? "";
-                  const mimeType =
-                    ext === "pdf" ? "application/pdf" :
-                    ["jpg", "jpeg", "png", "gif", "webp", "bmp"].includes(ext) ? `image/${ext === "jpg" ? "jpeg" : ext}` :
-                    ext === "docx" ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" :
-                    "application/octet-stream";
-                  return { name: sc.filename, size: 0, type: mimeType, dataUrl: undefined };
-                })
-              : [];
+            const restoredFiles: ChatRequestFile[] = [];
+            if (resp?.sourceCitations) {
+              for (const sc of resp.sourceCitations) {
+                const ext = sc.filename.split(".").pop()?.toLowerCase() ?? "";
+                const mimeType =
+                  ext === "pdf" ? "application/pdf" :
+                  ["jpg", "jpeg", "png", "gif", "webp", "bmp"].includes(ext) ? `image/${ext === "jpg" ? "jpeg" : ext}` :
+                  ext === "docx" ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" :
+                  "application/octet-stream";
+                const file: ChatRequestFile = { name: sc.filename, size: 0, type: mimeType, dataUrl: undefined };
+                restoredFiles.push(file);
+                if (!uniqueFiles.has(sc.filename)) {
+                  uniqueFiles.set(sc.filename, file);
+                }
+              }
+            }
             reconstructed.push({
               userMessage: msg.content,
               attachedFiles: restoredFiles,
@@ -112,6 +120,7 @@ export function ChatView() {
             respIdx++;
           }
         }
+        setAttachedFiles(Array.from(uniqueFiles.values()));
         setTurns(reconstructed);
         if (reconstructed.length > 0) setIsSetup(true);
         const initialFlags: Record<number, Record<string, boolean>> = {};
@@ -223,7 +232,6 @@ export function ChatView() {
     setTurns((prev) => [...prev, pendingTurn]);
     setLoading(true);
     setError(null);
-    setAttachedFiles([]);
 
     try {
       if (process.env.NODE_ENV === "development") {
@@ -517,6 +525,7 @@ export function ChatView() {
             setupDone={isSetup}
             setupLoading={setupLoading}
             skillName={activeSkillName}
+            sessionId={sessionId}
             onFileSelect={handleFileSelect}
             onRemoveFile={removeFile}
             onSetup={handleSetup}

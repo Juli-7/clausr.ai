@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useCallback } from "react";
 import type { ChatRequestFile } from "@clausr/engine/types";
 
 interface FileUploadPanelProps {
@@ -9,6 +9,7 @@ interface FileUploadPanelProps {
   setupDone: boolean;
   setupLoading: boolean;
   skillName: string;
+  sessionId?: string;
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onRemoveFile: (name: string) => void;
   onSetup: () => void;
@@ -57,6 +58,7 @@ export function FileUploadPanel({
   setupDone,
   setupLoading,
   skillName,
+  sessionId,
   onFileSelect,
   onRemoveFile,
   onSetup,
@@ -65,6 +67,25 @@ export function FileUploadPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canSetup = (attachedFiles.length > 0 || !!skillName) && !setupLoading;
   const [previewFile, setPreviewFile] = useState<ChatRequestFile | null>(null);
+
+  function getFileUrl(f: ChatRequestFile): string | undefined {
+    if (sessionId && f.type?.includes("pdf")) return `/api/files/${sessionId}/${encodeURIComponent(f.name)}`;
+    if (f.dataUrl) return f.dataUrl;
+    if (sessionId) return `/api/files/${sessionId}/${encodeURIComponent(f.name)}`;
+    return undefined;
+  }
+
+  const handleDownload = useCallback((f: ChatRequestFile, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const url = getFileUrl(f);
+    if (!url) return;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = f.name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }, [sessionId]);
 
   return (
     <div
@@ -156,9 +177,9 @@ export function FileUploadPanel({
                   border: "1px solid var(--color-border-default)",
                   color: "var(--color-text-body)",
                 }}
-                onClick={() => f.dataUrl && setPreviewFile(f)}
+                onClick={() => getFileUrl(f) && setPreviewFile(f)}
               >
-                <span className="shrink-0" style={{ color: f.dataUrl ? "var(--color-accent-blue)" : "var(--color-text-muted)" }}>
+                <span className="shrink-0" style={{ color: getFileUrl(f) ? "var(--color-accent-blue)" : "var(--color-text-muted)" }}>
                   <FileIcon type={f.type} />
                 </span>
                 <div className="flex-1 min-w-0">
@@ -167,6 +188,17 @@ export function FileUploadPanel({
                     {onFormatSize(f.size)}
                   </div>
                 </div>
+                <button
+                  onClick={(e) => handleDownload(f, e)}
+                  className="cursor-pointer bg-transparent border-none shrink-0 rounded p-0.5 transition-colors duration-150 hover:opacity-70"
+                  style={{ color: "var(--color-text-muted)" }}
+                  title="Download file"
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 1v10M4 7l4 4 4-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M2 14h12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                  </svg>
+                </button>
                 {!setupDone && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onRemoveFile(f.name); }}
@@ -177,11 +209,6 @@ export function FileUploadPanel({
                       <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
                     </svg>
                   </button>
-                )}
-                {f.dataUrl && (
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="shrink-0" style={{ color: "var(--color-text-muted)" }}>
-                    <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
                 )}
               </div>
             ))}
@@ -243,45 +270,62 @@ export function FileUploadPanel({
       </div>
 
       {/* Preview modal */}
-      {previewFile && previewFile.dataUrl && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ background: "rgba(0,0,0,0.6)" }}
-          onClick={() => setPreviewFile(null)}
-        >
+      {previewFile && (() => {
+        const previewUrl = getFileUrl(previewFile);
+        if (!previewUrl) return null;
+        return (
           <div
-            className="relative max-w-[90vw] max-h-[90vh] rounded-lg overflow-hidden"
-            style={{ background: "var(--color-bg-card)" }}
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 flex items-center justify-center"
+            style={{ background: "rgba(0,0,0,0.6)" }}
+            onClick={() => setPreviewFile(null)}
           >
-            <button
-              className="absolute top-3 right-3 z-10 w-7 h-7 flex items-center justify-center rounded-full cursor-pointer"
-              style={{ background: "rgba(0,0,0,0.5)", color: "#fff" }}
-              onClick={() => setPreviewFile(null)}
+            <div
+              className="relative max-w-[90vw] max-h-[90vh] rounded-lg overflow-hidden flex flex-col"
+              style={{ background: "var(--color-bg-card)" }}
+              onClick={(e) => e.stopPropagation()}
             >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            </button>
-            {previewFile.type.startsWith("image/") ? (
-              <img
-                src={previewFile.dataUrl}
-                alt={previewFile.name}
-                className="max-w-[85vw] max-h-[85vh] object-contain"
-              />
-            ) : (
-              <div className="flex flex-col items-center gap-4 px-8 py-12">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" style={{ color: "var(--color-text-muted)" }}>
-                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
-                  <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
-                </svg>
-                <span className="text-sm" style={{ color: "var(--color-text-body)" }}>{previewFile.name}</span>
-                <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>Preview not available for this file type</span>
+              <div className="flex items-center justify-between shrink-0 px-4 h-10" style={{ borderBottom: "1px solid var(--color-border-default)" }}>
+                <span className="text-xs truncate" style={{ color: "var(--color-text-muted)", fontFamily: "'JetBrains Mono', monospace" }}>
+                  {previewFile.name}
+                </span>
+                <button
+                  className="w-6 h-6 flex items-center justify-center rounded cursor-pointer shrink-0"
+                  style={{ color: "var(--color-text-muted)" }}
+                  onClick={() => setPreviewFile(null)}
+                >
+                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                    <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                </button>
               </div>
-            )}
+              {previewFile.type.startsWith("image/") ? (
+                <img
+                  src={previewUrl}
+                  alt={previewFile.name}
+                  className="max-w-[85vw] max-h-[80vh] object-contain p-4"
+                />
+              ) : previewFile.type.includes("pdf") ? (
+                <embed
+                  src={previewUrl}
+                  type="application/pdf"
+                  className="w-[85vw] h-[80vh]"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-3 px-8 py-16" style={{ minHeight: 200 }}>
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" style={{ color: "var(--color-text-muted)" }}>
+                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+                    <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+                  </svg>
+                  <span className="text-sm" style={{ color: "var(--color-text-body)" }}>Preview not available for this file type</span>
+                  <span className="text-xs" style={{ color: "var(--color-text-muted)", fontFamily: "'JetBrains Mono', monospace" }}>
+                    Download the file to view its contents
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Animations */}
       <style>{`

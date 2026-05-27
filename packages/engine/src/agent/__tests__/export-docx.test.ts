@@ -5,6 +5,21 @@ import type { ReportTemplate } from "../present/template-types";
 // Replicate the utility functions from export-docx.ts for testing
 // (they are not exported individually, so we test them inline)
 
+const FIELD_ALIASES: Record<string, string[]> = {
+  light_source: ["light-source"],
+  mounting_height: ["mounting-height"],
+  colour_temperature: ["colour-temp"],
+  luminous_flux: ["luminous-flux"],
+  beam_cutoff_angle: ["beam-pattern", "cutoff-sharpness"],
+  auto_leveling: ["levelling-deviation"],
+};
+
+const DEFAULT_PLACEHOLDER_FALLBACKS: Record<string, string> = {
+  "{vehicle-make-model}": "N/A",
+  "{certifier-name}": "N/A",
+  "{certification-date}": new Date().toISOString().split("T")[0],
+};
+
 function escapeXml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -39,7 +54,14 @@ function buildPlaceholderMap(
       for (const field of section.fields) {
         const val = (sectionData as Record<string, string>)[field.id];
         if (val !== undefined) {
-          map[`{${field.id}}`] = val;
+          const stripped = stripMarkdown(val);
+          map[`{${field.id}}`] = stripped;
+          const aliases = FIELD_ALIASES[field.id];
+          if (aliases) {
+            for (const alias of aliases) {
+              map[`{${alias}}`] = stripped;
+            }
+          }
         }
       }
     }
@@ -54,6 +76,12 @@ function buildPlaceholderMap(
 
     if (section.type === "verdict") {
       map["{verdict}"] = response.verdict === "PASS" ? "PASS" : "FAIL";
+    }
+  }
+
+  for (const [placeholder, fallback] of Object.entries(DEFAULT_PLACEHOLDER_FALLBACKS)) {
+    if (!(placeholder in map)) {
+      map[placeholder] = fallback;
     }
   }
 
@@ -226,10 +254,12 @@ describe("buildPlaceholderMap", () => {
     expect(map["{results-table}"]).toBe("Name  Value \n Test  123");
   });
 
-  it("returns empty map for template with no sections", () => {
+  it("applies fallback placeholders when template has no sections", () => {
     const template: ReportTemplate = { name: "Empty", sections: [] };
     const map = buildPlaceholderMap(baseResponse, template);
-    expect(Object.keys(map)).toHaveLength(0);
+    expect(map["{vehicle-make-model}"]).toBe("N/A");
+    expect(map["{certifier-name}"]).toBe("N/A");
+    expect(map["{certification-date}"]).toBeDefined();
   });
 
   it("skips fields with undefined values in response", () => {
