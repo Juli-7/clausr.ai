@@ -7,13 +7,11 @@ export function createSqliteDb(dbPath: string): EngineDb {
   db.pragma("foreign_keys = ON");
 
   const engineDb: EngineDb = {
-    async query(sql, params) {
-      const rows = db.prepare(sql).all(...(params ?? [])) as Record<string, unknown>[];
-      return rows;
+    async query<T>(sql: string, params?: unknown[]): Promise<T[]> {
+      return db.prepare(sql).all(...(params ?? [])) as T[];
     },
-    async get(sql, params) {
-      const row = db.prepare(sql).get(...(params ?? [])) as Record<string, unknown> | undefined;
-      return row ?? null;
+    async get<T>(sql: string, params?: unknown[]): Promise<T | null> {
+      return (db.prepare(sql).get(...(params ?? [])) as T | undefined) ?? null;
     },
     async run(sql, params) {
       db.prepare(sql).run(...(params ?? []));
