@@ -1,4 +1,4 @@
-import type { AgentResponse, ChatRequestFile, ToolCallRecord, ReasoningStep } from "@/lib/agent/shared/schemas";
+import type { AgentResponse, ChatRequestFile, ToolCallRecord, ReasoningStep } from "@clausr/engine/types";
 
 export type { ReasoningStep };
 

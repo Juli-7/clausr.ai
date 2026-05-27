@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SetupRequestSchema } from "@/lib/agent/shared/schemas";
-import { setupSession } from "@/lib/agent/loading/loading-orchestrator";
+import { SetupRequestSchema } from "@clausr/engine";
+import { setupSession } from "@clausr/engine";
 
 export async function POST(req: NextRequest) {
   try {

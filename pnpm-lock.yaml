@@ -17,6 +17,9 @@ importers:
       '@base-ui/react':
         specifier: ^1.4.1
         version: 1.4.1(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@clausr/engine':
+        specifier: workspace:*
+        version: link:packages/engine
       ai:
         specifier: ^6.0.177
         version: 6.0.185(zod@4.4.3)
@@ -114,6 +117,58 @@ importers:
       vitest:
         specifier: ^4.1.5
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@20.19.41)(vite@8.0.13(@types/node@20.19.41)(jiti@2.7.0))
+
+  packages/engine:
+    dependencies:
+      '@ai-sdk/anthropic':
+        specifier: ^3.0.76
+        version: 3.0.78(zod@4.4.3)
+      '@ai-sdk/openai':
+        specifier: ^3.0.63
+        version: 3.0.64(zod@4.4.3)
+      ai:
+        specifier: ^6.0.177
+        version: 6.0.185(zod@4.4.3)
+      better-sqlite3:
+        specifier: ^12.9.0
+        version: 12.10.0
+      docx:
+        specifier: ^9.6.1
+        version: 9.6.1
+      gray-matter:
+        specifier: ^4.0.3
+        version: 4.0.3
+      jszip:
+        specifier: ^3.10.1
+        version: 3.10.1
+      mammoth:
+        specifier: ^1.12.0
+        version: 1.12.0
+      pdf-parse:
+        specifier: ^2.4.5
+        version: 2.4.5
+      pdfjs-dist:
+        specifier: 5.4.296
+        version: 5.4.296
+      tesseract.js:
+        specifier: ^7.0.0
+        version: 7.0.0
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+      '@types/node':
+        specifier: ^20
+        version: 20.19.41
+      '@types/pdf-parse':
+        specifier: ^1.1.5
+        version: 1.1.5
+      typescript:
+        specifier: ^5
+        version: 5.9.3
 
 packages:
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listSkills, loadSkill } from "@/lib/agent/loading/skill/loader";
+import { listSkills, loadSkill } from "@clausr/engine";
 
 export async function GET() {
   try {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSetting, setSetting } from "@/lib/agent/shared/memory/database";
+import { getSetting, setSetting } from "@clausr/engine";
 
 const VALID_PROVIDERS = ["deepseek", "openai", "anthropic"];
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAllSessions } from "@/lib/agent/shared/memory/repository";
+import { getAllSessions } from "@clausr/engine";
 
 export async function GET() {
   try {

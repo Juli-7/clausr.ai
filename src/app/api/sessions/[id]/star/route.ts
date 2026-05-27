@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { toggleStar } from "@/lib/agent/shared/memory/repository";
+import { toggleStar } from "@clausr/engine";
 
 export async function POST(
   req: NextRequest,

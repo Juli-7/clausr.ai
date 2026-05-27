@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { ChatRequestFile } from "@/lib/agent/shared/schemas";
+import type { ChatRequestFile } from "@clausr/engine/types";
 
 interface FileUploadPanelProps {
   attachedFiles: ChatRequestFile[];

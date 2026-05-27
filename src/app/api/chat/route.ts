@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ChatRequestSchema } from "@/lib/agent/shared/schemas";
-import { hasSessionSetup } from "@/lib/agent/shared/memory/repository";
-import { orchestratePipeline } from "@/lib/agent/pipeline/orchestrator-v2";
+import { ChatRequestSchema } from "@clausr/engine";
+import { hasSessionSetup } from "@clausr/engine";
+import { orchestratePipeline } from "@clausr/engine";
 import fs from "fs";
 import path from "path";
 

@@ -9,8 +9,7 @@ import { LearningBanner } from "@/components/learning-banner";
 import { EvolutionConfirmDialog } from "@/components/evolution-confirm-dialog";
 
 import { useApp } from "@/lib/app-context";
-import type { AgentResponse } from "@/lib/agent/shared/types";
-import type { ChatRequestFile } from "@/lib/agent/shared/schemas";
+import type { AgentResponse, ChatRequestFile } from "@clausr/engine/types";
 import type { ChatTurn } from "@/types/agent-types";
 interface PendingComment {
   selectedText: string;

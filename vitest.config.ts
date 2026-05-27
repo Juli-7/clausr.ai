@@ -8,6 +8,7 @@ export default defineConfig({
     testTimeout: 30000,
     hookTimeout: 30000,
     reporters: ["verbose"],
+    include: ["src/**/*.test.ts", "packages/engine/src/**/*.test.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],

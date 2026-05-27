@@ -3,7 +3,7 @@ import {
   getConversationHistory,
   getResponsesForSession,
   deleteSession,
-} from "@/lib/agent/shared/memory/repository";
+} from "@clausr/engine";
 
 export async function GET(
   _req: NextRequest,

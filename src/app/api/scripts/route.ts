@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { loadSkill } from "@/lib/agent/loading/skill/loader";
+import { loadSkill } from "@clausr/engine";
 
 /**
  * GET /api/scripts?skillId=<id>

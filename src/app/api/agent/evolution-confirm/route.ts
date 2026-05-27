@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import fs from "fs";
 import path from "path";
-import { getDb } from "@/lib/agent/shared/memory/database";
+import { getDb } from "@clausr/engine";
 
 const SKILLS_DIR = path.join(process.cwd(), "skills");
 
