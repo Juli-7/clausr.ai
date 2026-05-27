@@ -27,14 +27,21 @@ export function Sidebar() {
           onClick={() => setOpenDrawer(openDrawer === "skills" ? null : "skills")}
           title="Skills Database"
         >
-          ⚡
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M15 14c-2 0-3 1-3 3 0-2-1-3-3-3s-3 1-3 3c0-2-1-3-3-3"/>
+            <path d="M6 10h12"/>
+            <rect x="3" y="4" width="18" height="16" rx="2"/>
+          </svg>
         </IconButton>
         <IconButton
           active={openDrawer === "history"}
           onClick={() => setOpenDrawer(openDrawer === "history" ? null : "history")}
           title="History"
         >
-          🕐
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
         </IconButton>
         <Divider />
         <SettingsPopover
@@ -75,10 +82,16 @@ function IconButton({
     <button
       onClick={onClick}
       title={title}
-      className="flex items-center justify-center text-lg transition-colors cursor-pointer border-none w-10 h-10 rounded-lg"
+      className="flex items-center justify-center transition-colors cursor-pointer border-none w-10 h-10 rounded-lg"
       style={{
         color: active ? "var(--color-accent-blue)" : "var(--color-text-muted)",
         background: active ? "var(--color-accent-blue-bg)" : "transparent",
+      }}
+      onMouseEnter={(e) => {
+        if (!active) e.currentTarget.style.background = "var(--color-accent-blue-bg)";
+      }}
+      onMouseLeave={(e) => {
+        if (!active) e.currentTarget.style.background = "transparent";
       }}
     >
       {children}

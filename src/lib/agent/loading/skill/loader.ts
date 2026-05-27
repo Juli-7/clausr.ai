@@ -20,6 +20,8 @@ export interface SkillLoader {
   checks: ParsedCheck[];
   /** Regulation IDs derived from checks' clause column */
   regulationIds: string[];
+  /** Whether a .docx report template exists in assets/ */
+  hasTemplate: boolean;
 }
 
 /**
@@ -60,6 +62,8 @@ export function loadSkill(skillId: string): SkillLoader {
 
   const checks = parseChecks(parsed.content);
   const regulationIds: string[] = parsed.data?.regulation_ids ?? [];
+  const templatePath = path.join(skillDir, "assets", "template.docx");
+  const hasTemplate = fs.existsSync(templatePath);
 
   return {
     name,
@@ -69,6 +73,7 @@ export function loadSkill(skillId: string): SkillLoader {
     scripts,
     checks,
     regulationIds,
+    hasTemplate,
   };
 }
 

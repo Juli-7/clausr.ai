@@ -111,9 +111,9 @@ export function DocumentPanel({
     return (
       <div
         className="flex items-center justify-center h-full"
-        style={{ color: "var(--color-amber)", fontSize: 13 }}
+        style={{ color: "var(--color-text-muted)", fontSize: 13 }}
       >
-        Select a skill from the sidebar and type a question to begin.
+        Select a skill and type a question to begin.
       </div>
     );
   }
@@ -150,7 +150,7 @@ export function DocumentPanel({
           className="p-4 rounded-lg mt-4"
           style={{
             border: "1px solid var(--color-danger)",
-            background: "#f8514911",
+            background: "rgba(196, 113, 122, 0.08)",
             color: "var(--color-danger)",
           }}
         >
@@ -190,11 +190,11 @@ function ReportSkeleton({ stepStatus }: { stepStatus?: string | null }) {
       className="mb-6 rounded-lg overflow-hidden animate-pulse"
       style={{
         border: "1px solid var(--color-border-default)",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
-        background: "var(--color-bg-card)",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+        background: "#ffffff",
       }}
     >
-      <div className="px-6 py-4" style={{ background: "var(--color-bg-dark)", borderBottom: "2px solid var(--color-border-default)" }}>
+      <div className="px-6 py-4" style={{ background: "var(--color-bg-dark)", borderBottom: "1px solid var(--color-border-default)" }}>
         <div className="flex items-center justify-between mb-2">
           <div className="h-4 w-48 rounded" style={{ background: "var(--color-border-default)" }} />
           <div className="h-4 w-16 rounded" style={{ background: "var(--color-border-default)" }} />
@@ -209,7 +209,7 @@ function ReportSkeleton({ stepStatus }: { stepStatus?: string | null }) {
         <div className="h-3 w-full rounded" style={{ background: "var(--color-border-default)" }} />
         <div className="h-3 w-4/5 rounded" style={{ background: "var(--color-border-default)" }} />
       </div>
-      <div className="flex items-center justify-center py-4" style={{ borderTop: "2px solid var(--color-border-default)", background: "var(--color-bg-dark)" }}>
+      <div className="flex items-center justify-center py-4" style={{ borderTop: "1px solid var(--color-border-default)", background: "var(--color-bg-dark)" }}>
         <span style={{ color: "var(--color-text-muted)", fontSize: 13 }}>
           {formatLoadingMessage(stepStatus)}
         </span>
@@ -402,28 +402,28 @@ function DocumentCard({
       onMouseUp={onMouseUp}
       style={{
         border: "1px solid var(--color-border-default)",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
-        background: "var(--color-bg-card)",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+        background: "#ffffff",
       }}
     >
       {/* Card header */}
       <div
         className="px-6 py-4"
         style={{
-          borderBottom: "2px solid var(--color-border-default)",
+          borderBottom: "1px solid var(--color-border-default)",
           background: "var(--color-bg-dark)",
         }}
       >
         <div className="flex items-center justify-between mb-1">
-          <span className="text-sm font-bold" style={{ color: "var(--color-text-header)" }}>
+          <span className="font-bold" style={{ color: "var(--color-text-header)", fontFamily: "'Instrument Serif', Georgia, serif", fontSize: "1.15rem", lineHeight: 1.3 }}>
             {skillName ? `${skillName} Compliance Report` : "Compliance Report"}
           </span>
           <span className="text-2xs font-semibold px-2 py-0.5 rounded"
-            style={{ background: "var(--color-accent-blue-bg)", color: "var(--color-accent-blue)" }}>
+            style={{ background: "var(--color-accent-blue-bg)", color: "var(--color-accent-blue)", fontFamily: "'JetBrains Mono', monospace" }}>
             Round {response.round}/5
           </span>
         </div>
-        <div className="flex items-center gap-3 text-2xs" style={{ color: "var(--color-text-muted)" }}>
+        <div className="flex items-center gap-3 text-2xs" style={{ color: "var(--color-text-muted)", fontFamily: "'JetBrains Mono', monospace" }}>
           <span>{new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
           <span>·</span>
           <span>Examiner: AI</span>
@@ -442,13 +442,13 @@ function DocumentCard({
           className="px-6 py-3"
           style={{
             borderBottom: "1px solid var(--color-border-default)",
-            background: "#f8514911",
+            background: "var(--color-amber-bg)",
           }}
         >
           <div className="flex items-start gap-2">
-            <span style={{ color: "var(--color-danger)", fontSize: 14, lineHeight: 1 }}>⚠️</span>
+            <span style={{ color: "var(--color-amber)", fontSize: 14, lineHeight: 1 }}>⚠️</span>
             <div>
-              <div className="text-xs font-semibold mb-1" style={{ color: "var(--color-danger)" }}>
+              <div className="text-xs font-semibold mb-1" style={{ color: "var(--color-amber)" }}>
                 Validation Issues
               </div>
               <ul className="m-0 p-0 list-none">
@@ -481,17 +481,13 @@ function DocumentCard({
             const checked = revisionFlags?.[fieldName] ?? false;
             return (
               <div key={i}>
-                <div className="revision-row" style={{ display: "flex", gap: 10, alignItems: "flex-start", marginTop: 24 }}>
-                  <input
-                    type="checkbox"
-                    className="revision-toggle"
-                    data-field={fieldName}
-                    checked={checked}
-                    onChange={(e) => onToggleFlag?.(turnIndex, fieldName, e.target.checked)}
-                    style={{ flexShrink: 0, marginTop: 3, cursor: "pointer", accentColor: "var(--color-accent-blue)" }}
-                    title={checked ? "Flagged for revision" : "Field looks correct"}
-                  />
-                  <span style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted)" }}>
+                <div className="revision-row" style={{ display: "flex", gap: 10, alignItems: "flex-start", marginTop: 24, cursor: "pointer" }}
+                  onClick={() => onToggleFlag?.(turnIndex, fieldName, !checked)}>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, marginTop: 3, color: checked ? "#E2A6A9" : "#2944AB" }}>
+                    <path d="M4 2v12M4 2l8 3-8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    {checked && <circle cx="4" cy="2" r="1.5" fill="currentColor"/>}
+                  </svg>
+                  <span style={{ fontSize: 20, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: checked ? "#E2A6A9" : "#2944AB" }}>
                     {humanize(fieldName)}
                   </span>
                 </div>
@@ -809,10 +805,10 @@ function SourceCitationText({
 // ── Confidence Badge ──
 
 function confidenceColor(score: number): string {
-  if (score >= 99) return "#1a7f37";
-  if (score >= 80) return "#3fb950";
-  if (score >= 50) return "#d29922";
-  return "#f85149";
+  if (score >= 99) return "var(--color-success)";
+  if (score >= 80) return "var(--color-success)";
+  if (score >= 50) return "var(--color-amber)";
+  return "var(--color-danger)";
 }
 
 function confidenceLabel(score: number): string {
@@ -834,7 +830,7 @@ function ConfidenceBadge({ confidence }: { confidence: { score: number; ocrConfi
         {confidence.score.toFixed(0)}%
       </span>
       {confidence.needsExpert && (
-        <span className="text-2xs font-medium px-1.5 py-0.5 rounded" style={{ color: "#f85149", background: "#f8514918" }}>
+        <span className="text-2xs font-medium px-1.5 py-0.5 rounded" style={{ color: "var(--color-danger)", background: "rgba(196, 113, 122, 0.12)" }}>
           Defer to expert
         </span>
       )}
@@ -902,10 +898,15 @@ const markdownComponents: Components = {
     <td className="px-3 py-2" style={{ borderBottom: "1px solid var(--color-border-default)" }}>{children}</td>
   ),
   h2: ({ children }) => (
-    <div className="mb-7 mt-1">
-      <span className="inline-block text-2xs uppercase tracking-wider px-2 py-0.5 rounded mb-2"
-        style={{ color: "var(--color-text-muted)", background: "var(--color-border-default)" }}
-      >{children}</span>
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, marginTop: 28 }}>
+      <span style={{ fontFamily: "'Instrument Serif', Georgia, serif", fontSize: "1rem", color: "var(--color-text-header)" }}>{children}</span>
+      <span style={{ flex: 1, height: 1, background: "linear-gradient(to right, var(--color-border-default), transparent)" }} />
+    </div>
+  ),
+  h3: ({ children }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, marginTop: 24 }}>
+      <span style={{ fontFamily: "'Instrument Serif', Georgia, serif", fontSize: "0.9rem", color: "var(--color-text-header)" }}>{children}</span>
+      <span style={{ flex: 1, height: 1, background: "linear-gradient(to right, var(--color-border-default), transparent)" }} />
     </div>
   ),
 };
@@ -924,13 +925,13 @@ const citationStyles = `
   cursor: pointer;
   color: var(--color-accent-blue);
   background: var(--color-accent-blue-bg);
-  border: 1px solid var(--color-accent-blue-border);
+  border: 1px solid rgba(41, 68, 171, 0.18);
   vertical-align: middle;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 .citation-marker:hover {
-  background: #1f6feb44;
-  border-color: #58a6ff88;
+  background: rgba(41, 68, 171, 0.15);
+  border-color: rgba(41, 68, 171, 0.3);
 }
 .source-citation-marker {
   display: inline-flex;
@@ -943,15 +944,15 @@ const citationStyles = `
   margin: 0 2px;
   border-radius: 3px;
   cursor: pointer;
-  color: var(--color-amber);
-  background: var(--color-amber-bg);
-  border: 1px solid var(--color-amber-border);
+  color: var(--color-danger);
+  background: rgba(196, 113, 122, 0.08);
+  border: 1px solid rgba(196, 113, 122, 0.18);
   vertical-align: middle;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 .source-citation-marker:hover {
-  background: #d2992244;
-  border-color: #d2992288;
+  background: rgba(196, 113, 122, 0.15);
+  border-color: rgba(196, 113, 122, 0.3);
 }
 `;
 

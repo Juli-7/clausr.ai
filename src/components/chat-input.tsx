@@ -24,7 +24,7 @@ export function ChatInput({
   }
 
   return (
-    <>
+    <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
       <Textarea
         ref={ref}
         value={value}
@@ -37,18 +37,19 @@ export function ChatInput({
         }}
         placeholder={
           isSetup
-            ? "Review the analysis, request additional checks, or ask a follow-up..."
+            ? "Ask a question or request a revision..."
             : "Set up your case files first..."
         }
         className="min-h-[40px] max-h-[120px] resize-none flex-1"
         style={{
           background: "var(--color-bg-dark)",
           border: "1px solid var(--color-border-input)",
-          borderRadius: 8,
-          padding: "0 14px",
+          borderRadius: 10,
+          padding: "10px 14px",
           color: "var(--color-text-body)",
           fontSize: 14,
           outline: "none",
+          lineHeight: 1.5,
         }}
         disabled={loading || !isSetup}
         rows={1}
@@ -60,18 +61,23 @@ export function ChatInput({
         style={{
           height: 36,
           padding: "0 16px",
-          background: isSetup ? "var(--color-success-bg)" : "var(--color-bg-dark)",
-          border: isSetup ? "1px solid #2ea043" : "1px solid var(--color-border-input)",
+          background: isSetup ? "var(--color-accent-blue)" : "var(--color-bg-dark)",
+          border: isSetup ? "1px solid var(--color-accent-blue)" : "1px solid var(--color-border-input)",
           color: isSetup ? "#fff" : "var(--color-text-muted)",
           borderRadius: 8,
           fontSize: 13,
           fontWeight: 500,
           flexShrink: 0,
+          cursor: loading || !value.trim() || !isSetup ? "not-allowed" : "pointer",
+          opacity: loading || !value.trim() || !isSetup ? 0.5 : 1,
           transition: "all 0.15s ease",
         }}
       >
-        {isSetup ? "Analysis" : "Set up first"}
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"/>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
       </Button>
-    </>
+    </div>
   );
 }

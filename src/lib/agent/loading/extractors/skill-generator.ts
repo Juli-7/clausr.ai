@@ -134,5 +134,6 @@ export async function generateSkill(
     scripts: [],
     checks,
     regulationIds,
+    hasTemplate: false,
   };
 }

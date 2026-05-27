@@ -34,6 +34,8 @@ export function ChatView() {
   const [filesLoading, setFilesLoading] = useState(false);
   const [sessionId, setSessionId] = useState(() => "session-" + Date.now());
   const [pendingComments, setPendingComments] = useState<PendingComment[]>([]);
+  const [leftPanelOpen, setLeftPanelOpen] = useState(true);
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
 
   const [stepConfirmations, setStepConfirmations] = useState<Record<number, Record<string, boolean>>>({});
 
@@ -409,42 +411,85 @@ export function ChatView() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* Top bar */}
-      <div className="h-12 shrink-0 flex items-center px-5 border-b border-border-default">
-        <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">
-          Compliance Assessment
+      <div className="h-12 shrink-0 flex items-center px-5 border-b border-border-default"
+        style={{ background: "var(--color-bg-card)" }}
+      >
+        <span className="text-xs font-semibold uppercase tracking-wider"
+          style={{ color: "var(--color-text-muted)", fontFamily: "'JetBrains Mono', monospace" }}
+        >
+          clausr.ai
         </span>
         {activeSkillName && (
-          <span className="ml-4 text-xs text-accent-blue px-2.5 py-0.5 rounded"
-            style={{ background: "var(--color-accent-blue-bg)" }}
+          <span className="ml-4 text-xs px-2.5 py-0.5 rounded"
+            style={{
+              color: "var(--color-accent-blue)",
+              background: "var(--color-accent-blue-bg)",
+              fontFamily: "'JetBrains Mono', monospace",
+            }}
           >
             {activeSkillName}
           </span>
         )}
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-2">
           {latestResponse && (
             <>
-              <span className="text-xs text-text-muted px-2.5 py-0.5 rounded"
-                style={{ background: "var(--color-border-default)" }}
+              <span className="text-xs px-2.5 py-0.5 rounded"
+                style={{
+                  color: "var(--color-text-muted)",
+                  background: "var(--color-bg-dark)",
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}
               >
                 Round {latestResponse.round}
               </span>
-              <span className="text-xs text-accent-blue px-2.5 py-0.5 rounded"
-                style={{ background: "var(--color-accent-blue-bg)" }}
+              <span className="text-xs px-2.5 py-0.5 rounded"
+                style={{
+                  color: "var(--color-accent-blue)",
+                  background: "var(--color-accent-blue-bg)",
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}
               >
-                Session #{sessionId.slice(-4)}
+                #{sessionId.slice(-4)}
               </span>
             </>
           )}
+          <div className="w-px h-4 mx-1" style={{ background: "var(--color-border-default)" }} />
           <button
-            onClick={handleNewAssessment}
-            className="h-7 px-3 text-xs cursor-pointer rounded-lg"
+            onClick={() => setLeftPanelOpen((v) => !v)}
+            className="h-7 px-2.5 text-xs cursor-pointer rounded-lg transition-colors"
             style={{
-              background: "transparent",
-              border: "1px solid var(--color-border-input)",
-              color: "var(--color-text-body)",
+              background: leftPanelOpen ? "var(--color-accent-blue-bg)" : "transparent",
+              border: "1px solid var(--color-border-default)",
+              color: leftPanelOpen ? "var(--color-accent-blue)" : "var(--color-text-muted)",
+              fontFamily: "'JetBrains Mono', monospace",
             }}
           >
-            + New assessment
+            Sources
+          </button>
+
+          <button
+            onClick={() => setRightPanelOpen((v) => !v)}
+            className="h-7 px-2.5 text-xs cursor-pointer rounded-lg transition-colors"
+            style={{
+              background: rightPanelOpen ? "var(--color-accent-blue-bg)" : "transparent",
+              border: "1px solid var(--color-border-default)",
+              color: rightPanelOpen ? "var(--color-accent-blue)" : "var(--color-text-muted)",
+              fontFamily: "'JetBrains Mono', monospace",
+            }}
+          >
+            Audit Trail
+          </button>
+
+          <button
+            onClick={handleNewAssessment}
+            className="h-7 px-3 text-xs cursor-pointer rounded-lg font-medium"
+            style={{
+              background: "var(--color-accent-blue)",
+              border: "1px solid var(--color-accent-blue)",
+              color: "#fff",
+            }}
+          >
+            + New
           </button>
         </div>
       </div>
@@ -457,7 +502,7 @@ export function ChatView() {
       {/* Error banner */}
       {error && (
         <div className="flex items-center gap-2 shrink-0 px-4 py-2 text-xs"
-          style={{ background: "#f8514911", borderBottom: "1px solid #f8514933", color: "var(--color-danger)" }}
+          style={{ background: "rgba(196, 113, 122, 0.08)", borderBottom: "1px solid rgba(196, 113, 122, 0.18)", color: "var(--color-danger)" }}
         >
           <span>⚠️ {error}</span>
           <button onClick={() => setError(null)} className="ml-auto cursor-pointer bg-transparent border-none" style={{ color: "var(--color-danger)" }}>✕</button>
@@ -466,17 +511,19 @@ export function ChatView() {
 
       {/* Three panels: FileUpload | Document + ChatInput | Reasoning */}
       <div className="flex-1 flex min-h-0">
-        <FileUploadPanel
-          attachedFiles={attachedFiles}
-          filesLoading={filesLoading}
-          setupDone={isSetup}
-          setupLoading={setupLoading}
-          skillName={activeSkillName}
-          onFileSelect={handleFileSelect}
-          onRemoveFile={removeFile}
-          onSetup={handleSetup}
-          onFormatSize={formatFileSize}
-        />
+        {leftPanelOpen && (
+          <FileUploadPanel
+            attachedFiles={attachedFiles}
+            filesLoading={filesLoading}
+            setupDone={isSetup}
+            setupLoading={setupLoading}
+            skillName={activeSkillName}
+            onFileSelect={handleFileSelect}
+            onRemoveFile={removeFile}
+            onSetup={handleSetup}
+            onFormatSize={formatFileSize}
+          />
+        )}
         <div className="flex-1 flex flex-col min-h-0 border-r border-border-default">
           <div className="flex-1 min-h-0">
             <DocumentPanel
@@ -505,12 +552,14 @@ export function ChatView() {
             <ChatInput onSend={handleSend} loading={loading} isSetup={isSetup} />
           </div>
         </div>
-        <div
-          className="w-[340px] shrink-0 p-5"
-          style={{ background: "var(--color-bg-dark)" }}
-        >
-          <ReasoningPanel turns={turns} loading={loading} stepStatus={stepStatus} />
-        </div>
+        {rightPanelOpen && (
+          <div
+            className="w-[340px] shrink-0"
+            style={{ background: "var(--color-bg-dark)" }}
+          >
+            <ReasoningPanel turns={turns} loading={loading} stepStatus={stepStatus} />
+          </div>
+        )}
       </div>
 
       {/* Evolution confirm dialog */}

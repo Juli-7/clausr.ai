@@ -78,8 +78,9 @@ export function EvolutionConfirmDialog({
             size="sm"
             onClick={onConfirm}
             style={{
-              background: "var(--color-success-bg)",
-              border: "1px solid #2ea043",
+              background: "var(--color-accent-blue)",
+              border: "1px solid var(--color-accent-blue)",
+              color: "#fff",
             }}
           >
             Confirm &amp; Save

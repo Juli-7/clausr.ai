@@ -29,21 +29,25 @@ export function FileUploadPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canSetup = (attachedFiles.length > 0 || !!skillName) && !setupLoading;
 
+  const dropzoneBorderColor = setupDone
+    ? "var(--color-border-default)"
+    : "var(--color-border-input)";
+
   return (
     <div
       className="shrink-0 flex flex-col border-r border-border-default"
-      style={{
-        width: 280,
-        background: "var(--color-bg-card)",
-      }}
+      style={{ width: 280, background: "var(--color-bg-card)" }}
     >
       {/* Header */}
       <div className="h-12 shrink-0 flex items-center px-5 border-b border-border-default">
         <span
           className="text-xs font-semibold uppercase tracking-widest"
-          style={{ color: "var(--color-text-muted)" }}
+          style={{ color: "var(--color-text-muted)", fontFamily: "'JetBrains Mono', monospace" }}
         >
           Sources
+        </span>
+        <span className="ml-auto" style={{ color: "var(--color-text-dim)", fontSize: 10, fontFamily: "'JetBrains Mono', monospace" }}>
+          {attachedFiles.length}
         </span>
       </div>
 
@@ -53,26 +57,21 @@ export function FileUploadPanel({
           onClick={() => !setupDone && fileInputRef.current?.click()}
           className="flex flex-col items-center justify-center gap-2 rounded-lg cursor-pointer transition-all duration-150"
           style={{
-            minHeight: 100,
-            border: setupDone
-              ? "1px dashed var(--color-border-default)"
-              : "1px dashed var(--color-border-input)",
+            minHeight: 90,
+            border: `1.5px dashed ${dropzoneBorderColor}`,
             background: setupDone ? "transparent" : "var(--color-bg-dark)",
-            opacity: setupDone ? 0.5 : 1,
+            opacity: setupDone ? 0.45 : 1,
           }}
         >
           <span className="text-lg" style={{ color: "var(--color-text-muted)" }}>
             {setupDone ? "✓" : "+"}
           </span>
-          <span
-            className="text-xs"
-            style={{ color: "var(--color-text-muted)" }}
-          >
+          <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>
             {setupDone ? "Files locked" : "Add documents"}
           </span>
-          {setupDone && (
-            <span className="text-2xs" style={{ color: "var(--color-success)" }}>
-              Setup complete
+          {!setupDone && (
+            <span className="text-2xs" style={{ color: "var(--color-text-dim)", fontFamily: "'JetBrains Mono', monospace" }}>
+              PDF, DOCX, XLSX, PNG
             </span>
           )}
         </div>
@@ -127,10 +126,7 @@ export function FileUploadPanel({
                       : "📝"}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <div
-                    className="truncate"
-                    style={{ color: "var(--color-text-body)" }}
-                  >
+                  <div className="truncate" style={{ color: "var(--color-text-body)" }}>
                     {f.name}
                   </div>
                   <div style={{ color: "var(--color-text-muted)" }}>
@@ -151,7 +147,7 @@ export function FileUploadPanel({
           </div>
         )}
 
-        {/* Skill indicator — always visible when a skill is active */}
+        {/* Skill indicator */}
         {skillName && (
           <div
             className="flex items-center gap-2 px-3 py-2 rounded text-xs"
@@ -167,7 +163,7 @@ export function FileUploadPanel({
         )}
       </div>
 
-      {/* Setup button — always visible at bottom */}
+      {/* Setup button */}
       <div className="shrink-0 px-4 pb-4">
         <button
           onClick={canSetup ? onSetup : undefined}
@@ -177,14 +173,13 @@ export function FileUploadPanel({
             setupDone
               ? {
                   background: "transparent",
-                  border: "1px solid var(--color-success)",
-                  color: "var(--color-success)",
-                  opacity: 0.7,
+                  border: "1px solid var(--color-border-default)",
+                  color: "var(--color-text-muted)",
                 }
               : canSetup
                 ? {
-                    background: "var(--color-success-bg)",
-                    border: "1px solid #2ea043",
+                    background: "var(--color-accent-blue)",
+                    border: "1px solid var(--color-accent-blue)",
                     color: "#fff",
                   }
                 : {
