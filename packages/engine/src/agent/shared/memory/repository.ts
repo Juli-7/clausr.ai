@@ -13,11 +13,11 @@ function safeJsonParse<T>(json: string, fallback?: T): T {
   }
 }
 
-export function getOrCreateSession(sessionId: string, skillName: string): void {
+export function getOrCreateSession(sessionId: string, skillName: string, tenantId?: string): void {
   const db = getDb();
   db.prepare(
-    "INSERT OR IGNORE INTO sessions (id, skill_name, created_at) VALUES (?, ?, ?)"
-  ).run(sessionId, skillName, Date.now());
+    "INSERT OR IGNORE INTO sessions (id, skill_name, tenant_id, created_at) VALUES (?, ?, ?, ?)"
+  ).run(sessionId, skillName, tenantId ?? "", Date.now());
 }
 
 // ── Chunk Store ──
@@ -253,7 +253,7 @@ export function getRecentMemories(skillName: string, limit = 5): string[] {
   return rows.map((r) => r.content.slice(0, 120));
 }
 
-export function getAllSessions(): {
+export function getAllSessions(tenantId?: string): {
   id: string;
   skillName: string;
   title: string;
@@ -277,9 +277,10 @@ export function getAllSessions(): {
         (SELECT confidence_json FROM responses WHERE session_id = s.id AND confidence_json IS NOT NULL ORDER BY id DESC LIMIT 1) as confidence_json,
         (SELECT COUNT(*) FROM responses WHERE session_id = s.id) as round_count
       FROM sessions s
+      ${tenantId ? "WHERE s.tenant_id = ?" : ""}
       ORDER BY s.created_at DESC`
     )
-    .all() as {
+    .all(...(tenantId ? [tenantId] : [])) as {
     id: string;
     skill_name: string;
     created_at: number;
@@ -523,4 +524,25 @@ export function getContextSnapshots(sessionId: string): ContextSnapshot[] {
 export function toggleStar(sessionId: string, starred: boolean): void {
   const db = getDb();
   db.prepare("UPDATE sessions SET starred = ? WHERE id = ?").run(starred ? 1 : 0, sessionId);
+}
+
+// ── Lesson Overrides ──
+
+export function saveLessonOverride(skillId: string, lessonText: string, tenantId?: string): void {
+  const db = getDb();
+  db.prepare(
+    "INSERT INTO lesson_overrides (skill_id, tenant_id, lesson_text, created_at) VALUES (?, ?, ?, ?)"
+  ).run(skillId, tenantId ?? "", lessonText, Date.now());
+}
+
+export function getLessonOverrides(skillId: string, tenantId?: string): string[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT lesson_text FROM lesson_overrides
+       WHERE skill_id = ? AND (tenant_id = ? OR tenant_id = '')
+       ORDER BY created_at ASC`
+    )
+    .all(skillId, tenantId ?? "") as { lesson_text: string }[];
+  return rows.map((r) => r.lesson_text);
 }

@@ -127,6 +127,16 @@ function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_chunk_store_file ON chunk_store(session_id, file_id);
 
     CREATE VIRTUAL TABLE IF NOT EXISTS chunk_fts USING fts5(session_id UNINDEXED, file_id UNINDEXED, chunk_idx UNINDEXED, text, tokenize='unicode61');
+
+    CREATE TABLE IF NOT EXISTS lesson_overrides (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      skill_id TEXT NOT NULL,
+      tenant_id TEXT NOT NULL DEFAULT '',
+      lesson_text TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_lesson_overrides_skill ON lesson_overrides(skill_id, tenant_id);
   `);
 }
 
@@ -134,6 +144,7 @@ function runMigrations(db: Database.Database): void {
   try { db.exec("ALTER TABLE sessions ADD COLUMN file_chunks TEXT NOT NULL DEFAULT '[]'"); } catch { }
   try { db.exec("ALTER TABLE sessions ADD COLUMN starred INTEGER NOT NULL DEFAULT 0"); } catch { }
   try { db.exec("ALTER TABLE sessions ADD COLUMN is_setup INTEGER NOT NULL DEFAULT 0"); } catch { }
+  try { db.exec("ALTER TABLE sessions ADD COLUMN tenant_id TEXT NOT NULL DEFAULT ''"); } catch { }
   try { db.exec("ALTER TABLE responses ADD COLUMN sections_json TEXT"); } catch { }
   try { db.exec("ALTER TABLE responses ADD COLUMN source_citations_json TEXT"); } catch { }
   try { db.exec("ALTER TABLE responses ADD COLUMN clause_texts_json TEXT"); } catch { }

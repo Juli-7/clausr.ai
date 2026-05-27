@@ -10,8 +10,10 @@ import { logPipeline } from "../pipeline/logger";
 export interface SetupSessionParams {
   skillName?: string;
   sessionId: string;
+  tenantId?: string;
   files?: { name: string; size: number; type: string; dataUrl?: string }[];
   message?: string;
+  lessonOverrides?: string[];
 }
 
 /**
@@ -27,7 +29,7 @@ export async function setupSession(params: SetupSessionParams): Promise<{ correl
   logPipeline(`=== SETUP START === skill="${params.skillName ?? "(auto)"}" session="${params.sessionId}"`);
 
   // 1. Load or prepare skill + create DB session
-  const { skill, isAutoSkill } = await initSession(params.skillName, params.sessionId);
+  const { skill, isAutoSkill } = await initSession(params.skillName, params.sessionId, params.tenantId);
 
   // 2. Create fresh PipelineContext
   const ctx = createPipelineContext(
@@ -56,11 +58,20 @@ export async function setupSession(params: SetupSessionParams): Promise<{ correl
     await skillGenPhase(ctx, params.message, fileTexts);
   }
 
-  // 5. Generate steps from skill checks
+  // 5. Merge lesson overrides into skillmd (tenant-specific evolution)
+  if (params.lessonOverrides && params.lessonOverrides.length > 0) {
+    const lessonBlock = params.lessonOverrides
+      .map((t) => `- ${t}`)
+      .join("\n");
+    ctx.skill.skillmd = ctx.skill.skillmd + "\n\n### Tenant Lessons\n" + lessonBlock;
+    logPipeline(`[SETUP] merged ${params.lessonOverrides.length} lesson override(s)`);
+  }
+
+  // 6. Generate steps from skill checks
   const steps = generateStepsFromChecks(ctx.skill.checks, ctx.skill.regulationIds);
   logPipeline(`[SETUP] generated ${steps.length} step(s) from ${ctx.skill.checks.length} check(s)`);
 
-  // 6. Persist everything to DB (palette is loaded by pipeline layer)
+  // 7. Persist everything to DB (palette is loaded by pipeline layer)
   saveSessionSetup(params.sessionId, {
     skillName: ctx.skill.name,
     skillmd: ctx.skill.skillmd,

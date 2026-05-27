@@ -25,6 +25,8 @@ export {
   searchChunksFts5,
   deleteSession,
   getRecentMemories,
+  saveLessonOverride,
+  getLessonOverrides,
 } from "./agent/shared/memory/repository";
 
 export type { SessionSetupData, StoredChunk, Fts5Result } from "./agent/shared/memory/repository";

@@ -14,6 +14,7 @@ import type { PipelineContext, CheckResult } from "../../pipeline/pipeline-conte
 export async function initSession(
   skillName: string | undefined,
   sessionId: string,
+  tenantId?: string,
 ): Promise<{
   skill: {
     name: string;
@@ -48,7 +49,7 @@ export async function initSession(
     };
   }
 
-  getOrCreateSession(sessionId, skill.name);
+  getOrCreateSession(sessionId, skill.name, tenantId);
   return { skill, isAutoSkill };
 }
 
