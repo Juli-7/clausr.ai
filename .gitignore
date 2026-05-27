@@ -43,6 +43,11 @@ eng.traineddata
 # Demo / mockup artifacts
 public/mockup.html
 
+# Design/architecture docs (not part of source)
+ARCHITECTURE.md
+ARCHITECTURE-MAP.md
+frontend-mock.html
+
 # vercel
 .vercel
 
