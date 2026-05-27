@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type { ChatRequestFile } from "@/lib/agent/shared/schemas";
 
 interface FileUploadPanelProps {
@@ -13,6 +13,42 @@ interface FileUploadPanelProps {
   onRemoveFile: (name: string) => void;
   onSetup: () => void;
   onFormatSize: (bytes: number) => string;
+}
+
+function FileIcon({ type }: { type: string }) {
+  if (type.startsWith("image/")) {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+        <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+        <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/>
+        <path d="M21 15l-5-5-5 5-4-4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+      </svg>
+    );
+  }
+  if (type.includes("pdf")) {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+        <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+        <path d="M9 15h6M9 12h6M9 18h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+    );
+  }
+  if (type.includes("sheet") || type.includes("xlsx") || type.includes("xls") || type.includes("spreadsheet")) {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+        <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+        <path d="M8 13l8 6M16 13l-8 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+    );
+  }
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+      <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+    </svg>
+  );
 }
 
 export function FileUploadPanel({
@@ -28,62 +64,63 @@ export function FileUploadPanel({
 }: FileUploadPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canSetup = (attachedFiles.length > 0 || !!skillName) && !setupLoading;
-
-  const dropzoneBorderColor = setupDone
-    ? "var(--color-border-default)"
-    : "var(--color-border-input)";
+  const [previewFile, setPreviewFile] = useState<ChatRequestFile | null>(null);
 
   return (
     <div
-      className="shrink-0 flex flex-col border-r border-border-default"
+      className="shrink-0 flex flex-col"
       style={{ width: 280, background: "var(--color-bg-card)" }}
     >
       {/* Header */}
-      <div className="h-12 shrink-0 flex items-center px-5 border-b border-border-default">
+      <div className="h-12 shrink-0 flex items-center px-5" style={{ borderBottom: "1px solid var(--color-border-default)" }}>
         <span
           className="text-xs font-semibold uppercase tracking-widest"
           style={{ color: "var(--color-text-muted)", fontFamily: "'JetBrains Mono', monospace" }}
         >
           Sources
         </span>
-        <span className="ml-auto" style={{ color: "var(--color-text-dim)", fontSize: 10, fontFamily: "'JetBrains Mono', monospace" }}>
-          {attachedFiles.length}
-        </span>
+        {attachedFiles.length > 0 && (
+          <span className="ml-auto text-2xs px-1.5 py-0.5 rounded" style={{ background: "var(--color-accent-blue-bg)", color: "var(--color-accent-blue)", fontFamily: "'JetBrains Mono', monospace" }}>
+            {attachedFiles.length}
+          </span>
+        )}
       </div>
 
-      <div className="flex-1 flex flex-col min-h-0 p-4 gap-4 overflow-y-auto">
-        {/* Upload zone */}
-        <div
-          onClick={() => !setupDone && fileInputRef.current?.click()}
-          className="flex flex-col items-center justify-center gap-2 rounded-lg cursor-pointer transition-all duration-150"
-          style={{
-            minHeight: 90,
-            border: `1.5px dashed ${dropzoneBorderColor}`,
-            background: setupDone ? "transparent" : "var(--color-bg-dark)",
-            opacity: setupDone ? 0.45 : 1,
-          }}
-        >
-          <span className="text-lg" style={{ color: "var(--color-text-muted)" }}>
-            {setupDone ? "✓" : "+"}
-          </span>
-          <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-            {setupDone ? "Files locked" : "Add documents"}
-          </span>
-          {!setupDone && (
-            <span className="text-2xs" style={{ color: "var(--color-text-dim)", fontFamily: "'JetBrains Mono', monospace" }}>
-              PDF, DOCX, XLSX, PNG
-            </span>
-          )}
-        </div>
+      <div className="flex-1 flex flex-col min-h-0 p-4 gap-3 overflow-y-auto">
 
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept="image/*,.pdf,.docx"
-          onChange={onFileSelect}
-          style={{ display: "none" }}
-        />
+        {/* Upload zone (before setup) */}
+        {!setupDone && (
+          <>
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className="flex flex-col items-center justify-center gap-1.5 rounded-lg cursor-pointer transition-all duration-150"
+              style={{
+                minHeight: 80,
+                border: "1.5px dashed var(--color-border-input)",
+                background: "var(--color-bg-primary)",
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ color: "var(--color-text-muted)" }}>
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <polyline points="17 8 12 3 7 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+              <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>Add documents</span>
+              <span className="text-2xs" style={{ color: "var(--color-text-dim)", fontFamily: "'JetBrains Mono', monospace" }}>
+                PDF, DOCX, XLSX, PNG
+              </span>
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*,.pdf,.docx"
+              onChange={onFileSelect}
+              style={{ display: "none" }}
+            />
+          </>
+        )}
 
         {/* Loading indicator */}
         {filesLoading && (
@@ -93,18 +130,19 @@ export function FileUploadPanel({
               background: "var(--color-amber-bg)",
               border: "1px solid var(--color-amber-border)",
               color: "var(--color-amber)",
+              fontFamily: "'JetBrains Mono', monospace",
             }}
           >
-            <span className="animate-pulse">⏳</span>
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--color-amber)", animation: "pulse-dot 1.2s ease infinite" }} />
             Reading files...
           </div>
         )}
 
         {/* File list */}
         {attachedFiles.length > 0 && (
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1">
             <span
-              className="text-2xs font-semibold uppercase tracking-wider"
+              className="text-2xs font-semibold uppercase tracking-wider px-0.5"
               style={{ color: "var(--color-text-muted)" }}
             >
               {attachedFiles.length} file{attachedFiles.length !== 1 ? "s" : ""}
@@ -112,35 +150,38 @@ export function FileUploadPanel({
             {attachedFiles.map((f) => (
               <div
                 key={f.name}
-                className="flex items-center gap-2 px-3 py-2 rounded text-xs"
+                className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-colors duration-150 cursor-pointer"
                 style={{
-                  background: "var(--color-bg-dark)",
+                  background: "var(--color-bg-primary)",
                   border: "1px solid var(--color-border-default)",
+                  color: "var(--color-text-body)",
                 }}
+                onClick={() => f.dataUrl && setPreviewFile(f)}
               >
-                <span className="shrink-0" style={{ color: "var(--color-text-muted)" }}>
-                  {f.type.startsWith("image/")
-                    ? "🖼"
-                    : f.type.includes("pdf")
-                      ? "📄"
-                      : "📝"}
+                <span className="shrink-0" style={{ color: f.dataUrl ? "var(--color-accent-blue)" : "var(--color-text-muted)" }}>
+                  <FileIcon type={f.type} />
                 </span>
                 <div className="flex-1 min-w-0">
-                  <div className="truncate" style={{ color: "var(--color-text-body)" }}>
-                    {f.name}
-                  </div>
-                  <div style={{ color: "var(--color-text-muted)" }}>
+                  <div className="truncate font-medium">{f.name}</div>
+                  <div style={{ color: "var(--color-text-muted)", fontFamily: "'JetBrains Mono', monospace", fontSize: 10 }}>
                     {onFormatSize(f.size)}
                   </div>
                 </div>
                 {!setupDone && (
                   <button
-                    onClick={() => onRemoveFile(f.name)}
-                    className="cursor-pointer bg-transparent border-none text-xs shrink-0"
+                    onClick={(e) => { e.stopPropagation(); onRemoveFile(f.name); }}
+                    className="cursor-pointer bg-transparent border-none shrink-0 rounded p-0.5 transition-colors duration-150"
                     style={{ color: "var(--color-text-muted)" }}
                   >
-                    ✕
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                    </svg>
                   </button>
+                )}
+                {f.dataUrl && (
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="shrink-0" style={{ color: "var(--color-text-muted)" }}>
+                    <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
                 )}
               </div>
             ))}
@@ -157,7 +198,11 @@ export function FileUploadPanel({
               color: "var(--color-accent-blue)",
             }}
           >
-            <span>⚡</span>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <rect x="3" y="2" width="10" height="12" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+              <path d="M6 6h4M6 8h4M6 10h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+              <path d="M8 3v4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+            </svg>
             <span className="truncate">{skillName}</span>
           </div>
         )}
@@ -168,7 +213,7 @@ export function FileUploadPanel({
         <button
           onClick={canSetup ? onSetup : undefined}
           disabled={!canSetup}
-          className="w-full h-10 rounded-lg text-sm font-medium cursor-pointer transition-all duration-150 disabled:cursor-not-allowed"
+          className="w-full h-9 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150 disabled:cursor-not-allowed"
           style={
             setupDone
               ? {
@@ -183,7 +228,7 @@ export function FileUploadPanel({
                     color: "#fff",
                   }
                 : {
-                    background: "var(--color-bg-dark)",
+                    background: "var(--color-bg-primary)",
                     border: "1px solid var(--color-border-input)",
                     color: "var(--color-text-muted)",
                   }
@@ -192,10 +237,59 @@ export function FileUploadPanel({
           {setupLoading
             ? "Setting up..."
             : setupDone
-              ? "✓ Ready"
+              ? "Ready"
               : "Set up"}
         </button>
       </div>
+
+      {/* Preview modal */}
+      {previewFile && previewFile.dataUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.6)" }}
+          onClick={() => setPreviewFile(null)}
+        >
+          <div
+            className="relative max-w-[90vw] max-h-[90vh] rounded-lg overflow-hidden"
+            style={{ background: "var(--color-bg-card)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              className="absolute top-3 right-3 z-10 w-7 h-7 flex items-center justify-center rounded-full cursor-pointer"
+              style={{ background: "rgba(0,0,0,0.5)", color: "#fff" }}
+              onClick={() => setPreviewFile(null)}
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+            </button>
+            {previewFile.type.startsWith("image/") ? (
+              <img
+                src={previewFile.dataUrl}
+                alt={previewFile.name}
+                className="max-w-[85vw] max-h-[85vh] object-contain"
+              />
+            ) : (
+              <div className="flex flex-col items-center gap-4 px-8 py-12">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" style={{ color: "var(--color-text-muted)" }}>
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+                  <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+                </svg>
+                <span className="text-sm" style={{ color: "var(--color-text-body)" }}>{previewFile.name}</span>
+                <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>Preview not available for this file type</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Animations */}
+      <style>{`
+        @keyframes pulse-dot {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.3; }
+        }
+      `}</style>
     </div>
   );
 }
