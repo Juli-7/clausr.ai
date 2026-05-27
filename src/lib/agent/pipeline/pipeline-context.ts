@@ -1,6 +1,11 @@
-import type { Citation, SourceCitation, Verdict, Claim } from "@/lib/agent/schemas";
-import type { ReportTemplate } from "@/lib/agent/template-types";
-import type { TextChunk } from "@/lib/agent/extractors";
+import type { TextChunk } from "@/lib/agent/user-info/extractors";
+import type { ParsedCheck } from "@/lib/agent/loading/skill/check-parser";
+import { CheckStore } from "./slices/check-store";
+import { StepMemory } from "./slices/step-memory";
+import { FileRegistry } from "./slices/file-registry";
+import { PaletteStore } from "./slices/palette-store";
+import { ReportAssembler } from "./slices/report-assembler";
+import { loadSessionSetup } from "@/lib/agent/shared/memory/repository";
 
 // ── Types ──
 
@@ -12,7 +17,7 @@ export interface CitationPaletteEntry {
 }
 
 export interface SourcePaletteEntry {
-  id: number;
+  id: string;
   fileId: string;
   filename: string;
   extractedText: string;
@@ -22,27 +27,13 @@ export interface SourcePaletteEntry {
   pageNumber?: number;
 }
 
-export interface VehicleData {
-  make: string;
-  model: string;
-  lightSource: string;
-  mountingHeight: string;
-  beamPattern: string;
-  luminousFlux: string;
-  colorTemp: string;
-  cutoffSharpness: string;
-  levelingDeviation: string;
-}
-
 export interface CheckResult {
   name: string;
   type: "numerical" | "qualitative";
-  regulation: string;
-  clause: string;
   finding: string;
   verdict: "PASS" | "FAIL";
-  citationRef: string;
-  sourceRef?: number;
+  citationRef: string[];
+  sourceCitation: string[];
   toolCallId?: string;
   toolResult?: {
     value: number;
@@ -57,29 +48,21 @@ export interface PipelineContext {
   skill: {
     name: string;
     skillmd: string;
-    template: ReportTemplate | null;
+    checks: ParsedCheck[];
+    scripts: { name: string; path: string; desc: string; params: string }[];
+    regulationIds: string[];
   };
   sessionId: string;
-  /** Correlation ID for log tracing across a single pipeline run */
   correlationId: string;
-  /** Whether to fill template structure (default true when template exists) */
-  useTemplate: boolean;
 
-  /** Generic step outputs keyed by step number or label (e.g. "toolCalls") */
-  stepOutputs: Record<string, unknown>;
+  /** Owned context slices — canonical data store */
+  checks: CheckStore;
+  steps: StepMemory;
+  files: FileRegistry;
+  palette: PaletteStore;
+  report: ReportAssembler;
 
-  vehicleData: VehicleData | null;
-  loadedReferences: { filename: string; content: string }[];
-  citationPalette: CitationPaletteEntry[];
-  sourcePalette: SourcePaletteEntry[];
-  checkResults: CheckResult[];
-  /** Structured claim→citation mappings extracted from LLM output (Layer 5) */
-  claims: Claim[];
-  compiledCitations: Citation[];
-  compiledSourceCitations: SourceCitation[];
-  reportSections: Record<string, Record<string, string> | string> | null;
-  verdict: Verdict | null;
-
+  /** Data carried across turns */
   previousTurns: {
     turnNumber: number;
     userMessage: string;
@@ -104,71 +87,46 @@ export interface PipelineContext {
 export function createPipelineContext(
   skillName: string,
   skillmd: string,
-  template: ReportTemplate | null,
   sessionId: string,
   correlationId: string,
-  useTemplate?: boolean
+  checks: ParsedCheck[],
+  scripts?: { name: string; path: string; desc: string; params: string }[],
+  regulationIds?: string[]
 ): PipelineContext {
   return {
-    skill: { name: skillName, skillmd, template },
+    skill: { name: skillName, skillmd, checks, scripts: scripts ?? [], regulationIds: regulationIds ?? [] },
     sessionId,
     correlationId,
-    useTemplate: useTemplate ?? (template !== null),
-    stepOutputs: {},
-    vehicleData: null,
-    loadedReferences: [],
-    citationPalette: [],
-    sourcePalette: [],
-    checkResults: [],
-    claims: [],
-    compiledCitations: [],
-    compiledSourceCitations: [],
-    reportSections: null,
-    verdict: null,
+    checks: new CheckStore(),
+    steps: new StepMemory(),
+    files: new FileRegistry(),
+    palette: new PaletteStore(),
+    report: new ReportAssembler(),
     previousTurns: [],
     uploadedFiles: [],
   };
 }
 
-// ── Context persistence across turns ──
+// ── Restore from DB session_setup ──
 
-export function serializeContext(ctx: PipelineContext): string {
-  return JSON.stringify({
-    vehicleData: ctx.vehicleData,
-    citationPalette: ctx.citationPalette,
-    sourcePalette: ctx.sourcePalette,
-    checkResults: ctx.checkResults,
-    compiledCitations: ctx.compiledCitations,
-    compiledSourceCitations: ctx.compiledSourceCitations,
-    uploadedFiles: ctx.uploadedFiles.map((f) => ({
-      fileId: f.fileId,
-      filename: f.filename,
-      dataUrl: f.dataUrl,
-      pageCount: f.pageCount,
-      chunks: f.chunks,
-    })),
-  });
-}
+export async function restoreContext(
+  sessionId: string,
+  correlationId: string,
+): Promise<{ ctx: PipelineContext; steps: import("@/lib/agent/pipeline/types").ExecutableStep[] } | null> {
+  const setup = loadSessionSetup(sessionId);
+  if (!setup) return null;
 
-export function deserializeContext(
-  json: string,
-  skill: PipelineContext["skill"],
-  sessionId: string
-): Partial<PipelineContext> {
-  const data = JSON.parse(json);
-  return {
-    skill,
+  const ctx = createPipelineContext(
+    setup.skillName,
+    setup.skillmd,
     sessionId,
-    vehicleData: data.vehicleData ?? null,
-    citationPalette: data.citationPalette ?? [],
-    sourcePalette: data.sourcePalette ?? [],
-    checkResults: data.checkResults ?? [],
-    compiledCitations: data.compiledCitations ?? [],
-    compiledSourceCitations: data.compiledSourceCitations ?? [],
-    uploadedFiles: data.uploadedFiles ?? [],
-    loadedReferences: [],
-    reportSections: null,
-    verdict: null,
-    previousTurns: [],
-  };
+    correlationId,
+    setup.checks,
+    setup.scripts,
+    setup.regulationIds,
+  );
+
+  ctx.files = FileRegistry.fromJSON(setup.fileRegistry);
+
+  return { ctx, steps: setup.steps };
 }

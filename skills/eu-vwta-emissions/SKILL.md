@@ -2,35 +2,68 @@
 name: eu-vwta-emissions
 description: Light vehicle emissions compliance covering UN R83 (exhaust emissions) and UN R154 (WLTP)
 triggers: ["VWTA", "emissions", "R83", "R154", "WLTP", "exhaust"]
+regulation_ids:
+  - R83
+  - R154
 ---
 
-# EU VWTA Emissions Compliance
+## Checks
 
-## 1. Role Definition
-Senior EU VWTA certification expert specializing in vehicle emissions.
+### powertrain_type
+1. **type**: enum(ice, hybrid, electric, other)
+2. **attention**: powertrain type engine ICE hybrid electric
+3. **description**: Powertrain type determines which emission limits apply
+4. **clause**: R83.5.1
+5. **depends_on**: (none)
+6. **sample**: The vehicle has an internal combustion engine [S1.c1], so ICE emission limits under R83 apply.
 
-## 2. Execution Flow
+### vehicle_mass_kg
+1. **type**: number(0-5000)
+2. **attention**: vehicle mass weight kerb unladen
+3. **description**: Vehicle mass used for CO2 limit calculation
+4. **clause**: R83.5.3
+5. **depends_on**: (none)
+6. **sample**: The vehicle mass is 1450 kg [S1.c2] as documented in the type approval application.
 
-| # | Step | Executor |
-|---|------|----------|
-| 1 | Identify vehicle powertrain and fuel type | llm |
-| 2 | Load applicable R83/R154 references | builtin:load-references |
-| 3 | Calculate emission limits via scripts | llm+tool |
-| 4 | Compare measured vs limit values | llm |
+### co2_limit_gkm
+1. **type**: number(0-300)
+2. **attention**: CO2 carbon dioxide emissions g/km
+3. **description**: CO2 emissions in g/km must not exceed the limit
+4. **clause**: R83.5.3
+5. **constraint**: <= 95
+6. **depends_on**: powertrain_type
+7. **sample**: For ICE powertrain, the CO2 emissions measured are 88 g/km [S1.c3], within the 95 g/km limit under R83.5.3.
 
-## 3. Key Decision Points
-- CO2 limits based on vehicle mass per R83 §5.3
-- NOx limits per R83 §5.4
-- WLTP cycle requirements per R154 §6.2
+### nox_limit_mgkm
+1. **type**: number(0-200)
+2. **attention**: NOx nitrogen oxide emissions mg/km
+3. **description**: NOx emissions in mg/km, stricter limits for diesel
+4. **clause**: R83.5.4
+5. **constraint**: <= 80
+6. **depends_on**: powertrain_type
+7. **sample**: NOx emissions are 45 mg/km [S1.c4], below the 80 mg/km limit under R83.5.4.
 
-## 4. Red Lines
-- Do not issue PASS where data is insufficient
-- Do not skip OBD check for emissions
-- Numerical checks MUST go through the compliance-check tool
+### wltp_cycle_compliant
+1. **type**: enum(pass, fail, not_tested)
+2. **attention**: WLTP test cycle compliance drive cycle
+3. **description**: Whether the vehicle passes WLTP test cycle requirements
+4. **clause**: R154.6.2
+5. **depends_on**: (none)
+6. **sample**: The WLTP test cycle was completed with a pass result [S1.c5], conforming to R154.6.2.
 
-## 6. Reference Loading Rules
-| Condition | Must Load |
-|-----------|-----------|
-| Any emissions check | references/un-r83.md |
-| WLTP cycle | references/un-r154.md |
-| Any task | references/common-pitfalls.md |
+### obd_present
+1. **type**: boolean
+2. **attention**: on-board diagnostics OBD system
+3. **description**: On-board diagnostics must be present
+4. **clause**: R83.5.5
+5. **depends_on**: (none)
+6. **sample**: On-board diagnostics (OBD) are confirmed present in the vehicle documentation [S1.c6], meeting R83.5.5 requirements.
+
+## Red Lines
+- ❌ Do not issue PASS where data is insufficient
+- ❌ Do not skip OBD check for emissions
+- ❌ Do not make numerical pass/fail without calling the compliance-check tool
+- ❌ Do not reference clauses from memory — load from Regulation API
+
+## Lessons Learnt
+(System-maintained area, initially empty.)

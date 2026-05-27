@@ -1,215 +1,228 @@
-import { loadReferencesForConditions } from "@/lib/agent/regulation/skill-source";
-import { getConversationHistory, getRecentMemories } from "@/lib/agent/memory/repository";
-import { getSkill } from "@/lib/agent/skill/registry";
-import type { ComplianceCheckInput } from "@/lib/agent/schemas";
+import { getRegulationApi } from "@/lib/agent/knowledge/regulation-api";
 import type {
   PipelineContext,
   CitationPaletteEntry,
 } from "./pipeline-context";
-import type { StepResult } from "./step-executor";
+import type { StepResult } from "./types";
 import { logPipeline } from "./logger";
-
-// ── Builtin executors ──
-
-export async function executeBuiltin(
-  executor: string,
-  ctx: PipelineContext
-): Promise<StepResult> {
-  switch (executor) {
-    case "builtin:load-references":
-      return loadReferences(ctx);
-    default:
-      return { success: false, error: `Unknown builtin executor: "${executor}"`, errorCode: "BUILTIN_ERROR" };
-  }
-}
 
 // ── Reference loading ──
 
-async function loadReferences(ctx: PipelineContext): Promise<StepResult> {
+export async function loadRegulationSummaries(ctx: PipelineContext): Promise<StepResult> {
   try {
-    const conditions = extractConditions(ctx);
-    logPipeline(`  [BUILTIN] load-references conditions=[${conditions.join(", ")}]`);
+    const regulationIds = ctx.skill.regulationIds;
 
-    const refTexts = loadReferencesForConditions(ctx.skill.name, conditions);
-    logPipeline(`  [BUILTIN] loaded ${refTexts.length} reference texts`);
-    ctx.loadedReferences = refTexts.map((rt) => {
-      const headerMatch = rt.match(/^--- ([\w-]+\.md) ---\n/);
-      return {
-        filename: headerMatch?.[1] ?? "unknown.md",
-        content: rt,
-      };
-    });
+    if (regulationIds.length === 0) {
+      logPipeline(`  [BUILTIN] load-summaries: no regulation IDs, skipping`);
+      return { success: true };
+    }
 
-    const skill = getSkill(ctx.skill.name);
-	    const loadedFilenames = new Set(ctx.loadedReferences.map(r => r.filename));
-	    const relevantClauses = (skill.clauseIndex ?? []).filter(c => {
-	      const refFilename = `un-r${c.regulation.slice(1)}.md`;
-	      return loadedFilenames.has(refFilename);
-	    });
+    logPipeline(`  [BUILTIN] load-summaries: ${regulationIds.join(", ")}`);
 
-	    ctx.citationPalette = buildCitationPaletteFromIndex(relevantClauses);
-    logPipeline(`  [BUILTIN] citationPalette=${ctx.citationPalette.length} entries: ${ctx.citationPalette.map(e => `${e.regulation}§${e.clause}[${e.id}]`).join(", ")}`);
+    const api = await getRegulationApi();
+    const regulations = (
+      await Promise.all(
+        regulationIds.map(async (id) => {
+          const resolved = api.resolveCode(id);
+          if (!resolved) return null;
+          const result = await api.getRegulation({ code: resolved });
+          return result.success ? result.data : null;
+        })
+      )
+    ).filter((r): r is NonNullable<typeof r> => r !== null);
 
-    // Build source palette from uploaded files
-    ctx.sourcePalette = ctx.uploadedFiles.map((f, i) => ({
-      id: i + 1,
-      fileId: f.fileId,
-      filename: f.filename,
-      extractedText: f.extractedText,
-      keyExcerpt: f.extractedText.slice(0, 200),
-      chunks: f.chunks,
-      dataUrl: f.dataUrl,
-      pageNumber: f.pageCount,
+    // Tier 1: Build compact summaries (clause numbers + titles only) + full reference texts
+    const summaries: {
+      code: string;
+      title: string;
+      description: string;
+      clauseIndex: { number: string; title: string }[];
+    }[] = [];
+    const refTexts: string[] = [];
+
+    for (const reg of regulations) {
+      const header = `--- ${reg.code} ---`;
+      const bodyLines: string[] = [];
+      const clauseIndex: { number: string; title: string }[] = [];
+
+      for (const clause of reg.clauses) {
+        const clauseText = clause.title
+          ? `\xA7${clause.number} ${clause.title}\n${clause.text}`
+          : `\xA7${clause.number}\n${clause.text}`;
+        bodyLines.push(clauseText);
+        clauseIndex.push({ number: clause.number, title: clause.title });
+      }
+
+      refTexts.push(`${header}\n${bodyLines.join("\n\n")}`);
+      summaries.push({
+        code: reg.code,
+        title: reg.title,
+        description: reg.description,
+        clauseIndex,
+      });
+    }
+
+    logPipeline(`  [BUILTIN] loaded ${summaries.length} regulation summaries`);
+
+    ctx.palette.loadReferences(refTexts.map((rt) => {
+      let code = "unknown.md";
+      const headerStart = rt.indexOf("--- ");
+      if (headerStart !== -1) {
+        const headerEnd = rt.indexOf(" ---\n", headerStart + 4);
+        if (headerEnd !== -1) {
+          code = rt.substring(headerStart + 4, headerEnd);
+        }
+      }
+      return { filename: code, content: rt };
     }));
 
-    const memories = getRecentMemories(ctx.skill.name);
-    logPipeline(`  [BUILTIN] sourcePalette=${ctx.sourcePalette.length} entries memories=${memories.length}`);
+    ctx.palette.loadSummaries(summaries);
 
-    ctx.stepOutputs["2"] = {
-      references: ctx.loadedReferences.map((r) => r.filename),
-      citationCount: ctx.citationPalette.length,
-      sourceCount: ctx.sourcePalette.length,
-      memoryCount: memories.length,
-    };
+    // Tier 2: Eagerly load clause texts for checks' declared clause fields
+    const preloadedEntries: CitationPaletteEntry[] = [];
+    const seen = new Set<string>();
+
+    for (const check of ctx.skill.checks) {
+      if (!check.clause) continue;
+      for (const reg of regulations) {
+        let clauseNumber: string;
+        if (check.clause.startsWith(reg.code + ".")) {
+          clauseNumber = check.clause.substring(reg.code.length + 1);
+        } else {
+          clauseNumber = check.clause;
+        }
+        const clause = reg.clauses.find((c) => c.number === clauseNumber);
+        if (clause) {
+          const ref = `${reg.code}.${clause.number}`;
+          if (!seen.has(ref)) {
+            seen.add(ref);
+            const text = clause.title
+              ? `\xA7${clause.number} ${clause.title}\n${clause.text}`
+              : `\xA7${clause.number}\n${clause.text}`;
+            preloadedEntries.push({
+              id: ref,
+              regulation: reg.code,
+              clause: clause.number,
+              text,
+            });
+          }
+          break;
+        }
+      }
+    }
+
+    ctx.palette.addPaletteEntries(preloadedEntries);
+    logPipeline(`  [BUILTIN] pre-loaded ${preloadedEntries.length} check-related clause(s): ${preloadedEntries.map((e) => e.id).join(", ")}`);
+
+    ctx.steps.setRaw("referenceSummary", {
+      references: ctx.palette.getReferences().map((r) => r.filename),
+      citationCount: preloadedEntries.length,
+      sourceCount: ctx.files.getFiles().length,
+    });
 
     return { success: true };
   } catch (err) {
     return {
       success: false,
-      error: `Builtin "load-references" error: ${err instanceof Error ? err.message : String(err)}`,
+      error: `Builtin "load-regulations" error: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
 }
 
-// ── Compliance check builtin (replaces compliance-check.py) ──
+// ── Compliance check builtin ──
 
 export interface ComplianceCheckResult {
-  name: string;
-  value: number;
-  limit: number | string;
-  comparison: string;
   status: "pass" | "fail";
+  comparison: string;
   note: string;
 }
 
-export function executeComplianceCheck(input: ComplianceCheckInput): { results: ComplianceCheckResult[] } {
-  const results: ComplianceCheckResult[] = [];
+function parseRounding(rounding?: number | string): { places: number; mode: "standard" | "ceil" | "floor" } | null {
+  if (rounding === undefined) return null;
+  if (typeof rounding === "number") return { places: rounding, mode: "standard" };
+  const parts = rounding.split(":");
+  const places = parseInt(parts[0], 10);
+  if (isNaN(places) || places < 0) return null;
+  const mode = parts[1] === "ceil" ? "ceil" : parts[1] === "floor" ? "floor" : "standard";
+  return { places, mode };
+}
 
-  for (const check of input.checks) {
-    const { name, value, limit, operator } = check;
-    let status: "pass" | "fail" = "pass";
-    let note = "";
-    let comparison = "";
+function roundValue(value: number, places: number, mode: "standard" | "ceil" | "floor"): number {
+  const factor = 10 ** places;
+  switch (mode) {
+    case "ceil": return Math.ceil(value * factor) / factor;
+    case "floor": return Math.floor(value * factor) / factor;
+    default: return Math.round(value * factor) / factor;
+  }
+}
 
-    if (operator === "range" && typeof limit === "string") {
-      const parts = limit.split("-");
-      const lo = parseFloat(parts[0]);
-      const hi = parseFloat(parts[1]);
-      comparison = `${value} in [${lo}, ${hi}]`;
-      if (value < lo || value > hi) {
-        status = "fail";
-        note = `Value ${value} outside range [${lo}, ${hi}]`;
-      }
+export function executeComplianceCheck(
+  value: number,
+  limit: number | string,
+  operator: string,
+  rounding?: number | string
+): ComplianceCheckResult {
+  let status: "pass" | "fail" = "pass";
+  let note = "";
+  let comparison = "";
+
+  const roundingConfig = parseRounding(rounding);
+  const compareValue = roundingConfig
+    ? roundValue(value, roundingConfig.places, roundingConfig.mode)
+    : value;
+
+  if (operator === "range" && typeof limit === "string") {
+    const parts = limit.split("-");
+    const lo = parseFloat(parts[0]);
+    const hi = parseFloat(parts[1]);
+    comparison = `${compareValue} in [${lo}, ${hi}]`;
+    if (compareValue < lo || compareValue > hi) {
+      status = "fail";
+      note = `Value ${compareValue} outside range [${lo}, ${hi}]`;
+    }
+  } else if (operator === "tolerance" && typeof limit === "string") {
+    const match = limit.match(/^([\d.]+)±([\d.]+)(%)?$/);
+    if (!match) {
+      status = "fail";
+      note = `Invalid tolerance format: ${limit}`;
     } else {
-      const limitVal = typeof limit === "string" ? parseFloat(limit) : limit;
-      switch (operator) {
-        case ">=":
-          comparison = `${value} >= ${limitVal}`;
-          if (value < limitVal) { status = "fail"; note = `${value} < ${limitVal}`; }
-          break;
-        case "<=":
-          comparison = `${value} <= ${limitVal}`;
-          if (value > limitVal) { status = "fail"; note = `${value} > ${limitVal}`; }
-          break;
-        case ">":
-          comparison = `${value} > ${limitVal}`;
-          if (value <= limitVal) { status = "fail"; note = `${value} <= ${limitVal}`; }
-          break;
-        case "<":
-          comparison = `${value} < ${limitVal}`;
-          if (value >= limitVal) { status = "fail"; note = `${value} >= ${limitVal}`; }
-          break;
+      const [, nominalStr, tolStr, isPercent] = match;
+      const nominal = parseFloat(nominalStr);
+      const tol = parseFloat(tolStr);
+      const delta = isPercent ? nominal * tol / 100 : tol;
+      const lo = nominal - delta;
+      const hi = nominal + delta;
+      comparison = `${compareValue} within ${isPercent ? `${tol}%` : `±${tol}`} of ${nominal} (${lo}-${hi})`;
+      if (compareValue < lo || compareValue > hi) {
+        status = "fail";
+        note = `Value ${compareValue} outside ±${isPercent ? `${tol}%` : tol} tolerance of ${nominal} (allowed: ${lo}-${hi})`;
       }
     }
-
-    results.push({ name, value, limit, comparison, status, note });
-  }
-
-  return { results };
-}
-
-// ── Helpers ──
-
-function extractConditions(ctx: PipelineContext): string[] {
-  const conditions: string[] = [];
-
-  // From vehicle data
-  if (ctx.vehicleData) {
-    const vd = ctx.vehicleData;
-    if (vd.lightSource && vd.lightSource !== "unknown")
-      conditions.push("lighting", vd.lightSource.toLowerCase());
-    if (vd.beamPattern && vd.beamPattern !== "unknown")
-      conditions.push("beam");
-    if (vd.colorTemp && vd.colorTemp !== "unknown")
-      conditions.push("colour");
-    if (vd.cutoffSharpness && vd.cutoffSharpness !== "unknown")
-      conditions.push("cutoff");
-  }
-
-  // From uploaded file text (fallback when vehicleData not yet populated)
-  for (const file of ctx.uploadedFiles) {
-    const lower = file.extractedText.toLowerCase();
-    const filePatterns = [
-      { words: ["led", "headlamp", "low beam", "high beam", "lighting", "xenon"], kw: "lighting" },
-      { words: ["brake", "braking", "abs", "stop lamp"], kw: "braking" },
-      { words: ["emission", "exhaust", "co2", "nox"], kw: "emissions" },
-      { words: ["cut-off", "cutoff"], kw: "cutoff" },
-      { words: ["colour", "color", "temperature", "kelvin"], kw: "colour" },
-    ];
-    for (const { words, kw } of filePatterns) {
-      if (words.some((w) => lower.includes(w))) conditions.push(kw);
+  } else {
+    const limitVal = typeof limit === "string" ? parseFloat(limit) : limit;
+    switch (operator) {
+      case ">=":
+        comparison = `${compareValue} >= ${limitVal}`;
+        if (compareValue < limitVal) { status = "fail"; note = `${compareValue} < ${limitVal}`; }
+        break;
+      case "<=":
+        comparison = `${compareValue} <= ${limitVal}`;
+        if (compareValue > limitVal) { status = "fail"; note = `${compareValue} > ${limitVal}`; }
+        break;
+      case ">":
+        comparison = `${compareValue} > ${limitVal}`;
+        if (compareValue <= limitVal) { status = "fail"; note = `${compareValue} <= ${limitVal}`; }
+        break;
+      case "<":
+        comparison = `${compareValue} < ${limitVal}`;
+        if (compareValue >= limitVal) { status = "fail"; note = `${compareValue} >= ${limitVal}`; }
+        break;
     }
   }
 
-  // From user message
-  try {
-    const history = getConversationHistory(ctx.sessionId);
-    const lastMsg =
-      history.filter((m) => m.role === "user").pop()?.content ?? "";
-    const lower = lastMsg.toLowerCase();
-    const msgPatterns = [
-      { words: ["light", "led", "headlamp", "beam", "flash"], kw: "lighting" },
-      { words: ["brake", "braking", "abs"], kw: "braking" },
-      { words: ["emission", "exhaust", "co2", "nox"], kw: "emissions" },
-      { words: ["cutoff", "cut-off"], kw: "cutoff" },
-      { words: ["colour", "color", "temperature"], kw: "colour" },
-    ];
-    for (const { words, kw } of msgPatterns) {
-      if (words.some((w) => lower.includes(w))) conditions.push(kw);
-    }
-  } catch {
-    // ignore — no history available
+  if (compareValue !== value) {
+    note = note ? `${note}; Rounded from ${value}` : `Rounded from ${value}`;
   }
 
-  return conditions;
+  return { status, comparison, note };
 }
-
-function buildCitationPaletteFromIndex(
-  clauseIndex: { regulation: string; clause: string; text: string }[]
-): CitationPaletteEntry[] {
-  const palette: CitationPaletteEntry[] = [];
-  const seen = new Set<string>();
-  for (const entry of clauseIndex) {
-    const id = `${entry.regulation}.${entry.clause}`;
-    if (seen.has(id)) continue;
-    seen.add(id);
-    palette.push({
-      id,
-      regulation: entry.regulation,
-      clause: entry.clause,
-      text: entry.text,
-    });
-  }
-  return palette;
-}
-

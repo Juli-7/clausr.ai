@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { integrateLesson } from "@/lib/agent/evolution/integrator";
-import { getDb } from "@/lib/agent/memory/database";
+import fs from "fs";
+import path from "path";
+import { getDb } from "@/lib/agent/shared/memory/database";
+
+const SKILLS_DIR = path.join(process.cwd(), "skills");
 
 const RequestSchema = z.object({
   sessionId: z.string().min(1),
@@ -14,7 +17,7 @@ const RequestSchema = z.object({
  * POST /api/agent/evolution-confirm
  *
  * Confirms or dismisses a proposed lesson from a compliance session.
- * If confirmed, writes the lesson to SKILL.md §7 and stores in memory.
+ * If confirmed, appends the lesson under SKILL.md §7 Experience Accumulation.
  * If dismissed, stores in memory only.
  */
 export async function POST(request: NextRequest) {
@@ -22,16 +25,37 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const parsed = RequestSchema.parse(body);
 
-    const result = integrateLesson(parsed.skillId, parsed.lessonText, parsed.confirmed);
+    let written = false;
+    if (parsed.confirmed) {
+      const skillMdPath = path.join(SKILLS_DIR, parsed.skillId, "SKILL.md");
+      if (!fs.existsSync(skillMdPath)) {
+        return NextResponse.json({ error: `SKILL.md not found for skill "${parsed.skillId}"` }, { status: 404 });
+      }
 
-    // Store in memory via SQLite (as a special session message)
+      const content = fs.readFileSync(skillMdPath, "utf-8");
+      if (!content.includes(`- ${parsed.lessonText}`)) {
+        const sectionHeader = "## Lessons Learnt";
+        if (content.includes(sectionHeader)) {
+          const startIdx = content.indexOf(sectionHeader);
+          const nextSection = content.indexOf("\n## ", startIdx + sectionHeader.length);
+          const sectionEnd = nextSection !== -1 ? nextSection : content.length;
+          const before = content.substring(0, sectionEnd);
+          const after = nextSection !== -1 ? content.substring(sectionEnd) : "";
+          const updated = before.trimEnd() + "\n- " + parsed.lessonText + "\n" + after;
+          fs.writeFileSync(skillMdPath, updated, "utf-8");
+        } else {
+          const lessonBlock = `\n\n## Lessons Learnt\n\n(System-maintained area, initially empty.)\n\n- ${parsed.lessonText}\n`;
+          fs.writeFileSync(skillMdPath, content.trimEnd() + lessonBlock, "utf-8");
+        }
+        written = true;
+      }
+    }
+
     const db = getDb();
-    // Ensure session exists
     db.prepare(
       "INSERT OR IGNORE INTO sessions (id, skill_name, created_at) VALUES (?, ?, ?)"
     ).run(parsed.sessionId, parsed.skillId, Date.now());
 
-    // Insert an assistant message recording the evolution
     const summary = parsed.confirmed
       ? `[Evolution] Lesson saved: ${parsed.lessonText}`
       : `[Evolution] Lesson dismissed: ${parsed.lessonText}`;
@@ -39,10 +63,7 @@ export async function POST(request: NextRequest) {
       "INSERT INTO messages (session_id, role, content, created_at) VALUES (?, 'assistant', ?, ?)"
     ).run(parsed.sessionId, summary, Date.now());
 
-    return NextResponse.json(
-      { success: true, written: result.written },
-      { status: 200 }
-    );
+    return NextResponse.json({ success: true, written }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";
     console.error("[api/agent/evolution-confirm]", err);

@@ -1,18 +1,17 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, startTransition } from "react";
 import { DocumentPanel } from "@/components/document-panel";
 import { ReasoningPanel } from "@/components/reasoning-panel";
 import { ChatInput } from "@/components/chat-input";
+import { FileUploadPanel } from "@/components/file-upload-panel";
 import { LearningBanner } from "@/components/learning-banner";
 import { EvolutionConfirmDialog } from "@/components/evolution-confirm-dialog";
 
 import { useApp } from "@/lib/app-context";
-import type { AgentResponse } from "@/lib/agent/types";
-import type { ChatRequest, ChatRequestFile } from "@/lib/agent/schemas";
-import type { ChatTurn } from "@/lib/agent/turn-types";
-import type { ReportTemplate } from "@/lib/agent/template-types";
-
+import type { AgentResponse } from "@/lib/agent/shared/types";
+import type { ChatRequestFile } from "@/lib/agent/shared/schemas";
+import type { ChatTurn } from "@/types/agent-types";
 interface PendingComment {
   selectedText: string;
   comment: string;
@@ -24,6 +23,8 @@ export function ChatView() {
   const { activeSkillName, activeSkillId, activeSessionId, clearSession } = useApp();
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [loading, setLoading] = useState(false);
+  const [setupLoading, setSetupLoading] = useState(false);
+  const [isSetup, setIsSetup] = useState(false);
   const [stepStatus, setStepStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showLearningBanner, setShowLearningBanner] = useState(false);
@@ -33,27 +34,51 @@ export function ChatView() {
   const [filesLoading, setFilesLoading] = useState(false);
   const [sessionId, setSessionId] = useState(() => "session-" + Date.now());
   const [pendingComments, setPendingComments] = useState<PendingComment[]>([]);
-  const [template, setTemplate] = useState<ReportTemplate | null>(null);
-  const [sentFiles, setSentFiles] = useState<{ name: string; size: number; type: string }[]>([]);
-  const [useTemplate, setUseTemplate] = useState(true);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [leftPanelOpen, setLeftPanelOpen] = useState(true);
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
 
-  // Load template for the active skill
-  useEffect(() => {
-    if (!activeSkillId) { setTemplate(null); return; }
-    fetch("/api/skills")
-      .then(r => r.json())
-      .then((skills: { name: string; template: ReportTemplate | null }[]) => {
-        const skill = skills.find(s => s.name === activeSkillId);
-        setTemplate(skill?.template ?? null);
-      })
-      .catch(() => setTemplate(null));
-  }, [activeSkillId]);
+  const [stepConfirmations, setStepConfirmations] = useState<Record<number, Record<string, boolean>>>({});
+
+  function extractFieldNamesFromContent(content: string): string[] {
+    const names: string[] = [];
+    const regex = /^### (.+)$/gm;
+    let match;
+    while ((match = regex.exec(content)) !== null) {
+      names.push(match[1].trim());
+    }
+    return names;
+  }
+
+  function initFlags(turnIndex: number, fieldNames: string[]) {
+    if (!fieldNames.length) return;
+    setStepConfirmations((prev) => {
+      if (prev[turnIndex]) return prev;
+      const flags: Record<string, boolean> = {};
+      for (const field of fieldNames) {
+        flags[field] = false;
+      }
+      return { ...prev, [turnIndex]: flags };
+    });
+  }
+
+  function handleToggleFlag(turnIndex: number, field: string, flagged: boolean) {
+    setStepConfirmations((prev) => ({
+      ...prev,
+      [turnIndex]: { ...(prev[turnIndex] ?? {}), [field]: flagged },
+    }));
+  }
 
   // Session loading from history
   useEffect(() => {
     let cancelled = false;
     if (!activeSessionId) return;
+    // Reset all state before loading a new session
+    startTransition(() => {
+      setTurns([]);
+      setPendingComments([]);
+      setStepConfirmations({});
+      setError(null);
+    });
     fetch(`/api/sessions/${activeSessionId}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -65,7 +90,6 @@ export function ChatView() {
         for (const msg of messages) {
           if (msg.role === "user") {
             const resp = responseList[respIdx] ?? null;
-            // Reconstruct attached files from sourceCitations (persisted in the response)
             const restoredFiles = resp?.sourceCitations
               ? resp.sourceCitations.map((sc: { filename: string; fileUrl?: string }) => {
                   const ext = sc.filename.split(".").pop()?.toLowerCase() ?? "";
@@ -90,6 +114,18 @@ export function ChatView() {
           }
         }
         setTurns(reconstructed);
+        if (reconstructed.length > 0) setIsSetup(true);
+        const initialFlags: Record<number, Record<string, boolean>> = {};
+        for (let idx = 0; idx < reconstructed.length; idx++) {
+          const content = reconstructed[idx]?.response?.content ?? "";
+          const fieldNames = extractFieldNamesFromContent(content);
+          if (fieldNames.length > 0) {
+            const flags: Record<string, boolean> = {};
+            for (const field of fieldNames) flags[field] = false;
+            initialFlags[idx] = flags;
+          }
+        }
+        setStepConfirmations(initialFlags);
         setError(null);
       })
       .catch(() => {
@@ -111,7 +147,6 @@ export function ChatView() {
     setFilesLoading(true);
     const readPromises = Array.from(fileList).map(async (f): Promise<ChatRequestFile> => {
       let dataUrl: string | undefined;
-      // Read as data URL for transfer (base64 in JSON body, simpler than multipart)
       try {
         dataUrl = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
@@ -149,9 +184,33 @@ export function ChatView() {
     setPendingComments((prev) => prev.filter((c) => c.turnIndex !== turnIndex));
   }
 
-  const handleSend = useCallback(async (message: string) => {
-    // Allow sending without a skill — plain chat mode
+  const handleSetup = useCallback(async () => {
+    setSetupLoading(true);
+    setError(null);
+    try {
+      const setupBody: Record<string, unknown> = { sessionId };
+      if (activeSkillId) setupBody.skillName = activeSkillId;
+      if (attachedFiles.length > 0) setupBody.files = attachedFiles;
 
+      const setupResp = await fetch("/api/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(setupBody),
+      });
+      if (!setupResp.ok) {
+        const err = await setupResp.json().catch(() => ({ error: "Setup failed" }));
+        throw new Error(err.error || `Setup HTTP ${setupResp.status}`);
+      }
+      setIsSetup(true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Setup failed";
+      setError(msg);
+    } finally {
+      setSetupLoading(false);
+    }
+  }, [activeSkillId, sessionId, attachedFiles]);
+
+  const handleSend = useCallback(async (message: string, revisionFields?: string[]) => {
     const pendingTurn: ChatTurn = {
       userMessage: message,
       attachedFiles: [...attachedFiles],
@@ -165,26 +224,22 @@ export function ChatView() {
     setTurns((prev) => [...prev, pendingTurn]);
     setLoading(true);
     setError(null);
-    setSentFiles((prev) => [...prev, ...attachedFiles]);
     setAttachedFiles([]);
 
     try {
-      const filesToSend = pendingTurn.attachedFiles.length > 0 ? pendingTurn.attachedFiles : undefined;
       if (process.env.NODE_ENV === "development") {
-        const fileSummary = filesToSend?.map(f => `${f.name} (${f.size}B, ${f.type})`).join(", ") ?? "none";
-        console.error(`[chat-view] Sending to API — message: ${message.slice(0, 80)}, files: [${fileSummary}], skillName: ${activeSkillId}`);
+        console.log(`[chat-view] message: ${message.slice(0, 80)}, revisionFields: ${revisionFields?.join(",") ?? "none"}`);
+      }
+
+      const chatBody: Record<string, unknown> = { message, sessionId };
+      if (revisionFields && revisionFields.length > 0) {
+        chatBody.revisionFields = revisionFields;
       }
 
       const resp = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message,
-          skillName: activeSkillId,
-          sessionId,
-          files: filesToSend,
-          useTemplate,
-        } satisfies ChatRequest & { useTemplate?: boolean }),
+        body: JSON.stringify(chatBody),
       });
 
       if (!resp.ok) {
@@ -203,7 +258,6 @@ export function ChatView() {
 
         buffer += decoder.decode(value, { stream: true });
 
-        // Process complete SSE messages
         const messages = buffer.split("\n\n");
         buffer = messages.pop() ?? "";
 
@@ -263,16 +317,16 @@ export function ChatView() {
             });
           } else if (event.type === "done") {
             const doneEvent = event as { type: "done"; response: AgentResponse };
+            let updatedTurnIdx = -1;
             setTurns((prev) => {
               if (prev.length === 0) return prev;
+              updatedTurnIdx = prev.length - 1;
               return prev.map((t, i) => {
                 if (i !== prev.length - 1) return t;
-                // Preserve reasoning steps (from status events) + mark all complete
                 const steps = t.reasoningSteps.map((s) => ({
                   ...s,
                   body: s.body || "Complete",
                 }));
-                // Ensure tool calls from response are visible
                 return {
                   ...t,
                   response: doneEvent.response,
@@ -280,13 +334,17 @@ export function ChatView() {
                 };
               });
             });
+            if (updatedTurnIdx >= 0) {
+              const fieldNames = extractFieldNamesFromContent(doneEvent.response.content ?? "");
+              if (fieldNames.length > 0) {
+                initFlags(updatedTurnIdx, fieldNames);
+              }
+            }
           } else if (event.type === "status") {
             const statusEvent = event as { type: "status"; phase: string; stepTitle?: string };
             const phase = statusEvent.phase;
             setStepStatus(phase);
-            // Auto phases (compiling-report, computing-verdict) don't create reasoning steps
-            if (phase === "compiling-report" || phase === "computing-verdict") {
-              // Signal only — document panel shows the loading indicator
+            if (phase === "evaluating" || phase === "compiling-report" || phase === "computing-verdict") {
             } else if (phase.startsWith("step-")) {
               const stepNum = parseInt(phase.slice(5), 10);
               const stepTitle = statusEvent.stepTitle ?? `Step ${stepNum}`;
@@ -295,11 +353,9 @@ export function ChatView() {
                 return prev.map((t, i) => {
                   if (i !== prev.length - 1) return t;
                   const existing = t.reasoningSteps;
-                  // If step already exists, it might be re-running — mark it as running
                   if (existing.some((s) => s.stepNumber === stepNum)) {
-                    return t; // already present
+                    return t;
                   }
-                  // Mark all previous steps as complete
                   const updated = existing.map((s) => ({
                     ...s,
                     body: s.body || "Complete",
@@ -334,65 +390,106 @@ export function ChatView() {
     } finally {
       setLoading(false);
     }
-  }, [activeSkillId, sessionId, attachedFiles]);
-
-  function handleApprove(turnIndex: number) {
-    const turnResponse = turns[turnIndex]?.response;
-    if (!turnResponse?.lesson) {
-      // Nothing worth saving — record silently, no dialog
-      return;
-    }
-    setPendingLesson(turnResponse.lesson);
-    setShowEvolutionDialog(true);
-  }
+  }, [sessionId, attachedFiles]);
 
   function handleNewAssessment() {
     setTurns([]);
     setSessionId("session-" + Date.now());
-    setSentFiles([]);
+    setLoading(false);
+    setSetupLoading(false);
+    setIsSetup(false);
+    setStepStatus(null);
     setError(null);
     setAttachedFiles([]);
+    setPendingComments([]);
+    setStepConfirmations({});
+    setShowLearningBanner(false);
+    setShowEvolutionDialog(false);
+    setPendingLesson(null);
   }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* Top bar */}
-      <div className="h-12 shrink-0 flex items-center px-5 border-b border-border-default">
-        <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">
-          Compliance Assessment
+      <div className="h-12 shrink-0 flex items-center px-5 border-b border-border-default"
+        style={{ background: "var(--color-bg-card)" }}
+      >
+        <span className="text-xs font-semibold uppercase tracking-wider"
+          style={{ color: "var(--color-text-muted)", fontFamily: "'JetBrains Mono', monospace" }}
+        >
+          clausr.ai
         </span>
         {activeSkillName && (
-          <span className="ml-4 text-xs text-accent-blue px-2.5 py-0.5 rounded"
-            style={{ background: "var(--color-accent-blue-bg)" }}
+          <span className="ml-4 text-xs px-2.5 py-0.5 rounded"
+            style={{
+              color: "var(--color-accent-blue)",
+              background: "var(--color-accent-blue-bg)",
+              fontFamily: "'JetBrains Mono', monospace",
+            }}
           >
             {activeSkillName}
           </span>
         )}
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-2">
           {latestResponse && (
             <>
-              <span className="text-xs text-text-muted px-2.5 py-0.5 rounded"
-                style={{ background: "var(--color-border-default)" }}
+              <span className="text-xs px-2.5 py-0.5 rounded"
+                style={{
+                  color: "var(--color-text-muted)",
+                  background: "var(--color-bg-dark)",
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}
               >
                 Round {latestResponse.round}
               </span>
-              <span className="text-xs text-accent-blue px-2.5 py-0.5 rounded"
-                style={{ background: "var(--color-accent-blue-bg)" }}
+              <span className="text-xs px-2.5 py-0.5 rounded"
+                style={{
+                  color: "var(--color-accent-blue)",
+                  background: "var(--color-accent-blue-bg)",
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}
               >
-                Session #{sessionId.slice(-4)}
+                #{sessionId.slice(-4)}
               </span>
             </>
           )}
+          <div className="w-px h-4 mx-1" style={{ background: "var(--color-border-default)" }} />
           <button
-            onClick={handleNewAssessment}
-            className="h-7 px-3 text-xs cursor-pointer rounded-lg"
+            onClick={() => setLeftPanelOpen((v) => !v)}
+            className="h-7 px-2.5 text-xs cursor-pointer rounded-lg transition-colors"
             style={{
-              background: "transparent",
-              border: "1px solid var(--color-border-input)",
-              color: "var(--color-text-body)",
+              background: leftPanelOpen ? "var(--color-accent-blue-bg)" : "transparent",
+              border: "1px solid var(--color-border-default)",
+              color: leftPanelOpen ? "var(--color-accent-blue)" : "var(--color-text-muted)",
+              fontFamily: "'JetBrains Mono', monospace",
             }}
           >
-            + New assessment
+            Sources
+          </button>
+
+          <button
+            onClick={() => setRightPanelOpen((v) => !v)}
+            className="h-7 px-2.5 text-xs cursor-pointer rounded-lg transition-colors"
+            style={{
+              background: rightPanelOpen ? "var(--color-accent-blue-bg)" : "transparent",
+              border: "1px solid var(--color-border-default)",
+              color: rightPanelOpen ? "var(--color-accent-blue)" : "var(--color-text-muted)",
+              fontFamily: "'JetBrains Mono', monospace",
+            }}
+          >
+            Audit Trail
+          </button>
+
+          <button
+            onClick={handleNewAssessment}
+            className="h-7 px-3 text-xs cursor-pointer rounded-lg font-medium"
+            style={{
+              background: "var(--color-accent-blue)",
+              border: "1px solid var(--color-accent-blue)",
+              color: "#fff",
+            }}
+          >
+            + New
           </button>
         </div>
       </div>
@@ -405,115 +502,64 @@ export function ChatView() {
       {/* Error banner */}
       {error && (
         <div className="flex items-center gap-2 shrink-0 px-4 py-2 text-xs"
-          style={{ background: "#f8514911", borderBottom: "1px solid #f8514933", color: "var(--color-danger)" }}
+          style={{ background: "rgba(196, 113, 122, 0.08)", borderBottom: "1px solid rgba(196, 113, 122, 0.18)", color: "var(--color-danger)" }}
         >
           <span>⚠️ {error}</span>
           <button onClick={() => setError(null)} className="ml-auto cursor-pointer bg-transparent border-none" style={{ color: "var(--color-danger)" }}>✕</button>
         </div>
       )}
 
-      {/* Three panels */}
+      {/* Three panels: FileUpload | Document + ChatInput | Reasoning */}
       <div className="flex-1 flex min-h-0">
-        <div className="flex-1 min-h-0 border-r border-border-default">
-          <DocumentPanel
-            turns={turns}
-            loading={loading}
-            stepStatus={stepStatus}
+        {leftPanelOpen && (
+          <FileUploadPanel
+            attachedFiles={attachedFiles}
+            filesLoading={filesLoading}
+            setupDone={isSetup}
+            setupLoading={setupLoading}
             skillName={activeSkillName}
-            sessionId={sessionId}
-            template={template}
-            clauseTexts={latestResponse?.clauseTexts}
-            pendingComments={pendingComments}
-            onAddComment={(turnIndex, selectedText, comment, occurrenceIndex) =>
-              addComment(turnIndex, selectedText, comment, occurrenceIndex)}
-            onRevise={(turnIndex) => {
-              const comments = pendingComments.filter((c) => c.turnIndex === turnIndex);
-              if (comments.length > 0) {
-                const feedback = comments
-                  .map((c) => `- Selected: "${c.selectedText.slice(0, 120)}"\n  Comment: ${c.comment}`)
-                  .join("\n");
-                handleSend(`Revise the assessment based on the following feedback:\n${feedback}`);
-                clearCommentsForTurn(turnIndex);
-              } else {
-                handleSend("Please revise the assessment based on the findings above.");
-              }
-            }}
+            onFileSelect={handleFileSelect}
+            onRemoveFile={removeFile}
+            onSetup={handleSetup}
+            onFormatSize={formatFileSize}
           />
+        )}
+        <div className="flex-1 flex flex-col min-h-0 border-r border-border-default">
+          <div className="flex-1 min-h-0">
+            <DocumentPanel
+              turns={turns}
+              loading={loading}
+              stepStatus={stepStatus}
+              skillName={activeSkillName}
+              clauseTexts={latestResponse?.clauseTexts}
+              pendingComments={pendingComments}
+              onAddComment={(turnIndex, selectedText, comment, occurrenceIndex) =>
+                addComment(turnIndex, selectedText, comment, occurrenceIndex)}
+              onRevise={(turnIndex, revisionFields) => {
+                const comments = pendingComments.filter((c) => c.turnIndex === turnIndex);
+                const feedback = comments.length > 0
+                  ? "Revise the assessment based on the following feedback:\n" +
+                    comments.map((c) => `- Selected: "${c.selectedText.slice(0, 120)}"\n  Comment: ${c.comment}`).join("\n")
+                  : "Please revise the assessment.";
+                clearCommentsForTurn(turnIndex);
+                handleSend(feedback, revisionFields);
+              }}
+              revisionFlags={stepConfirmations[turns.length - 1] ?? {}}
+              onToggleFlag={handleToggleFlag}
+            />
+          </div>
+          <div className="shrink-0 px-4 py-3 border-t border-border-default">
+            <ChatInput onSend={handleSend} loading={loading} isSetup={isSetup} />
+          </div>
         </div>
-        <div
-          className="w-[340px] shrink-0 p-5"
-          style={{ background: "var(--color-bg-dark)" }}
-        >
-          <ReasoningPanel turns={turns} loading={loading} stepStatus={stepStatus} sentFiles={sentFiles} />
-        </div>
-      </div>
-
-      {/* Bottom bar — always visible */}
-      <div className="shrink-0 border-t border-border-default"
-        style={{ background: "var(--color-bg-card)" }}
-      >
-        {/* Attachment strip above textbar */}
-        {(attachedFiles.length > 0 || filesLoading) && (
-          <div className="flex items-center gap-2 px-5 py-2 overflow-x-auto">
-            {filesLoading && (
-              <div className="flex items-center gap-1.5 text-xs rounded shrink-0" style={{ padding: "4px 10px", color: "var(--color-text-muted)" }}>
-                <span>⏳ Reading files...</span>
-              </div>
-            )}
-            {attachedFiles.map((f) => (
-              <div
-                key={f.name}
-                className="flex items-center gap-1.5 text-xs rounded shrink-0"
-                style={{
-                  color: "var(--color-text-muted)",
-                  background: "var(--color-border-default)",
-                  padding: "4px 10px",
-                }}
-              >
-                <span style={{ color: "var(--color-text-body)" }}>{f.name}</span>
-                <span style={{ color: "var(--color-text-muted)" }}>({formatFileSize(f.size)})</span>
-                <button onClick={() => removeFile(f.name)} className="text-text-muted cursor-pointer bg-transparent border-none text-xs">✕</button>
-              </div>
-            ))}
+        {rightPanelOpen && (
+          <div
+            className="w-[340px] shrink-0"
+            style={{ background: "var(--color-bg-dark)" }}
+          >
+            <ReasoningPanel turns={turns} loading={loading} stepStatus={stepStatus} />
           </div>
         )}
-        <div className="h-16 flex items-center px-5 gap-3">
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="image/*,.pdf,.docx"
-            onChange={handleFileSelect}
-            style={{ display: "none" }}
-          />
-          <button
-            title="Attach files"
-            className="w-9 h-9 flex items-center justify-center shrink-0 rounded-lg text-base cursor-pointer"
-            style={{
-              background: "transparent",
-              border: "1px dashed var(--color-border-input)",
-              color: "var(--color-text-muted)",
-            }}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            📎
-          </button>
-          {template && (
-            <button
-              title={useTemplate ? "Using template — click to disable" : "Not using template — click to enable"}
-              className="h-7 px-2 text-[10px] font-medium rounded cursor-pointer shrink-0"
-              style={{
-                background: useTemplate ? "var(--color-accent-blue-bg)" : "transparent",
-                border: useTemplate ? "1px solid var(--color-accent-blue-border)" : "1px solid var(--color-border-input)",
-                color: useTemplate ? "var(--color-accent-blue)" : "var(--color-text-muted)",
-              }}
-              onClick={() => setUseTemplate(!useTemplate)}
-            >
-              {useTemplate ? "📋 Template" : "📋 Chat"}
-            </button>
-          )}
-          <ChatInput onSend={handleSend} loading={loading} />
-        </div>
       </div>
 
       {/* Evolution confirm dialog */}
@@ -554,7 +600,6 @@ export function ChatView() {
                 }),
               });
             } catch {
-              // Silent — dismissal is non-critical
             }
           }
           setShowEvolutionDialog(false);

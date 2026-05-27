@@ -1,7 +1,7 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
-import type { LanguageModelV3 } from "@ai-sdk/provider";
-import { getSetting } from "@/lib/agent/memory/database";
+import type { LanguageModel } from "ai";
+import { getSetting } from "@/lib/agent/shared/memory/database";
 
 export type ProviderName = "openai" | "anthropic" | "deepseek";
 
@@ -18,7 +18,7 @@ const DEFAULT_CONFIGS: Record<ProviderName, { baseURL: string }> = {
   deepseek: { baseURL: "https://api.deepseek.com" },
 };
 
-export function getProvider(): ProviderName {
+function getProvider(): ProviderName {
   // Check DB override first, then fall back to env var
   const dbProvider = getSetting("llm_provider");
   const raw = (dbProvider ?? process.env.LLM_PROVIDER ?? "openai").toLowerCase();
@@ -83,7 +83,7 @@ function deepseekFetch(originalFetch: typeof fetch): typeof fetch {
   };
 }
 
-export function createModel(): LanguageModelV3 {
+export function createModel(): LanguageModel {
   const config = getProviderConfig();
 
   if (config.provider === "deepseek") {

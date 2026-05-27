@@ -5,26 +5,23 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import type { Components } from "react-markdown";
-import { SourceCitationCard } from "@/components/source-citation-card";
-import type { HighlightChunk } from "@/components/source-citation-card";
 import { InlineCommentThread } from "@/components/inline-comment";
+import type { HighlightChunk } from "@/components/source-citation-card";
 import { CommentPopover } from "@/components/comment-popover";
+import type { ChatTurn } from "@/types/agent-types";
 import { DownloadDropdown } from "@/components/download-dropdown";
-import type { Citation } from "@/lib/agent/types";
-import type { ChatTurn } from "@/lib/agent/turn-types";
-import type { ReportTemplate } from "@/lib/agent/template-types";
 
 interface DocumentPanelProps {
   turns: ChatTurn[];
   loading: boolean;
   stepStatus?: string | null;
   skillName?: string;
-  sessionId?: string;
-  template?: ReportTemplate | null;
   clauseTexts?: Record<string, string>;
   pendingComments?: { selectedText: string; comment: string; turnIndex: number; occurrenceIndex: number }[];
   onAddComment?: (turnIndex: number, selectedText: string, comment: string, occurrenceIndex: number) => void;
-  onRevise?: (turnIndex: number) => void;
+  onRevise?: (turnIndex: number, revisionFields: string[]) => void;
+  revisionFlags?: Record<string, boolean>;
+  onToggleFlag?: (turnIndex: number, field: string, flagged: boolean) => void;
 }
 
 export function DocumentPanel({
@@ -32,12 +29,12 @@ export function DocumentPanel({
   loading,
   stepStatus,
   skillName,
-  sessionId,
-  template,
   clauseTexts,
   pendingComments,
   onAddComment,
   onRevise,
+  revisionFlags,
+  onToggleFlag,
 }: DocumentPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -114,9 +111,9 @@ export function DocumentPanel({
     return (
       <div
         className="flex items-center justify-center h-full"
-        style={{ color: "var(--color-amber)", fontSize: 13 }}
+        style={{ color: "var(--color-text-muted)", fontSize: 13 }}
       >
-        Select a skill from the sidebar and type a question to begin.
+        Select a skill and type a question to begin.
       </div>
     );
   }
@@ -130,36 +127,22 @@ export function DocumentPanel({
             turnIndex={i}
             turn={turn}
             skillName={skillName}
-            sessionId={sessionId}
-            template={template}
             clauseTexts={clauseTexts}
             pendingComments={pendingComments?.filter((c) => c.turnIndex === i)}
             onMouseUp={(e) => handleMouseUp(e, i)}
             onRevise={onRevise}
+            revisionFlags={revisionFlags}
+            onToggleFlag={onToggleFlag}
           />
         ) : null
       )}
 
       {loading && turns.length > 0 && !turns[turns.length - 1].response && (
-        <div className="flex items-center justify-center py-8">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-6 h-6 border-2 border-accent-blue border-t-transparent rounded-full animate-spin" />
-            <span style={{ color: "var(--color-text-muted)", fontSize: 13 }}>
-              {formatLoadingMessage(stepStatus)}
-            </span>
-          </div>
-        </div>
+        <ReportSkeleton stepStatus={stepStatus} />
       )}
 
       {loading && turns.length === 0 && (
-        <div className="flex items-center justify-center h-full">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-6 h-6 border-2 border-accent-blue border-t-transparent rounded-full animate-spin" />
-            <span style={{ color: "var(--color-text-muted)", fontSize: 13 }}>
-              {formatLoadingMessage(stepStatus)}
-            </span>
-          </div>
-        </div>
+        <ReportSkeleton stepStatus={stepStatus} />
       )}
 
       {turns.length > 0 && turns[turns.length - 1].error && (
@@ -167,7 +150,7 @@ export function DocumentPanel({
           className="p-4 rounded-lg mt-4"
           style={{
             border: "1px solid var(--color-danger)",
-            background: "#f8514911",
+            background: "rgba(196, 113, 122, 0.08)",
             color: "var(--color-danger)",
           }}
         >
@@ -201,62 +184,121 @@ function formatLoadingMessage(stepStatus?: string | null): string {
   }
 }
 
-function findHighlightChunk(
-  sourceCitation: { chunks?: { id: string; text: string; bbox?: HighlightChunk["bbox"]; wordBoxes?: HighlightChunk["wordBoxes"]; pageNumber?: number }[] } | undefined,
-  claims: { chunkRef?: string; sourceRef?: number }[] | undefined,
-  ref: number,
-): HighlightChunk | undefined {
-  if (!claims || !sourceCitation?.chunks) return undefined;
-  const matchingClaim = claims.find(c => {
-    if (c.chunkRef) {
-      const m = c.chunkRef.match(/^S(\d+)\.(.+)$/);
-      return m && parseInt(m[1], 10) === ref;
+function ReportSkeleton({ stepStatus }: { stepStatus?: string | null }) {
+  return (
+    <div
+      className="mb-6 rounded-lg overflow-hidden animate-pulse"
+      style={{
+        border: "1px solid var(--color-border-default)",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+        background: "#ffffff",
+      }}
+    >
+      <div className="px-6 py-4" style={{ background: "var(--color-bg-dark)", borderBottom: "1px solid var(--color-border-default)" }}>
+        <div className="flex items-center justify-between mb-2">
+          <div className="h-4 w-48 rounded" style={{ background: "var(--color-border-default)" }} />
+          <div className="h-4 w-16 rounded" style={{ background: "var(--color-border-default)" }} />
+        </div>
+        <div className="h-3 w-32 rounded" style={{ background: "var(--color-border-default)" }} />
+      </div>
+      <div className="px-6 py-5 space-y-4">
+        <div className="h-3 w-full rounded" style={{ background: "var(--color-border-default)" }} />
+        <div className="h-3 w-3/4 rounded" style={{ background: "var(--color-border-default)" }} />
+        <div className="h-3 w-5/6 rounded" style={{ background: "var(--color-border-default)" }} />
+        <div className="h-3 w-2/3 rounded" style={{ background: "var(--color-border-default)" }} />
+        <div className="h-3 w-full rounded" style={{ background: "var(--color-border-default)" }} />
+        <div className="h-3 w-4/5 rounded" style={{ background: "var(--color-border-default)" }} />
+      </div>
+      <div className="flex items-center justify-center py-4" style={{ borderTop: "1px solid var(--color-border-default)", background: "var(--color-bg-dark)" }}>
+        <span style={{ color: "var(--color-text-muted)", fontSize: 13 }}>
+          {formatLoadingMessage(stepStatus)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+interface Section {
+  header: string;
+  body: string;
+}
+
+function parseSections(content: string): Section[] {
+  const sections: Section[] = [];
+  const headerRegex = /^### (.+)$/gm;
+  let lastIndex = 0;
+  let lastHeader = "";
+  let match: RegExpExecArray | null;
+
+  while ((match = headerRegex.exec(content)) !== null) {
+    if (lastHeader) {
+      sections.push({
+        header: lastHeader,
+        body: content.slice(lastIndex, match.index).replace(/^### .+\n?/, "").trim(),
+      });
+    } else if (match.index > 0) {
+      sections.push({ header: "", body: content.slice(0, match.index).trim() });
     }
-    return c.sourceRef === ref;
-  });
-  if (matchingClaim?.chunkRef) {
-    const chunkMatch = matchingClaim.chunkRef.match(/^S\d+\.(.+)$/);
-    const chunkId = chunkMatch?.[1];
-    const chunk = chunkId ? sourceCitation.chunks.find(ch => ch.id === chunkId) : undefined;
-    if (chunk) {
-      return {
-        id: chunk.id,
-        text: chunk.text,
-        bbox: chunk.bbox,
-        wordBoxes: chunk.wordBoxes,
-        pageNumber: chunk.pageNumber,
-      };
-    }
+    lastHeader = match[1].trim();
+    lastIndex = match.index;
   }
-  return undefined;
+
+  if (lastHeader) {
+    sections.push({
+      header: lastHeader,
+      body: content.slice(lastIndex).replace(/^### .+\n?/, "").trim(),
+    });
+  } else if (content.trim()) {
+    sections.push({ header: "", body: content.trim() });
+  }
+
+  return sections;
+}
+
+function findHighlightChunk(
+  sourceCitation: { chunks?: { id: string; text: string; html?: string; bbox?: HighlightChunk["bbox"]; wordBoxes?: HighlightChunk["wordBoxes"]; pageNumber?: number; pageWidth?: number; pageHeight?: number }[] } | undefined,
+  claims: { sourceCitation?: string }[] | undefined,
+  ref: string,
+): HighlightChunk | undefined {
+  if (!sourceCitation?.chunks) return undefined;
+  const chunkId = ref.includes(".") ? ref.split(".")[1] : undefined;
+  if (!chunkId) return undefined;
+  const chunk = sourceCitation.chunks.find(ch => ch.id === chunkId);
+  if (!chunk) return undefined;
+  return {
+    id: chunk.id,
+    text: chunk.text,
+    html: chunk.html,
+    bbox: chunk.bbox,
+    wordBoxes: chunk.wordBoxes,
+    pageNumber: chunk.pageNumber,
+    pageWidth: chunk.pageWidth,
+    pageHeight: chunk.pageHeight,
+  };
 }
 
 function DocumentCard({
   turn,
   turnIndex,
   skillName,
-  sessionId,
-  template,
   clauseTexts,
   pendingComments,
   onMouseUp,
   onRevise,
+  revisionFlags,
+  onToggleFlag,
 }: {
   turn: ChatTurn;
   turnIndex: number;
   skillName?: string;
-  sessionId?: string;
-  template?: ReportTemplate | null;
   clauseTexts?: Record<string, string>;
   pendingComments?: { selectedText: string; comment: string; occurrenceIndex: number }[];
   onMouseUp?: (e: React.MouseEvent) => void;
-  onRevise?: (turnIndex: number) => void;
+  onRevise?: (turnIndex: number, revisionFields: string[]) => void;
+  revisionFlags?: Record<string, boolean>;
+  onToggleFlag?: (turnIndex: number, field: string, flagged: boolean) => void;
 }) {
   const { response } = turn;
-  if (!response) return null;
-
-  // Extract for use in click handlers (narrowed after null guard)
-  const sourceCitations = response.sourceCitations;
 
   const [activeCitation, setActiveCitation] = useState<{
     regulation: string;
@@ -266,7 +308,7 @@ function DocumentCard({
   } | null>(null);
 
   const [activeSourceCitation, setActiveSourceCitation] = useState<{
-    ref: number;
+    ref: string;
     fileId?: string;
     filename: string;
     fileUrl?: string;
@@ -274,25 +316,30 @@ function DocumentCard({
     text: string;
     pageNumber?: number;
     highlightChunk?: HighlightChunk;
-    position: { top: number; left: number };
   } | null>(null);
 
-  // Normalize tables, then enhance citations to inline HTML, then apply highlights
   const normalizedContent = useMemo(
-    () => normalizeTables(response.content),
-    [response.content]
-  );
-  const enhancedContent = useMemo(
-    () => enhanceCitations(normalizedContent, response.citations, sourceCitations),
-    [normalizedContent, response.citations, sourceCitations]
+    () => (response ? normalizeTables(response.content) : ""),
+    [response]
   );
   const highlightedContent = useMemo(
-    () => applyHighlights(enhancedContent, pendingComments),
-    [enhancedContent, pendingComments]
+    () => (normalizedContent ? applyHighlights(normalizedContent, pendingComments) : ""),
+    [normalizedContent, pendingComments]
   );
+
+  const sections = useMemo(
+    () => (highlightedContent ? parseSections(highlightedContent) : []),
+    [highlightedContent]
+  );
+
+  if (!response) return null;
+
+  // Extract for use in click handlers (narrowed after null guard)
+  const sourceCitations = response.sourceCitations;
 
   function handleContentClick(e: React.MouseEvent) {
     const target = e.target as HTMLElement;
+
     const cite = target.closest("cite.citation-marker") as HTMLElement | null;
     if (cite) {
       const regulation = cite.getAttribute("data-regulation") ?? "";
@@ -307,28 +354,29 @@ function DocumentCard({
         if (t) clauseTextsList.push(`§${cl.trim()}: ${t}`);
       }
       const text = clauseTextsList.length > 0 ? clauseTextsList.join("\n\n") : "Clause text not available.";
+      // Clamp popover position so it doesn't overflow the viewport
+      const popoverW = 360;
+      const popoverH = 300;
+      const gap = 6;
+      const left = Math.max(gap, Math.min(rect.left - 100, window.innerWidth - popoverW - gap));
+      const top = rect.bottom + gap + popoverH > window.innerHeight
+        ? Math.max(gap, rect.top - popoverH - gap)
+        : rect.bottom + gap;
       setActiveSourceCitation(null);
       setActiveCitation({
         regulation,
         clause,
         text,
-        position: {
-          top: rect.bottom + 6,
-          left: Math.max(10, rect.left - 100),
-        },
+        position: { top, left },
       });
     } else {
       const scite = target.closest("cite.source-citation-marker") as HTMLElement | null;
       if (scite) {
-        const ref = parseInt(scite.getAttribute("data-source-ref") ?? "0", 10);
+        const ref = scite.getAttribute("data-source-citation") ?? "";
         const sc = sourceCitations?.find(r => r.ref === ref);
         const filename = sc?.filename ?? "Unknown file";
         const excerpt = sc?.keyExcerpt ?? "";
         const text = sc?.extractedText ?? "";
-        const rect = scite.getBoundingClientRect();
-
-        const highlightChunk = findHighlightChunk(sc, response?.claims, ref);
-
         setActiveCitation(null);
         setActiveSourceCitation({
           ref,
@@ -337,12 +385,8 @@ function DocumentCard({
           fileUrl: sc?.fileUrl,
           excerpt,
           text,
+          highlightChunk: findHighlightChunk(sc, response?.claims, ref),
           pageNumber: sc?.pageNumber,
-          highlightChunk,
-          position: {
-            top: rect.bottom + 6,
-            left: Math.max(10, rect.left - 100),
-          },
         });
       } else {
         setActiveCitation(null);
@@ -353,44 +397,40 @@ function DocumentCard({
 
   return (
     <div
-      className="mb-6 rounded-lg overflow-hidden"
+      className="mb-6 rounded-lg overflow-hidden animate-fade-in"
+      onClick={handleContentClick}
       onMouseUp={onMouseUp}
       style={{
         border: "1px solid var(--color-border-default)",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
-        background: "var(--color-bg-card)",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+        background: "#ffffff",
       }}
     >
       {/* Card header */}
       <div
         className="px-6 py-4"
         style={{
-          borderBottom: "2px solid var(--color-border-default)",
+          borderBottom: "1px solid var(--color-border-default)",
           background: "var(--color-bg-dark)",
         }}
       >
         <div className="flex items-center justify-between mb-1">
-          <span className="text-sm font-bold" style={{ color: "var(--color-text-header)" }}>
+          <span className="font-bold" style={{ color: "var(--color-text-header)", fontFamily: "'Instrument Serif', Georgia, serif", fontSize: "1.15rem", lineHeight: 1.3 }}>
             {skillName ? `${skillName} Compliance Report` : "Compliance Report"}
           </span>
-          <span
-            className="text-[10px] font-semibold px-2 py-0.5 rounded"
-            style={{
-              color: response.verdict === "FAIL" ? "var(--color-danger)" : "var(--color-success)",
-              background: response.verdict === "FAIL" ? "#f8514918" : "#3fb95018",
-            }}
-          >
+          <span className="text-2xs font-semibold px-2 py-0.5 rounded"
+            style={{ background: "var(--color-accent-blue-bg)", color: "var(--color-accent-blue)", fontFamily: "'JetBrains Mono', monospace" }}>
             Round {response.round}/5
           </span>
         </div>
-        <div className="flex items-center gap-3 text-[11px]" style={{ color: "var(--color-text-muted)" }}>
+        <div className="flex items-center gap-3 text-2xs" style={{ color: "var(--color-text-muted)", fontFamily: "'JetBrains Mono', monospace" }}>
           <span>{new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
           <span>·</span>
           <span>Examiner: AI</span>
-          {sessionId && (
+          {response.sessionId && (
             <>
               <span>·</span>
-              <span>Ref: #{sessionId.slice(-4)}</span>
+              <span>Ref: #{response.sessionId.slice(-4)}</span>
             </>
           )}
         </div>
@@ -402,13 +442,13 @@ function DocumentCard({
           className="px-6 py-3"
           style={{
             borderBottom: "1px solid var(--color-border-default)",
-            background: "#f8514911",
+            background: "var(--color-amber-bg)",
           }}
         >
           <div className="flex items-start gap-2">
-            <span style={{ color: "var(--color-danger)", fontSize: 14, lineHeight: 1 }}>⚠️</span>
+            <span style={{ color: "var(--color-amber)", fontSize: 14, lineHeight: 1 }}>⚠️</span>
             <div>
-              <div className="text-xs font-semibold mb-1" style={{ color: "var(--color-danger)" }}>
+              <div className="text-xs font-semibold mb-1" style={{ color: "var(--color-amber)" }}>
                 Validation Issues
               </div>
               <ul className="m-0 p-0 list-none">
@@ -427,85 +467,80 @@ function DocumentCard({
       <div className="px-6 py-5" data-card-body="true" onClick={handleContentClick}>
         <style>{citationStyles}</style>
 
-        {template && response.sections ? (
-          // ── Template-aware rendering: iterate template sections ──
-          template.sections.map((section) => {
-            const sectionData = response.sections?.[section.id];
-
+        {/* Narrative report from LLM analysis */}
+        {revisionFlags ? (
+          sections.map((sec, i) => {
+            if (!sec.header) {
+              return (
+                <ReactMarkdown key={i} remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={markdownComponents}>
+                  {sec.body}
+                </ReactMarkdown>
+              );
+            }
+            const fieldName = sec.header;
+            const checked = revisionFlags?.[fieldName] ?? false;
             return (
-              <div key={section.id} style={{ marginBottom: 20 }}>
-                {/* Section header */}
-                <div
-                  className="inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded mb-3"
-                  style={{ color: "var(--color-text-muted)", background: "var(--color-border-default)" }}
-                >
-                  {section.title}
+              <div key={i}>
+                <div className="revision-row" style={{ display: "flex", gap: 10, alignItems: "flex-start", marginTop: 24, cursor: "pointer" }}
+                  onClick={() => onToggleFlag?.(turnIndex, fieldName, !checked)}>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, marginTop: 3, color: checked ? "#E2A6A9" : "#2944AB" }}>
+                    <path d="M4 2v12M4 2l8 3-8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    {checked && <circle cx="4" cy="2" r="1.5" fill="currentColor"/>}
+                  </svg>
+                  <span style={{ fontSize: 20, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: checked ? "#E2A6A9" : "#2944AB" }}>
+                    {humanize(fieldName)}
+                  </span>
                 </div>
-
-                {section.type === "fields" && section.fields && typeof sectionData === "object" && sectionData ? (
-                  <table className="w-full border-collapse text-xs mt-1 mb-3">
-                    <tbody>
-                      {section.fields.map((f) => (
-                        <tr key={f.id} style={{ borderBottom: "1px solid var(--color-border-default)" }}>
-                          <td className="py-2 pr-4" style={{ color: "var(--color-text-muted)", width: 180, whiteSpace: "nowrap" as const }}>
-                            {f.label}
-                          </td>
-                          <td className="py-2" style={{ color: "var(--color-text-body)", fontWeight: 500 }}>
-                            <span dangerouslySetInnerHTML={{ __html: applyHighlights(enhanceCitations((sectionData as Record<string, string>)[f.id] ?? "—", response.citations, sourceCitations), pendingComments) }} />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : null}
-
-                {section.type === "markdown" && typeof sectionData === "string" ? (
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    rehypePlugins={[rehypeRaw]}
-                    components={markdownComponents}
-                  >
-                    {applyHighlights(enhanceCitations(sectionData, response.citations, sourceCitations), pendingComments)}
-                  </ReactMarkdown>
-                ) : null}
-
-                {section.type === "table" && typeof sectionData === "string" ? (
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    rehypePlugins={[rehypeRaw]}
-                    components={markdownComponents}
-                  >
-                    {applyHighlights(enhanceCitations(sectionData, response.citations, sourceCitations), pendingComments)}
-                  </ReactMarkdown>
-                ) : null}
-
-                {section.type === "verdict" ? (
-                  <div className="p-4 rounded-lg mt-2" style={{ border: "1px solid var(--color-border-default)", background: "var(--color-bg-card)" }}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold uppercase" style={{ color: response.verdict === "FAIL" ? "var(--color-danger)" : "var(--color-success)" }}>
-                        {response.verdict === "FAIL" ? "✗ FAIL" : "✓ PASS"}
-                      </span>
-                      {response.confidence ? (
-                        <ConfidenceBadge confidence={response.confidence} />
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-
-                {/* Thin section divider */}
-                <div style={{ height: 1, background: "var(--color-border-default)", marginTop: 16 }} />
+                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={markdownComponents}>
+                  {sec.body}
+                </ReactMarkdown>
               </div>
             );
           })
         ) : (
-          // ── Fallback: render raw markdown (current behavior) ──
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeRaw]}
-            components={markdownComponents}
-          >
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={markdownComponents}>
             {highlightedContent}
           </ReactMarkdown>
+        )}
+
+        {/* Findings section (FAIL-only) — no checkboxes, display only */}
+        {response.sections?.findings !== undefined && typeof response.sections.findings === "object" && (
+          <div style={{ marginTop: 32, marginBottom: 20 }}>
+            <div
+              className="inline-block text-2xs uppercase tracking-wider px-2 py-0.5 rounded mb-3"
+              style={{ color: "var(--color-text-muted)", background: "var(--color-border-default)" }}
+            >
+              Findings
+            </div>
+            {(Object.entries(response.sections.findings) as [string, string][]).length === 0 ? (
+              <div className="text-xs" style={{ color: "var(--color-text-muted)", marginTop: 8 }}>
+                All checks passed — no findings to report.
+              </div>
+            ) : (
+              <table className="w-full border-collapse text-xs mt-1 mb-3">
+                <tbody>
+                  {(Object.entries(response.sections.findings) as [string, string][]).map(([field, value]) => (
+                    <tr key={field} style={{ borderBottom: "1px solid var(--color-border-default)" }}>
+                      <td className="py-2 pr-4" style={{ color: "var(--color-text-muted)", width: 180, whiteSpace: "nowrap" as const }}>
+                        {humanize(field)}
+                      </td>
+                      <td className="py-2" style={{ color: "var(--color-text-body)", fontWeight: 500 }}>
+                        <span dangerouslySetInnerHTML={{ __html: applyHighlights(value, pendingComments) }} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <div style={{ height: 1, background: "var(--color-border-default)", marginTop: 16 }} />
+          </div>
+        )}
+
+        {/* Confidence badge */}
+        {response.confidence && (
+          <div className="flex justify-end mt-4">
+            <ConfidenceBadge confidence={response.confidence} />
+          </div>
         )}
 
         {/* Citation popover */}
@@ -538,99 +573,44 @@ function DocumentCard({
           </>
         )}
 
-        {/* Source citation popover */}
+        {/* Source citation panel — centered, not full-screen */}
         {activeSourceCitation && (
           <>
-            <div className="fixed inset-0 z-[100]" onClick={() => setActiveSourceCitation(null)} />
+            <div className="fixed inset-0 z-[100] bg-black/10" onClick={() => setActiveSourceCitation(null)} />
             <div
-              className="fixed z-[101] rounded-lg shadow-lg"
-              style={{
-                top: activeSourceCitation.position.top,
-                left: activeSourceCitation.position.left,
-                width: 380,
-                background: "var(--color-bg-card)",
-                border: "1px solid var(--color-amber-border)",
-              }}
+              className="fixed z-[101] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] max-w-3xl max-h-[85vh] flex flex-col rounded-xl shadow-2xl overflow-hidden"
+              style={{ background: "var(--color-bg-card)" }}
             >
               <div
-                className="flex items-center justify-between px-4 py-3"
+                className="flex items-center justify-between px-5 py-3 flex-shrink-0"
                 style={{ borderBottom: "1px solid var(--color-border-default)" }}
               >
-                <span className="text-xs font-semibold" style={{ color: "var(--color-text-header)" }}>
+                <span className="text-sm font-semibold" style={{ color: "var(--color-text-header)" }}>
                   Source: {activeSourceCitation.filename}
                   {activeSourceCitation.highlightChunk && ` — Chunk ${activeSourceCitation.highlightChunk.id}`}
+                  {activeSourceCitation.pageNumber && ` (Page ${activeSourceCitation.pageNumber})`}
                 </span>
-                <button onClick={() => setActiveSourceCitation(null)} className="text-text-muted cursor-pointer text-base bg-transparent border-none">✕</button>
+                <button onClick={() => setActiveSourceCitation(null)} className="text-xl cursor-pointer bg-transparent border-none" style={{ color: "var(--color-text-muted)", lineHeight: 1 }}>✕</button>
               </div>
-              {/* Image preview with highlight */}
-              {activeSourceCitation.highlightChunk && activeSourceCitation.fileUrl && (
-                <SourceCitationPopoverImage
-                  fileUrl={activeSourceCitation.fileUrl}
-                  filename={activeSourceCitation.filename}
-                  highlightChunk={activeSourceCitation.highlightChunk}
+              <div className="flex-1 overflow-y-auto p-5">
+                {/* Visual preview with chunk highlighted — format-agnostic, driven by available data */}
+                {activeSourceCitation.highlightChunk && activeSourceCitation.fileUrl && (
+                  <SourceCitationFullPreview
+                    fileUrl={activeSourceCitation.fileUrl}
+                    filename={activeSourceCitation.filename}
+                    highlightChunk={activeSourceCitation.highlightChunk}
+                  />
+                )}
+                {/* Full extracted text with chunk highlighted */}
+                <SourceCitationText
+                  fullText={activeSourceCitation.text}
+                  chunkText={activeSourceCitation.highlightChunk?.text || activeSourceCitation.excerpt}
                 />
-              )}
-              {/* Cited excerpt */}
-              <div className="px-4 py-2">
-                <div className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={{ color: "var(--color-text-muted)" }}>
-                  {activeSourceCitation.highlightChunk ? "Cited excerpt" : "Key excerpt"}
-                </div>
-                <div className="text-xs leading-relaxed" style={{ color: "var(--color-text-body)" }}>
-                  {activeSourceCitation.highlightChunk?.text || activeSourceCitation.excerpt}
-                </div>
-              </div>
-              <div className="px-4 py-3">
-                <div className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={{ color: "var(--color-text-muted)" }}>
-                  Extracted text
-                </div>
-                <div
-                  className="text-xs leading-relaxed p-2 rounded"
-                  style={{
-                    color: "var(--color-text-muted)",
-                    background: "var(--color-bg-dark)",
-                    borderLeft: "2px solid var(--color-amber-border)",
-                    whiteSpace: "pre-wrap",
-                    maxHeight: 180,
-                    overflowY: "auto",
-                  }}
-                >
-                  {activeSourceCitation.text || "No text extracted."}
-                </div>
               </div>
             </div>
           </>
         )}
       </div>
-
-      {/* Source citations */}
-      {response.sourceCitations && response.sourceCitations.length > 0 && (
-        <div className="px-6 py-4" style={{ borderTop: "1px solid var(--color-border-default)" }}>
-          <div className="text-[11px] uppercase tracking-wider font-semibold mb-1"
-            style={{ color: "var(--color-text-muted)" }}
-          >
-            📄 Source Evidence
-          </div>
-          <div className="text-xs mb-3" style={{ color: "var(--color-text-muted)" }}>
-            Referenced source files used in this assessment.
-          </div>
-          {response.sourceCitations.map((sc) => {
-            const highlightChunk = findHighlightChunk(sc, response.claims, sc.ref);
-            return (
-              <SourceCitationCard
-                key={sc.ref}
-                refNumber={sc.ref}
-                fileId={sc.fileId}
-                filename={sc.filename}
-                fileUrl={sc.fileUrl}
-                extractedText={sc.extractedText}
-                keyExcerpt={sc.keyExcerpt}
-                pageNumber={sc.pageNumber}
-                highlightChunk={highlightChunk}
-              />
-            );
-          })}
-        </div>
-      )}
 
       {/* Pending comments for this turn */}
       {pendingComments && pendingComments.length > 0 && (
@@ -646,7 +626,7 @@ function DocumentCard({
         </div>
       )}
 
-      {/* Actions footer — Revise + Download */}
+      {/* Actions footer — Revise Selected + Download */}
       <div
         className="px-6 py-4 flex gap-2"
         style={{
@@ -657,45 +637,32 @@ function DocumentCard({
         <button
           className="px-3 py-1.5 text-xs rounded-lg cursor-pointer"
           style={{
-            background: "transparent",
+            background: revisionFlags && Object.values(revisionFlags).some((f) => f)
+              ? "var(--color-accent-blue)" : "transparent",
             border: "1px solid var(--color-border-input)",
-            color: "var(--color-text-body)",
+            color: revisionFlags && Object.values(revisionFlags).some((f) => f)
+              ? "white" : "var(--color-text-body)",
           }}
-          onClick={() => onRevise?.(turnIndex)}
+          onClick={() => {
+            if (!revisionFlags) { onRevise?.(turnIndex, []); return; }
+            const flagged = Object.entries(revisionFlags)
+              .filter(([, f]) => f)
+              .map(([field]) => field);
+            onRevise?.(turnIndex, flagged);
+          }}
         >
-          Revise
+          Revise Selected
         </button>
         <DownloadDropdown
           response={response}
-          template={template ?? undefined}
           skillName={skillName}
         />
       </div>
-
-      {/* Verdict box — only shown in fallback mode (template renders verdict inline) */}
-      {response.verdict && !(template && response.sections) && (
-        <div
-          className="mx-6 mb-5 p-4 rounded-lg"
-          style={{
-            border: `1px solid ${response.verdict === "FAIL" ? "var(--color-danger)" : "var(--color-success)"}`,
-            background: response.verdict === "FAIL" ? "#f8514911" : "#3fb95011",
-          }}
-        >
-          <span
-            className="text-xs font-bold uppercase"
-            style={{
-              color: response.verdict === "FAIL" ? "var(--color-danger)" : "var(--color-success)",
-            }}
-          >
-            {response.verdict === "FAIL" ? "✗ FAIL" : "✓ PASS"}
-          </span>
-        </div>
-      )}
     </div>
   );
 }
 
-function SourceCitationPopoverImage({
+function SourceCitationFullPreview({
   fileUrl,
   filename,
   highlightChunk,
@@ -704,16 +671,23 @@ function SourceCitationPopoverImage({
   filename: string;
   highlightChunk: HighlightChunk;
 }) {
-  const imgRef = useRef<HTMLImageElement>(null);
   const [displaySize, setDisplaySize] = useState<{ w: number; h: number; ox: number; oy: number } | null>(null);
 
+  // Only render for image/PDF — full page with word box overlays.
+  // Skip HTML chunks: showing highlightChunk.html means the entire preview
+  // is the chunk itself fully highlighted, which provides no context.
+  const isPdf = filename.toLowerCase().endsWith(".pdf");
+  const pageUrl = isPdf && highlightChunk.pageNumber
+    ? `${fileUrl.replace(/\/+$/, "")}/page/${highlightChunk.pageNumber}`
+    : fileUrl;
+
   const highlightRects: { x: number; y: number; width: number; height: number }[] = [];
-  if (highlightChunk.wordBoxes && displaySize && imgRef.current) {
-    const nw = imgRef.current.naturalWidth;
-    const nh = imgRef.current.naturalHeight;
-    if (nw > 0 && nh > 0) {
-      const sx = displaySize.w / nw;
-      const sy = displaySize.h / nh;
+  if (highlightChunk.wordBoxes && displaySize) {
+    const refWidth = highlightChunk.pageWidth ?? 0;
+    const refHeight = highlightChunk.pageHeight ?? 0;
+    if (refWidth > 0 && refHeight > 0) {
+      const sx = displaySize.w / refWidth;
+      const sy = displaySize.h / refHeight;
       for (const wb of highlightChunk.wordBoxes) {
         highlightRects.push({
           x: wb.x * sx + displaySize.ox,
@@ -726,58 +700,104 @@ function SourceCitationPopoverImage({
   }
 
   return (
-    <div className="px-4 py-3">
-      <div className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={{ color: "var(--color-text-muted)" }}>
-        Source region
+    <div
+      className="rounded-lg relative overflow-hidden flex items-center justify-center"
+      style={{
+        background: "var(--color-bg-dark)",
+        border: "1px solid var(--color-border-default)",
+        minHeight: 200,
+        maxHeight: "55vh",
+      }}
+    >
+      <img
+        src={pageUrl}
+        alt={`${filename}${highlightChunk.pageNumber ? ` page ${highlightChunk.pageNumber}` : ""}`}
+        style={{ maxWidth: "100%", maxHeight: "55vh", objectFit: "contain", display: "block" }}
+        onLoad={(e) => {
+          const img = e.currentTarget;
+          const parent = img.parentElement;
+          if (!parent) return;
+          const cw = parent.clientWidth;
+          const ch = parent.clientHeight;
+          const refW = highlightChunk.pageWidth ?? img.naturalWidth;
+          const refH = highlightChunk.pageHeight ?? img.naturalHeight;
+          if (refW <= 0 || refH <= 0) return;
+          const scale = Math.min(cw / refW, ch / refH);
+          setDisplaySize({
+            w: refW * scale,
+            h: refH * scale,
+            ox: (cw - refW * scale) / 2,
+            oy: (ch - refH * scale) / 2,
+          });
+        }}
+      />
+      {highlightRects.length > 0 && (
+        <div className="absolute inset-0 pointer-events-none">
+          {highlightRects.map((rect, i) => (
+            <div
+              key={i}
+              className="absolute"
+              style={{
+                left: rect.x,
+                top: rect.y,
+                width: rect.width,
+                height: rect.height,
+                background: "rgba(255, 180, 50, 0.3)",
+                border: "1px solid rgba(255, 150, 30, 0.7)",
+                borderRadius: 2,
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function SourceCitationText({
+  fullText,
+  chunkText,
+}: {
+  fullText?: string;
+  chunkText: string;
+}) {
+  const displayText = fullText || chunkText || "No text extracted.";
+  const idx = chunkText ? displayText.indexOf(chunkText) : -1;
+  const safeBefore = escapeHtml(displayText.substring(0, idx >= 0 ? idx : displayText.length));
+  const safeAfter = idx >= 0 ? escapeHtml(displayText.substring(idx + chunkText.length)) : "";
+  const safeHighlight = idx >= 0 ? escapeHtml(chunkText) : "";
+  const html = idx >= 0
+    ? safeBefore + `<mark class="source-chunk-highlight">${safeHighlight}</mark>` + safeAfter
+    : safeBefore;
+
+  return (
+    <div className="mt-4">
+      <div className="text-2xs uppercase tracking-wider font-semibold mb-1" style={{ color: "var(--color-text-muted)" }}>
+        Extracted text
       </div>
       <div
-        className="rounded relative overflow-hidden flex items-center justify-center"
+        className="text-sm leading-relaxed p-3 rounded whitespace-pre-wrap"
         style={{
-          height: 120,
+          color: "var(--color-text-body)",
           background: "var(--color-bg-dark)",
-          border: "1px solid var(--color-border-default)",
+          borderLeft: "2px solid var(--color-amber-border)",
+          maxHeight: "40vh",
+          overflowY: "auto",
         }}
-      >
-        <img
-          ref={imgRef}
-          src={fileUrl}
-          alt={filename}
-          style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
-          onLoad={(e) => {
-            const img = e.currentTarget;
-            const cw = 352; // container width minus padding
-            const ch = 120;
-            const nw = img.naturalWidth;
-            const nh = img.naturalHeight;
-            const scale = Math.min(cw / nw, ch / nh);
-            setDisplaySize({
-              w: nw * scale,
-              h: nh * scale,
-              ox: (cw - nw * scale) / 2,
-              oy: (ch - nh * scale) / 2,
-            });
-          }}
-        />
-        {highlightRects.length > 0 && (
-          <div className="absolute inset-0 pointer-events-none">
-            {highlightRects.map((rect, i) => (
-              <div
-                key={i}
-                className="absolute"
-                style={{
-                  left: rect.x,
-                  top: rect.y,
-                  width: rect.width,
-                  height: rect.height,
-                  background: "rgba(255, 180, 50, 0.3)",
-                  border: "1px solid rgba(255, 150, 30, 0.7)",
-                  borderRadius: 2,
-                }}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+      <style>{`
+        .source-chunk-highlight {
+          background: rgba(255, 180, 50, 0.25);
+          border-left: 3px solid rgba(255, 150, 30, 0.7);
+          padding: 1px 4px;
+          border-radius: 2px;
+        }
+      `}</style>
     </div>
   );
 }
@@ -785,10 +805,10 @@ function SourceCitationPopoverImage({
 // ── Confidence Badge ──
 
 function confidenceColor(score: number): string {
-  if (score >= 99) return "#1a7f37";
-  if (score >= 80) return "#3fb950";
-  if (score >= 50) return "#d29922";
-  return "#f85149";
+  if (score >= 99) return "var(--color-success)";
+  if (score >= 80) return "var(--color-success)";
+  if (score >= 50) return "var(--color-amber)";
+  return "var(--color-danger)";
 }
 
 function confidenceLabel(score: number): string {
@@ -798,18 +818,19 @@ function confidenceLabel(score: number): string {
   return "Expert needed";
 }
 
-function ConfidenceBadge({ confidence }: { confidence: { score: number; ocrConfidence: number; dataCompleteness: number; llmMultiplier: number; llmReasoning: string; needsExpert: boolean } }) {
+function ConfidenceBadge({ confidence }: { confidence: { score: number; ocrConfidence: number; dataCompleteness?: number; llmMultiplier: number; llmReasoning: string; needsExpert: boolean } }) {
   const color = confidenceColor(confidence.score);
+  const dataCompleteness = confidence.dataCompleteness ?? 100;
   return (
-    <div className="relative inline-flex items-center gap-2 group" title={`OCR: ${confidence.ocrConfidence}% · Data: ${confidence.dataCompleteness}% · LLM: ×${confidence.llmMultiplier}\n${confidence.llmReasoning}`}>
-      <span className="text-[10px] font-semibold px-2 py-0.5 rounded" style={{ color, background: `${color}18` }}>
+    <div className="relative inline-flex items-center gap-2 group" title={`OCR: ${confidence.ocrConfidence}% · Data: ${dataCompleteness}% · LLM: ×${confidence.llmMultiplier}\n${confidence.llmReasoning}`}>
+      <span className="text-2xs font-semibold px-2 py-0.5 rounded" style={{ color, background: `${color}18` }}>
         {confidenceLabel(confidence.score)}
       </span>
       <span className="text-xs font-bold" style={{ color }}>
         {confidence.score.toFixed(0)}%
       </span>
       {confidence.needsExpert && (
-        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ color: "#f85149", background: "#f8514918" }}>
+        <span className="text-2xs font-medium px-1.5 py-0.5 rounded" style={{ color: "var(--color-danger)", background: "rgba(196, 113, 122, 0.12)" }}>
           Defer to expert
         </span>
       )}
@@ -818,7 +839,7 @@ function ConfidenceBadge({ confidence }: { confidence: { score: number; ocrConfi
         <div className="p-3 rounded-lg shadow-lg text-xs" style={{ background: "var(--color-bg-dark)", border: "1px solid var(--color-border-default)", whiteSpace: "nowrap" }}>
           <div style={{ color: "var(--color-text-header)", fontWeight: 600, marginBottom: 6 }}>Confidence Breakdown</div>
           <div style={{ color: "var(--color-text-body)" }}>OCR quality: <span style={{ fontWeight: 500 }}>{confidence.ocrConfidence}%</span></div>
-          <div style={{ color: "var(--color-text-body)" }}>Data completeness: <span style={{ fontWeight: 500 }}>{confidence.dataCompleteness}%</span></div>
+          <div style={{ color: "var(--color-text-body)" }}>Data completeness: <span style={{ fontWeight: 500 }}>{dataCompleteness}%</span></div>
           <div style={{ color: "var(--color-text-body)" }}>LLM assessment: <span style={{ fontWeight: 500 }}>×{confidence.llmMultiplier}</span></div>
           <div style={{ color: "var(--color-text-muted)", marginTop: 4, maxWidth: 220, whiteSpace: "normal" }}>{confidence.llmReasoning}</div>
         </div>
@@ -858,70 +879,37 @@ function applyHighlights(
 // ── Shared markdown component overrides ──
 
 const markdownComponents: Components = {
-  p: ({ children, ..._rest }) => <p style={{ marginTop: 12, marginBottom: 0 }}>{children}</p>,
-  strong: ({ children, ..._rest }) => (
+  p: ({ children }) => <p style={{ marginTop: 12, marginBottom: 0 }}>{children}</p>,
+  strong: ({ children }) => (
     <strong style={{ color: "var(--color-text-header)", fontWeight: 600 }}>{children}</strong>
   ),
-  table: ({ children, ..._rest }) => (
+  table: ({ children }) => (
     <table className="w-full border-collapse text-xs mt-2">{children}</table>
   ),
-  thead: ({ children, ..._rest }) => <thead>{children}</thead>,
-  tbody: ({ children, ..._rest }) => <tbody>{children}</tbody>,
-  tr: ({ children, ..._rest }) => <tr>{children}</tr>,
-  th: ({ children, ..._rest }) => (
+  thead: ({ children }) => <thead>{children}</thead>,
+  tbody: ({ children }) => <tbody>{children}</tbody>,
+  tr: ({ children }) => <tr>{children}</tr>,
+  th: ({ children }) => (
     <th className="text-left px-3 py-2 text-xs uppercase tracking-wider"
       style={{ background: "var(--color-bg-card)", color: "var(--color-text-muted)", fontWeight: 500, borderBottom: "1px solid var(--color-border-default)" }}
     >{children}</th>
   ),
-  td: ({ children, ..._rest }) => (
+  td: ({ children }) => (
     <td className="px-3 py-2" style={{ borderBottom: "1px solid var(--color-border-default)" }}>{children}</td>
   ),
-  h2: ({ children, ..._rest }) => (
-    <div className="mb-7 mt-1">
-      <span className="inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded mb-2"
-        style={{ color: "var(--color-text-muted)", background: "var(--color-border-default)" }}
-      >{children}</span>
+  h2: ({ children }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, marginTop: 28 }}>
+      <span style={{ fontFamily: "'Instrument Serif', Georgia, serif", fontSize: "1rem", color: "var(--color-text-header)" }}>{children}</span>
+      <span style={{ flex: 1, height: 1, background: "linear-gradient(to right, var(--color-border-default), transparent)" }} />
+    </div>
+  ),
+  h3: ({ children }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, marginTop: 24 }}>
+      <span style={{ fontFamily: "'Instrument Serif', Georgia, serif", fontSize: "0.9rem", color: "var(--color-text-header)" }}>{children}</span>
+      <span style={{ flex: 1, height: 1, background: "linear-gradient(to right, var(--color-border-default), transparent)" }} />
     </div>
   ),
 };
-
-// ── Citation enhancement ──
-
-function enhanceCitations(content: string, citations: Citation[], sourceCitations?: { ref: number; filename: string; fileUrl?: string; extractedText?: string; keyExcerpt?: string }[]): string {
-  const map = new Map<string, Citation>();
-  for (const c of citations) map.set(c.ref, c);
-
-  // Escape HTML entities for safe attribute insertion
-  const escapeAttr = (s: string) =>
-    s.replace(/["'&<>]/g, (c) =>
-      ({ '"': "&quot;", "'": "&#39;", "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] ?? c
-    );
-
-  // 1) Replace [R48.5.11] markers FIRST
-  content = content.replace(/\[(R\d+\.\d+(?:\.\d+)*)\]/g, (match, refStr) => {
-    const c = map.get(refStr);
-    if (c) {
-      const reg = escapeAttr(c.regulation);
-      const clause = escapeAttr(c.clause);
-      return `<cite class="citation-marker" role="button" tabindex="0" data-ref="${escapeAttr(refStr)}" data-regulation="${reg}" data-clause="${clause}">${reg} §${clause}</cite>`;
-    }
-    return match;
-  });
-
-  // 2) Replace [SN] markers with source citation badges
-  if (sourceCitations && sourceCitations.length > 0) {
-    content = content.replace(/\[S(\d+)\]/gi, (match, refStr) => {
-      const ref = parseInt(refStr, 10);
-      const found = sourceCitations.some(sc => sc.ref === ref);
-      if (found) {
-        return `<cite class="source-citation-marker" role="button" tabindex="0" data-source-ref="${ref}">S${ref}</cite>`;
-      }
-      return match;
-    });
-  }
-
-  return content;
-}
 
 const citationStyles = `
 .citation-marker {
@@ -937,8 +925,13 @@ const citationStyles = `
   cursor: pointer;
   color: var(--color-accent-blue);
   background: var(--color-accent-blue-bg);
-  border: 1px solid var(--color-accent-blue-border);
+  border: 1px solid rgba(41, 68, 171, 0.18);
   vertical-align: middle;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.citation-marker:hover {
+  background: rgba(41, 68, 171, 0.15);
+  border-color: rgba(41, 68, 171, 0.3);
 }
 .source-citation-marker {
   display: inline-flex;
@@ -951,10 +944,15 @@ const citationStyles = `
   margin: 0 2px;
   border-radius: 3px;
   cursor: pointer;
-  color: var(--color-amber);
-  background: var(--color-amber-bg);
-  border: 1px solid var(--color-amber-border);
+  color: var(--color-danger);
+  background: rgba(196, 113, 122, 0.08);
+  border: 1px solid rgba(196, 113, 122, 0.18);
   vertical-align: middle;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.source-citation-marker:hover {
+  background: rgba(196, 113, 122, 0.15);
+  border-color: rgba(196, 113, 122, 0.3);
 }
 `;
 
@@ -966,7 +964,7 @@ function normalizeTables(content: string): string {
   let inTable = false;
 
   for (let i = 0; i < lines.length; i++) {
-    let line = lines[i];
+    const line = lines[i];
     const tr = line.trim();
     const hasTabs = line.includes("\t");
 
@@ -1020,4 +1018,10 @@ function normalizeTables(content: string): string {
   }
 
   return result.join("\n");
+}
+
+function humanize(slug: string): string {
+  return slug
+    .replace(/[-_.]/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }

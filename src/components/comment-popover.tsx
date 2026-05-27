@@ -34,7 +34,7 @@ export function CommentPopover({ selectedText, position, onConfirm, onDismiss }:
           width: 320,
         }}
       >
-        <div className="text-[10px] uppercase tracking-wider font-semibold mb-1.5"
+        <div className="text-2xs uppercase tracking-wider font-semibold mb-1.5"
           style={{ color: "var(--color-text-muted)" }}>
           Add Comment
         </div>

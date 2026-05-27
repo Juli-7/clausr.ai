@@ -1,49 +1,90 @@
 # clausr.ai
 
-AI-powered regulatory compliance assessment with **5-layer citation enforcement** and **chunk-level source traceability**. Upload vehicle specs and source documents; the agent checks every value against regulation text with citations inline.
+AI-powered regulatory compliance assessment. Upload vehicle specs and source documents; the agent checks every value against regulation text with inline citations back to specific document chunks.
 
-## Architecture Highlights
+## What It Does
 
-### 5-Layer Citation Enforcement
+1. **Upload** a vehicle specification document (PDF, DOCX, or images)
+2. **Select** a regulatory skill (e.g., EU VWTA Lighting, EU VWTA Emissions)
+3. **Chat** with the agent about the document — it extracts values and checks them against regulation clauses
+4. **Review** the assessment report with PASS/FAIL verdicts, confidence scores, and clickable citations
 
-Regulation citations are **structurally guaranteed**, not probabilistically prompted:
+## Architecture
 
-| Layer | Mechanism |
-|-------|-----------|
-| 1. Prompting | LLM instructed to use `[R48.6.2]` markers |
-| 2. Deterministic | Non-template content built from check results with citation markers inline |
-| 3. Supplementation | Scan LLM output, backfill citations from the regulation palette |
-| 4. Post-validation | Regex + claims-based mismatch detection across report sections |
-| 5. Structured output | LLM outputs `claims[]` array — backend validates & builds citations from it |
+### Pipeline
+
+```
+User Message
+    → Orchestrator loads skill + regulation summaries + file chunks
+    → Generates one LLM+tool step per check field
+    → Streams tokens back via SSE
+    → Evaluation layer computes confidence
+    → Finalize phase builds response with citations
+```
+
+Each turn:
+- Restores previous context from SQLite (`session_setup` table)
+- Loads regulation summaries into the citation palette
+- Searches uploaded file chunks via SQLite FTS5
+- Executes one `llm+tool` step per check (numerical checks get a `compliance-check` tool)
+- Compiles citations from check results + palette entries
+- Builds the response with HTML citation badges
+
+### Citation Safety Nets
+
+Citations are **requested from the LLM and validated**, not structurally guaranteed:
+
+1. **Prompted** — System prompt instructs the LLM to include `[R48.6.2]` regulation references and `[S1.c1]` source chunk IDs in its JSON output
+2. **Backfilled** — If the LLM omits `citationRef` or `sourceCitation`, the pipeline falls back to the check's clause or available file chunks
+3. **Validated** — A validation layer checks that cited regulation IDs exist in the palette and that claim text roughly matches source chunk content (word overlap heuristic)
+
+The response is still LLM-generated. These are safety nets, not deterministic guarantees.
 
 ### Chunk-Level Source Traceability
 
-Source citations point to **specific text chunks** within documents. Clicking a `[S1]` badge highlights the exact source region on the original image or PDF page:
+Source citations point to specific text chunks within documents. Clicking a `[S1]` badge highlights the exact source region on the original image or PDF page:
 
 - **OCR** — Tesseract.js with per-word bounding boxes, grouped into line-level chunks
-- **PDF** — pdfjs-dist extracts position data from transform matrices; pdf-parse fallback
+- **PDF** — pdfjs-dist extracts position data from transform matrices; pdf-parse fallback for text extraction
 - **DOCX** — mammoth converts to HTML, paragraphs become chunks
 - **Highlight rendering** — `object-fit: contain` aware scaling overlays on image thumbnails
 
-### LLM Confidence Scoring
+### Confidence Scoring
 
 Binary PASS/FAIL is backed by a 0–100% confidence score:
 
 ```
-BASE = 100% − OCR penalty (max 30%) − data completeness penalty (max 30%) − PDF quality penalty
+BASE = 100% − OCR penalty (max 30%) − validation penalty (n×5% per error)
 FINAL = BASE × LLM multiplier (0.5–1.0)
 ```
 
-4 color stops: dark green ≥99%, green ≥80%, amber ≥50%, red <50% (defers to expert).
+Color stops: dark green ≥99%, green ≥80%, amber ≥50%, red <50%.
 
-### Skill Pipeline
+### Skills
 
-Skills are file-based domain definitions. Each skill has:
-- `SKILL.md` — Agent role, execution flow table, template definition
+Skills are file-based domain definitions under `skills/<skill-id>/`:
+
+- `SKILL.md` — Agent role, `## Checks` block with per-field constraints, optional template definition
 - `references.json` — Regulation clause text indexed by `[R48.5.11]` ID
-- Optional scripts for custom checks
+- `assets/template.docx` — Optional Word template for export
+- `scripts/` — Optional Python scripts for custom checks
 
 **Built-in skills**: EU VWTA Emissions, EU VWTA Lighting, UN R13 Braking.
+
+`SKILL.md` format:
+- **Frontmatter** — `title`, `description`, `domain`
+- **## Checks** — Numbered checks with `type`, `description`, `clause`, `constraint`, `attention`
+- **Template sections** — `fields`, `table`, `markdown`, `verdict`
+
+See `skills/SKILL-SPEC.md` for the full specification and `skills/eu-vwta-lighting/` for a complete example.
+
+### Prompt Versioning
+
+LLM prompts are extracted from inline code into dedicated files under `src/lib/agent/pipeline/prompts/`:
+- `system.ts` — System prompt builder with retry context
+- `user.ts` — User message builder with file chunks and revision support
+
+This makes prompts versionable, reviewable, and testable independently.
 
 ## Tech Stack
 
@@ -53,8 +94,8 @@ Skills are file-based domain definitions. Each skill has:
 | Language | TypeScript (strict) |
 | UI | Tailwind CSS v4, shadcn/ui, @base-ui/react |
 | AI SDK | Vercel AI SDK (`streamText` with tool use) |
-| LLM | DeepSeek V4 (OpenAI-compatible protocol) |
-| Database | SQLite via `better-sqlite3` |
+| LLM | DeepSeek V4 (OpenAI-compatible protocol), OpenAI, Anthropic |
+| Database | SQLite via `better-sqlite3` with FTS5 for chunk search |
 | OCR | Tesseract.js v7 |
 | PDF | pdfjs-dist + pdf-parse |
 | DOCX | mammoth |
@@ -62,13 +103,14 @@ Skills are file-based domain definitions. Each skill has:
 
 ## Quick Start
 
-**Prerequisites**: Node.js ≥24, npm ≥10
+**Prerequisites**: Node.js ≥24, pnpm ≥10
 
 ```bash
-npm install
+pnpm install
 ```
 
-Create `.env.local`:
+Copy `.env.example` to `.env.local` and add your API key:
+
 ```
 LLM_PROVIDER=deepseek
 LLM_API_KEY=sk-your-key-here
@@ -76,28 +118,10 @@ LLM_MODEL=deepseek-v4-flash
 ```
 
 ```bash
-npm run dev
+pnpm dev      # Start dev server at http://localhost:3000
+pnpm test     # Run tests
+pnpm build    # Production build
 ```
-
-Open [http://localhost:3000](http://localhost:3000).
-
-## Adding a Skill
-
-Create a new directory under `skills/<skill-id>/`:
-
-```
-skills/your-domain/
-├── SKILL.md          # Role, execution flow table, template
-└── references.json   # {"R1.1": "Clause text...", ...}
-```
-
-`SKILL.md` format:
-- **§1 Agent Profile** — What the agent is and does
-- **§2 Execution Flow** — Markdown table: `| # | Step | Executor |`
-- **§3 Report Template** — Sections: fields, table, markdown, verdict
-- **§4 References** — Citation palette mappings
-
-See `skills/eu-vwta-lighting/` for a complete example.
 
 ## Project Structure
 
@@ -105,9 +129,15 @@ See `skills/eu-vwta-lighting/` for a complete example.
 src/
   app/api/           # REST + SSE streaming endpoints
   components/        # React components (panels, drawers, badges, chat)
-  lib/agent/         # Core: pipeline, extractors, schemas, LLM factory
+  lib/agent/         # Core agent logic
+    loading/         # Skill parser, phase loaders
+    pipeline/        # Orchestrator, executors, prompts
+    evaluation/      # Confidence scoring, validation
+    present/         # Response formatting, finalize phase
+    shared/          # Schemas, types, memory (SQLite repository)
+    __tests__/       # Integration tests (139 tests)
 skills/              # Skill definitions (3 built-in)
-data/                # SQLite database (runtime, gitignored)
+data/                # SQLite database + uploads (runtime, not committed)
 ```
 
 ## License

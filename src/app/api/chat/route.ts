@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ChatRequestSchema } from "@/lib/agent/schemas";
+import { ChatRequestSchema } from "@/lib/agent/shared/schemas";
+import { hasSessionSetup } from "@/lib/agent/shared/memory/repository";
 import { orchestratePipeline } from "@/lib/agent/pipeline/orchestrator-v2";
 import fs from "fs";
 import path from "path";
@@ -15,7 +16,6 @@ function dbg(msg: string) {
 export async function POST(req: NextRequest) {
   dbg("=== POST /api/chat HIT ===");
   try {
-    // ── Validate request body ──
     const body = await req.json().catch((e) => {
       dbg("FAILED to parse request body: " + String(e));
       return null;
@@ -23,7 +23,6 @@ export async function POST(req: NextRequest) {
     if (!body) {
       return NextResponse.json({ error: "Request body is required" }, { status: 400 });
     }
-    dbg("Body keys: " + Object.keys(body).join(", ") + " | files present: " + String((body as Record<string,unknown>).files != null));
 
     const parsed = ChatRequestSchema.safeParse(body);
     if (!parsed.success) {
@@ -33,11 +32,19 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    dbg("Validation PASSED");
 
-    const { message, skillName, sessionId, files } = parsed.data;
-    dbg("skillName: " + String(skillName) + " | message: " + message.slice(0, 80) + " | files: " + (files ? files.map(f => f.name + " (" + f.type + ", dataUrl:" + (f.dataUrl ? f.dataUrl.slice(0, 30) + "..." : "MISSING") + ")" ).join("; ") : "none"));
-    const useTemplate = body.useTemplate !== false; // default true
+    const { message, sessionId, revisionFields } = parsed.data;
+
+    // Verify the session has been set up (POST /api/setup must be called first)
+    if (!hasSessionSetup(sessionId)) {
+      dbg("NO SETUP for session: " + sessionId);
+      return NextResponse.json(
+        { error: "Session has not been set up. Call POST /api/setup first." },
+        { status: 400 }
+      );
+    }
+
+    dbg(`sessionId: ${sessionId} | message: ${message.slice(0, 80)} | revisionFields: ${revisionFields ? revisionFields.join(",") : "none"}`);
 
     // ── SSE streaming response ──
     const stream = new ReadableStream({
@@ -48,7 +55,7 @@ export async function POST(req: NextRequest) {
         };
 
         try {
-          for await (const event of orchestratePipeline(message, skillName, sessionId, useTemplate, files)) {
+          for await (const event of orchestratePipeline(sessionId, message, revisionFields)) {
             send(event);
           }
         } catch (err) {

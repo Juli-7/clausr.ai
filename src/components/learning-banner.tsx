@@ -5,8 +5,8 @@ export function LearningBanner({ message, onDismiss }: { message: string; onDism
     <div
       className="flex items-center justify-between shrink-0 px-4 py-2 text-xs"
       style={{
-        background: "#3fb95011",
-        borderBottom: "1px solid #3fb95033",
+        background: "var(--color-success-bg)",
+        borderBottom: "1px solid rgba(71, 156, 168, 0.2)",
       }}
     >
       <span style={{ color: "var(--color-success)" }}>

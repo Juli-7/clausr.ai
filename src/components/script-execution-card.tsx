@@ -11,7 +11,7 @@ export function ScriptExecutionCard({ toolName, status, summary }: ScriptExecuti
     <div
       className="p-3 rounded-lg mb-2 font-mono text-xs"
       style={{
-        background: "#0d1117",
+        background: "var(--color-bg-card)",
         border: "1px solid var(--color-border-default)",
       }}
     >

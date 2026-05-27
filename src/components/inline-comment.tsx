@@ -15,7 +15,7 @@ export function InlineCommentThread({
     <div
       className="mt-3 px-3 py-2.5 text-xs rounded-r-lg"
       style={{
-        background: "#d299220d",
+        background: "var(--color-amber-bg)",
         borderLeft: "3px solid var(--color-amber)",
       }}
     >

@@ -1,6 +1,7 @@
 export type PipelineErrorCode =
   | "SKILL_NOT_FOUND"
   | "SKILL_PARSE_FAILED"
+  | "SKILL_GENERATION_FAILED"
   | "STEP_FAILED"
   | "LLM_ERROR"
   | "BUILTIN_ERROR"

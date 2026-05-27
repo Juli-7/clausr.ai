@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { loadSkill } from "@/lib/agent/skill/loader";
-import { runScript } from "@/lib/agent/skill/script-runner";
-import { ComplianceCheckSchema } from "@/lib/agent/schemas";
+import { loadSkill } from "@/lib/agent/loading/skill/loader";
+import { runScript } from "@/lib/agent/pipeline/executors/script-runner";
+import { ComplianceCheckSchema } from "@/lib/agent/shared/schemas";
 
 /**
  * POST /api/scripts/<name>
  * Executes a named script for a given skill.
  *
- * Body: { skillId: string, input: ComplianceCheckInput }
+ * Body: { skillId: string, input: { value: number; limit: number | string; operator: string } }
  */
 export async function POST(
   request: NextRequest,

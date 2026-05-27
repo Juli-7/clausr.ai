@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
-import { getAllSkills } from "@/lib/agent/skill/registry";
-import { loadSkill } from "@/lib/agent/skill/loader";
+import { listSkills, loadSkill } from "@/lib/agent/loading/skill/loader";
 
 export async function GET() {
   try {
-    const ids = getAllSkills();
+    const ids = listSkills();
     const skills = ids.map((id) => loadSkill(id));
     return NextResponse.json(skills, { status: 200 });
   } catch (err) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, startTransition } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -50,7 +50,7 @@ export function HistoryDrawer({
   }, []);
 
   useEffect(() => {
-    if (open) fetchSessions();
+    if (open) startTransition(() => fetchSessions());
   }, [open, fetchSessions]);
 
   return (
@@ -100,9 +100,9 @@ export function HistoryDrawer({
                   }}
                   style={{
                     borderBottom: "1px solid var(--color-bg-card)",
-                    borderLeft: session.starred ? "3px solid #f0c040" : "3px solid transparent",
+                    borderLeft: session.starred ? "3px solid var(--color-amber)" : "3px solid transparent",
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "#1f6feb0d")}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-accent-blue-bg)")}
                   onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                 >
                   <div className="flex items-center justify-between mb-1">
@@ -114,28 +114,28 @@ export function HistoryDrawer({
                     </h4>
                     {session.confidenceScore != null ? (
                       <span
-                        className="text-[10px] font-semibold px-2 py-0.5 rounded flex-shrink-0"
+                        className="text-2xs font-semibold px-2 py-0.5 rounded flex-shrink-0"
                         style={{
-                          color: session.confidenceColor ?? "#3fb950",
-                          background: `${session.confidenceColor ?? "#3fb950"}18`,
+                          color: session.confidenceColor ?? "var(--color-success)",
+                          background: "var(--color-success-bg)",
                         }}
                       >
                         {session.confidenceScore.toFixed(0)}%
                       </span>
-                    ) : (
+                    ) : session.verdict && session.verdict !== "UNKNOWN" ? (
                       <span
-                        className="text-[10px] font-semibold px-2 py-0.5 rounded flex-shrink-0"
+                        className="text-2xs font-semibold px-2 py-0.5 rounded flex-shrink-0"
                         style={{
-                          color: session.verdict === "FAIL" ? "#f85149" : "#3fb950",
-                          background: session.verdict === "FAIL" ? "#f8514918" : "#3fb95018",
+                          color: session.verdict === "FAIL" ? "var(--color-danger)" : "var(--color-success)",
+                          background: session.verdict === "FAIL" ? "rgba(196, 113, 122, 0.1)" : "var(--color-success-bg)",
                         }}
                       >
                         {session.verdict}
                       </span>
-                    )}
+                    ) : null}
                   </div>
                   {session.needsExpert && (
-                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded mb-1 inline-block" style={{ color: "#f85149", background: "#f8514918" }}>
+                    <span className="text-2xs font-medium px-1.5 py-0.5 rounded mb-1 inline-block" style={{ color: "var(--color-danger)", background: "rgba(196, 113, 122, 0.1)" }}>
                       Expert review needed
                     </span>
                   )}
@@ -145,7 +145,7 @@ export function HistoryDrawer({
                   <p className="text-xs truncate pr-12" style={{ color: "var(--color-text-muted)" }}>
                     {session.lastMessage}
                   </p>
-                  <div className="flex items-center gap-2 mt-1.5 text-[10px]" style={{ color: "var(--color-text-muted)" }}>
+                  <div className="flex items-center gap-2 mt-1.5 text-2xs" style={{ color: "var(--color-text-muted)" }}>
                     <span>{session.roundCount} {session.roundCount === 1 ? "round" : "rounds"}</span>
                     <span>·</span>
                     <span>{new Date(session.timestamp).toLocaleDateString()}</span>
@@ -167,7 +167,7 @@ export function HistoryDrawer({
                   </button>
                   <button
                     className="absolute top-2 w-6 h-6 flex items-center justify-center rounded cursor-pointer opacity-0 group-hover:opacity-100 bg-transparent border-none text-sm"
-                    style={{ right: 28, color: session.starred ? "#f0c040" : "var(--color-text-muted)" }}
+                    style={{ right: 28, color: session.starred ? "var(--color-amber)" : "var(--color-text-muted)" }}
                     title={session.starred ? "Unstar session" : "Star session"}
                     onClick={async (e) => {
                       e.stopPropagation();

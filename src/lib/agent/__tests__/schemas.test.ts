@@ -4,31 +4,26 @@ import {
   AgentResponseSchema,
   ChatRequestSchema,
   ComplianceCheckSchema,
-} from "@/lib/agent/schemas";
+} from "@/lib/agent/shared/schemas";
 
 describe("CitationSchema", () => {
   it("accepts a valid citation", () => {
-    const result = CitationSchema.safeParse({ ref: 1, regulation: "R48", clause: "6.1" });
+    const result = CitationSchema.safeParse({ ref: "R48.6.1", regulation: "R48", clause: "6.1" });
     expect(result.success).toBe(true);
   });
 
   it("rejects missing regulation", () => {
-    const result = CitationSchema.safeParse({ ref: 1, regulation: "", clause: "6.1" });
+    const result = CitationSchema.safeParse({ ref: "R48.6.1", regulation: "", clause: "6.1" });
     expect(result.success).toBe(false);
   });
 
   it("rejects missing clause", () => {
-    const result = CitationSchema.safeParse({ ref: 1, regulation: "R48", clause: "" });
+    const result = CitationSchema.safeParse({ ref: "R48.6.1", regulation: "R48", clause: "" });
     expect(result.success).toBe(false);
   });
 
-  it("rejects non-positive ref", () => {
-    const result = CitationSchema.safeParse({ ref: 0, regulation: "R48", clause: "6.1" });
-    expect(result.success).toBe(false);
-  });
-
-  it("rejects non-integer ref", () => {
-    const result = CitationSchema.safeParse({ ref: 1.5, regulation: "R48", clause: "6.1" });
+  it("rejects empty ref", () => {
+    const result = CitationSchema.safeParse({ ref: "", regulation: "R48", clause: "6.1" });
     expect(result.success).toBe(false);
   });
 });
@@ -37,7 +32,7 @@ describe("AgentResponseSchema", () => {
   const validResponse = {
     content: "## Report\nPasses checks.",
     reasoning: "Step 1: Analysis\nBody here.",
-    citations: [{ ref: 1, regulation: "R48", clause: "6.1" }],
+    citations: [{ ref: "R48.6.1", regulation: "R48", clause: "6.1" }],
     round: 1,
     sessionId: "session-abc123",
     verdict: "PASS" as const,
@@ -78,7 +73,7 @@ describe("AgentResponseSchema", () => {
     const result = AgentResponseSchema.safeParse({
       ...validResponse,
       sourceCitations: [{
-        ref: 1, fileId: "test.pdf", filename: "test.pdf",
+        ref: "S1.c1", fileId: "test.pdf", filename: "test.pdf",
         extractedText: "Some text", keyExcerpt: "Key excerpt",
       }],
     });
@@ -86,7 +81,8 @@ describe("AgentResponseSchema", () => {
   });
 
   it("rejects missing content", () => {
-    const { content, ...rest } = validResponse;
+    const { content: _, ...rest } = validResponse;
+    void _;
     const result = AgentResponseSchema.safeParse(rest);
     expect(result.success).toBe(false);
   });
@@ -94,7 +90,7 @@ describe("AgentResponseSchema", () => {
   it("rejects empty citations entry", () => {
     const result = AgentResponseSchema.safeParse({
       ...validResponse,
-      citations: [{ ref: 1, regulation: "", clause: "" }],
+      citations: [{ ref: "R48.6.1", regulation: "", clause: "" }],
     });
     expect(result.success).toBe(false);
   });
@@ -109,21 +105,19 @@ describe("AgentResponseSchema", () => {
 });
 
 describe("ChatRequestSchema", () => {
-  it("accepts a valid chat request without files", () => {
+  it("accepts a valid chat request", () => {
     const result = ChatRequestSchema.safeParse({
       message: "Check compliance",
-      skillName: "eu-vwta-lighting",
       sessionId: "session-123",
     });
     expect(result.success).toBe(true);
   });
 
-  it("accepts a valid chat request with files", () => {
+  it("accepts a chat request with revision fields", () => {
     const result = ChatRequestSchema.safeParse({
       message: "Check compliance",
-      skillName: "eu-vwta-lighting",
       sessionId: "session-123",
-      files: [{ name: "test.pdf", size: 1024, type: "application/pdf", dataUrl: "data:..." }],
+      revisionFields: ["mounting-height", "beam-pattern"],
     });
     expect(result.success).toBe(true);
   });
@@ -131,56 +125,89 @@ describe("ChatRequestSchema", () => {
   it("rejects empty message", () => {
     const result = ChatRequestSchema.safeParse({
       message: "",
-      skillName: "eu-vwta-lighting",
       sessionId: "session-123",
     });
     expect(result.success).toBe(false);
   });
 
-  it("allows empty skill name for no-skill chat mode", () => {
-    const result = ChatRequestSchema.safeParse({
-      message: "Check compliance",
-      skillName: "",
-      sessionId: "session-123",
-    });
-    expect(result.success).toBe(true);
-  });
-
   it("rejects missing session ID", () => {
     const result = ChatRequestSchema.safeParse({
       message: "Check compliance",
-      skillName: "eu-vwta-lighting",
       sessionId: "",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects missing session ID entirely", () => {
+    const result = ChatRequestSchema.safeParse({
+      message: "Check compliance",
     });
     expect(result.success).toBe(false);
   });
 });
 
 describe("ComplianceCheckSchema", () => {
-  it("accepts valid compliance checks", () => {
+  it("accepts valid compliance check", () => {
     const result = ComplianceCheckSchema.safeParse({
-      checks: [
-        { name: "mounting-height", value: 650, limit: 500, operator: ">=", clause: "6.1" },
-        { name: "colour-temp", value: 5500, limit: 6000, operator: "<=", clause: "5.11" },
-      ],
+      value: 650,
+      limit: 500,
+      operator: ">=",
     });
     expect(result.success).toBe(true);
   });
 
-  it("accepts range operator", () => {
+  it("accepts range operator with string limit", () => {
     const result = ComplianceCheckSchema.safeParse({
-      checks: [
-        { name: "beam-cutoff", value: 15, limit: "10-20", operator: "range", clause: "6.2" },
-      ],
+      value: 15,
+      limit: "10-20",
+      operator: "range",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts tolerance operator with percent", () => {
+    const result = ComplianceCheckSchema.safeParse({
+      value: 104,
+      limit: "100±5%",
+      operator: "tolerance",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts tolerance operator with absolute", () => {
+    const result = ComplianceCheckSchema.safeParse({
+      value: 101,
+      limit: "100±2",
+      operator: "tolerance",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts rounding field as number", () => {
+    const result = ComplianceCheckSchema.safeParse({
+      value: 1.234,
+      limit: 1.2,
+      operator: ">=",
+      rounding: 2,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts rounding field as string with mode", () => {
+    const result = ComplianceCheckSchema.safeParse({
+      value: 1.234,
+      limit: 1.2,
+      operator: ">=",
+      rounding: "2:ceil",
     });
     expect(result.success).toBe(true);
   });
 
   it("rejects invalid operator", () => {
     const result = ComplianceCheckSchema.safeParse({
-      checks: [
-        { name: "test", value: 10, limit: 10, operator: "==", clause: "1.1" },
-      ],
+      value: 10,
+      limit: 10,
+      operator: "==",
     });
     expect(result.success).toBe(false);
   });

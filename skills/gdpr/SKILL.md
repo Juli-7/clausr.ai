@@ -2,97 +2,91 @@
 name: gdpr
 description: GDPR compliance review for data processing activities covering controller/processor obligations, data subject rights, and legal bases
 triggers: ["GDPR", "data protection", "privacy", "personal data", "consent", "DPA", "DPO", "data subject", "breach notification", "PIA", "DPIA"]
+regulation_ids:
+  - GDPR
 ---
 
-# GDPR Compliance
+## Checks
 
-## 1. Role Definition
+### controller_identified
+1. **type**: boolean
+2. **attention**: data controller identity responsible entity
+3. **description**: Is the data controller clearly stated in the document?
+4. **clause**: GDPR.Art 4(7)
+5. **depends_on**: (none)
+6. **sample**: The privacy policy on page 1 states "Data Controller: Acme Corp" [S1.c1], clearly identifying the entity that determines the purposes and means of processing.
 
-You are a senior EU data protection officer and GDPR certification expert.
-You assess data processing activities against the GDPR regulation (EU) 2016/679.
-You use the built-in compliance-check tool for quantitative determinations and your own expertise for qualitative assessments.
+### legal_basis
+1. **type**: enum(consent, contract, legal_obligation, vital_interest, public_task, legitimate_interest)
+2. **attention**: legal basis for processing consent contract legitimate interest
+3. **description**: Must be valid and documented
+4. **clause**: GDPR.Art 6
+5. **depends_on**: (none)
+6. **sample**: The document states processing is based on consent obtained via the opt-in checkbox on the registration form [S1.c4]. This is a valid legal basis under GDPR.Art 6(1)(a).
 
-## 2. Execution Flow
+### special_category_data
+1. **type**: boolean
+2. **attention**: special category data race health biometrics sensitive
+3. **description**: Does the processing involve special category data (race, health, biometrics, etc.)?
+4. **clause**: GDPR.Art 9
+5. **depends_on**: (none)
+6. **sample**: The document mentions processing of health data for insurance purposes [S1.c5]. This triggers GDPR.Art 9 requirements for an explicit consent basis.
 
-| # | Step | Executor |
-|---|------|----------|
-| 1 | Identify the data controller, processor, processing purposes, and data categories | llm |
-| 2 | Load applicable GDPR references per §6 | builtin:load-references |
-| 3 | Determine legal basis for each processing purpose (Art 6) | llm |
-| 4 | If special category data: verify Art 9 condition and DPIA requirement | llm+tool |
-| 5 | Verify data subject rights mechanisms (Art 12-22) | llm |
-| 6 | Check international transfer safeguards if applicable (Art 44-49) | llm |
-| 7 | Assess breach notification procedures (Art 33-34) | llm |
+### dpia_required
+1. **type**: enum(required, not_required, completed)
+2. **attention**: data protection impact assessment DPIA privacy
+3. **description**: Is a Data Protection Impact Assessment required or already completed?
+4. **clause**: GDPR.Art 35
+5. **depends_on**: special_category_data
+6. **sample**: Since special category data is being processed, a DPIA is required under GDPR.Art 35(3)(b). The document does not mention one [S1.c6].
 
-## 3. Key Decision Points
+### dpo_appointed
+1. **type**: enum(required, appointed, not_required)
+2. **attention**: data protection officer DPO appointment contact
+3. **description**: Has a Data Protection Officer been appointed?
+4. **clause**: GDPR.Art 37
+5. **depends_on**: (none)
+6. **sample**: The document mentions a DPO contact at dpo@acme.com [S1.c8], complying with GDPR.Art 37(7).
 
-### 3.1 Legal Basis (Art 6)
-Consent must be freely given, specific, informed, and unambiguous (Art 4(11), Art 7).
-Legitimate interest (Art 6(1)(f)) cannot be used by public authorities in performing their tasks.
-Processing necessary for contract performance requires that the data is genuinely needed.
+### data_subject_access
+1. **type**: enum(available, partial, missing)
+2. **attention**: data subject access request DSAR rights
+3. **description**: Is there a mechanism for data subjects to access their data?
+4. **clause**: GDPR.Art 15
+5. **depends_on**: (none)
+6. **sample**: A data subject access request procedure is described on page 3 [S1.c9], providing the required mechanisms under GDPR.Art 15.
 
-### 3.2 Special Category Data (Art 9)
-Explicit consent or specific Derogation required for: race, ethnicity, politics, religion, trade union membership, genetics, biometrics, health, sex life, sexual orientation.
-If special category → DPIA is mandatory (Art 35).
+### international_transfer
+1. **type**: enum(adequacy, scc, bcr, none)
+2. **attention**: international data transfer adequacy decision SCC BCR
+3. **description**: Are there safeguards for international data transfers?
+4. **clause**: GDPR.Art 44-49
+5. **depends_on**: (none)
+6. **sample**: The document states data is transferred to the US under Standard Contractual Clauses referenced in Appendix B [S1.c10], satisfying GDPR.Art 46 requirements.
 
-### 3.3 Data Subject Rights (Art 12-22)
-Right of access (Art 15): response within 1 month (Art 12(3)), extendable by 2 months for complex requests.
-Right to erasure (Art 17): applies when consent withdrawn, processing unlawful, legal obligation to erase.
-Right to data portability (Art 20): only applies if legal basis is consent or contract AND processing is automated.
+### breach_notification_72h
+1. **type**: boolean
+2. **attention**: breach notification DPA 72 hours personal data breach
+3. **description**: Does the document commit to notifying the DPA within 72 hours of a breach?
+4. **clause**: GDPR.Art 33(1)
+5. **depends_on**: (none)
+6. **sample**: The breach notification policy states the DPA will be notified within 72 hours of breach detection [S1.c11], as required by GDPR.Art 33(1).
 
-### 3.4 Data Protection Officer (Art 37-39)
-DPO mandatory for: public authorities, systematic monitoring at scale, large-scale special category data.
-DPO must be independent, report to highest management, and be involved in all DPIA-related matters.
+### record_retention_years
+1. **type**: number(0-50)
+2. **attention**: data retention period storage limitation erasure
+3. **description**: Years retained after relationship ends
+4. **clause**: GDPR.Art 5(1)(e)
+5. **constraint**: >= 5
+6. **depends_on**: (none)
+7. **sample**: The document specifies personal data is retained for 7 years after the relationship ends [S1.c12]. This meets the minimum requirement specified.
 
-### 3.5 International Transfers (Art 44-49)
-Adequacy decision (Art 45): Commission has determined adequate protection.
-SCCs (Art 46(2)(c)): Standard Contractual Clauses adopted by Commission.
-Transfer Impact Assessment (TIA) required for SCC-based transfers, per Schrems II ruling.
-BCRs (Art 46(2)(b)): Binding Corporate Rules approved by lead DPA.
-
-### 3.6 Breach Notification (Art 33-34)
-Notify DPA within 72 hours of becoming aware (Art 33(1)).
-Notify data subjects without undue delay if high risk (Art 34(1)).
-Document all breaches, even if not notifiable (Art 33(5)).
-
-### 3.7 DPIA (Art 35)
-Mandatory when processing is likely to result in high risk to natural persons.
-Must contain: systematic description, necessity assessment, risk assessment, mitigation measures.
-Prior consultation with DPA if high risk cannot be mitigated (Art 36).
-
-## 4. Red Lines
-
+## Red Lines
 - ❌ Do not issue PASS where data is insufficient or processing activities are not fully mapped
 - ❌ Do not approve processing without a valid legal basis under Art 6
 - ❌ Do not skip DPIA for special category data — legally required (Art 35(3)(b))
 - ❌ Do not approve international transfers without adequacy decision or appropriate safeguards (Art 44)
 - ❌ Do not recommend consent as legal basis where there is clear imbalance of power (Art 7(4))
-- ❌ Do not extend the 1-month response period for data subject requests without documenting complexity (Art 12(3))
-- ❌ Do not estimate data protection impacts — use the DPIA framework (§5)
 
-## 5. Numerical Judgement Rules
-
-| Check | Operator | Limit | Clause |
-|-------|----------|-------|--------|
-| Breach notification deadline | <= | 72 hours | Art 33(1) |
-| Data subject request response | <= | 1 month | Art 12(3) |
-| Extension for complex requests | <= | 2 additional months | Art 12(3) |
-| Record retention post-relationship | >= | 5 years | Art 5(1)(e), Art 30(4) |
-| Fine tier - lower (Art 83(4)) | <= | €10M or 2% global turnover | Art 83(4) |
-| Fine tier - upper (Art 83(5)) | <= | €20M or 4% global turnover | Art 83(5) |
-
-## 6. Reference Loading Rules
-
-| Condition | Must Load |
-|-----------|-----------|
-| Any GDPR assessment | references/gdpr-articles.md |
-| International transfer | references/international-transfers.md |
-| DPIA required | references/dpia-framework.md |
-| Breach assessment | references/breach-notification.md |
-| Any task | references/common-pitfalls.md |
-
-## 7. Experience Accumulation
-
-> This section is auto-maintained by system experience, equally important as the initial flow.
-
+## Lessons Learnt
 (System-maintained area, initially empty.)

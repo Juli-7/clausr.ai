@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import React, { useState, useRef } from "react";
 
 export interface WordBox {
   x: number;
@@ -12,16 +12,19 @@ export interface WordBox {
 export interface HighlightChunk {
   id: string;
   text: string;
+  html?: string;
   bbox?: WordBox;
   wordBoxes?: WordBox[];
   pageNumber?: number;
+  pageWidth?: number;
+  pageHeight?: number;
 }
 
 function SourceCitationBadge({
   refNumber,
   onClick,
 }: {
-  refNumber: number;
+  refNumber: string;
   onClick: (e: React.MouseEvent) => void;
 }) {
   return (
@@ -34,13 +37,13 @@ function SourceCitationBadge({
         border: "1px solid var(--color-amber-border)",
       }}
     >
-      S{refNumber}
+      {refNumber}
     </button>
   );
 }
 
 interface SourceCitationCardProps {
-  refNumber: number;
+  refNumber: string;
   fileId?: string;
   filename: string;
   fileUrl?: string;
@@ -60,6 +63,35 @@ function detectFileType(filename: string, fileType?: string): "image" | "pdf" | 
   return "unknown";
 }
 
+function fileUrlToPageUrl(fileUrl: string, pageNumber: number): string {
+  const base = fileUrl.replace(/\/+$/, "");
+  return `${base}/page/${pageNumber}`;
+}
+
+function applyScale(boxes: WordBox[], sx: number, sy: number): WordBox[] {
+  return boxes.map((b) => ({
+    x: b.x * sx,
+    y: b.y * sy,
+    width: b.width * sx,
+    height: b.height * sy,
+  }));
+}
+
+function computeDisplaySize(
+  naturalW: number,
+  naturalH: number,
+  containerW: number,
+  containerH: number,
+): { w: number; h: number; offsetX: number; offsetY: number } {
+  const scale = Math.min(containerW / naturalW, containerH / naturalH);
+  return {
+    w: naturalW * scale,
+    h: naturalH * scale,
+    offsetX: (containerW - naturalW * scale) / 2,
+    offsetY: (containerH - naturalH * scale) / 2,
+  };
+}
+
 export function SourceCitationCard({
   refNumber,
   filename,
@@ -73,6 +105,7 @@ export function SourceCitationCard({
   const [expanded, setExpanded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [imgDisplaySize, setImgDisplaySize] = useState<{ w: number; h: number; offsetX: number; offsetY: number } | null>(null);
+  const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const fileType = detectFileType(filename, ft);
 
@@ -80,18 +113,19 @@ export function SourceCitationCard({
 
   // Compute highlight rects scaled to the rendered image within the container
   const highlightRects: WordBox[] = [];
-  if (highlightChunk?.wordBoxes && imgDisplaySize && imgRef.current) {
-    const naturalW = imgRef.current.naturalWidth;
-    const naturalH = imgRef.current.naturalHeight;
-    if (naturalW > 0 && naturalH > 0) {
-      const scaleX = imgDisplaySize.w / naturalW;
-      const scaleY = imgDisplaySize.h / naturalH;
-      for (const wb of highlightChunk.wordBoxes) {
+  if (highlightChunk?.wordBoxes && imgDisplaySize) {
+    const refWidth = highlightChunk.pageWidth ?? naturalSize?.w ?? 0;
+    const refHeight = highlightChunk.pageHeight ?? naturalSize?.h ?? 0;
+    if (refWidth > 0 && refHeight > 0) {
+      const sx = imgDisplaySize.w / refWidth;
+      const sy = imgDisplaySize.h / refHeight;
+      const offsetRects = applyScale(highlightChunk.wordBoxes, sx, sy);
+      for (const r of offsetRects) {
         highlightRects.push({
-          x: wb.x * scaleX + imgDisplaySize.offsetX,
-          y: wb.y * scaleY + imgDisplaySize.offsetY,
-          width: wb.width * scaleX,
-          height: wb.height * scaleY,
+          x: r.x + imgDisplaySize.offsetX,
+          y: r.y + imgDisplaySize.offsetY,
+          width: r.width,
+          height: r.height,
         });
       }
     }
@@ -116,7 +150,7 @@ export function SourceCitationCard({
             <span className="text-xs font-semibold flex-1" style={{ color: "var(--color-text-header)" }}>
               Source: {filename}
               {pageNumber ? ` (Page ${pageNumber})` : ""}
-              {highlightChunk && ` — Chunk ${highlightChunk.id}`}
+              {highlightChunk ? ` — Chunk ${highlightChunk.id}` : ""}
             </span>
             <button
               onClick={() => setExpanded(false)}
@@ -127,116 +161,37 @@ export function SourceCitationCard({
             </button>
           </div>
           <div className="flex gap-4 p-3.5">
-            {/* Preview panel */}
-            {fileType === "image" && fileUrl && !imageError && (
-              <div style={{ flexShrink: 0 }}>
-                <div
-                  className="rounded-lg relative overflow-hidden flex items-center justify-center"
-                  style={{
-                    width: 180,
-                    height: 130,
-                    background: "var(--color-bg-dark)",
-                    border: "1px solid var(--color-border-default)",
-                  }}
-                >
-                  <img
-                    ref={imgRef}
-                    src={fileUrl}
-                    alt={filename}
-                    style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
-                    onLoad={(e) => {
-                      const img = e.currentTarget;
-                      const containerW = 180;
-                      const containerH = 130;
-                      const naturalW = img.naturalWidth;
-                      const naturalH = img.naturalHeight;
-                      const scale = Math.min(containerW / naturalW, containerH / naturalH);
-                      const displayW = naturalW * scale;
-                      const displayH = naturalH * scale;
-                      setImgDisplaySize({
-                        w: displayW,
-                        h: displayH,
-                        offsetX: (containerW - displayW) / 2,
-                        offsetY: (containerH - displayH) / 2,
-                      });
-                    }}
-                    onError={() => setImageError(true)}
-                  />
-                  {/* Highlight overlay rectangles */}
-                  {highlightRects.length > 0 && (
-                    <div className="absolute inset-0 pointer-events-none">
-                      {highlightRects.map((rect, i) => (
-                        <div
-                          key={i}
-                          className="absolute"
-                          style={{
-                            left: rect.x,
-                            top: rect.y,
-                            width: rect.width,
-                            height: rect.height,
-                            background: "rgba(255, 180, 50, 0.3)",
-                            border: "1px solid rgba(255, 150, 30, 0.7)",
-                            borderRadius: 2,
-                          }}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="text-[10px] text-center mt-1" style={{ color: "var(--color-text-muted)" }}>
-                  {filename} {highlightChunk && `— chunk ${highlightChunk.id}`}
-                </div>
-              </div>
+            {/* Preview panel — HTML content (format-agnostic) */}
+            {highlightChunk?.html ? (
+              <PreviewHtmlContent html={highlightChunk.html} chunkId={highlightChunk.id} filename={filename} />
+            ) : fileType === "image" && fileUrl && !imageError ? (
+              <PreviewImage
+                ref={imgRef}
+                src={fileUrl}
+                alt={filename}
+                onLoad={(naturalW, naturalH) => {
+                  setNaturalSize({ w: naturalW, h: naturalH });
+                  setImgDisplaySize(computeDisplaySize(naturalW, naturalH, 180, 130));
+                }}
+                onError={() => setImageError(true)}
+                highlightRects={highlightRects}
+              />
+            ) : fileType === "image" && ((fileUrl && imageError) || !fileUrl) ? (
+              <PreviewUnavailable filename={filename} />
+            ) : (fileType === "pdf") && highlightChunk?.pageNumber && fileUrl ? (
+              <PdfPreviewPage
+                pageUrl={fileUrlToPageUrl(fileUrl, highlightChunk.pageNumber)}
+                filename={filename}
+                highlightChunk={highlightChunk}
+                ref={imgRef}
+                onDisplaySizeChange={setImgDisplaySize}
+              />
+            ) : (fileType === "pdf") && !highlightChunk?.pageNumber ? (
+              <PreviewFallback filename={filename} pageNumber={pageNumber} fileUrl={fileUrl} />
+            ) : (
+              <PreviewFallback filename={filename} pageNumber={pageNumber} fileUrl={fileUrl} />
             )}
-            {(fileUrl && imageError) || (fileType === "image" && !fileUrl) ? (
-              <div style={{ flexShrink: 0 }}>
-                <div
-                  className="rounded-lg flex flex-col items-center justify-center"
-                  style={{
-                    width: 180,
-                    height: 130,
-                    background: "var(--color-bg-dark)",
-                    border: "1px solid var(--color-border-default)",
-                    color: "var(--color-text-muted)",
-                    fontSize: 12,
-                  }}
-                >
-                  <span>{filename}</span>
-                  <span>(preview unavailable)</span>
-                </div>
-              </div>
-            ) : null}
-            {(fileType === "pdf" || fileType === "docx" || fileType === "unknown") && (
-              <div style={{ flexShrink: 0 }}>
-                <div
-                  className="rounded-lg flex flex-col items-center justify-center gap-1"
-                  style={{
-                    width: 180,
-                    height: 100,
-                    background: "var(--color-bg-dark)",
-                    border: "1px solid var(--color-border-default)",
-                    color: "var(--color-text-muted)",
-                    fontSize: 12,
-                  }}
-                >
-                  <span style={{ fontSize: 24 }}>{fileType === "pdf" ? "📄" : "📃"}</span>
-                  <span>{filename}</span>
-                  {pageNumber && <span>(Page {pageNumber})</span>}
-                  {highlightChunk?.pageNumber && <span>(Chunk p.{highlightChunk.pageNumber})</span>}
-                  {fileUrl && (
-                    <a
-                      href={fileUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs underline"
-                      style={{ color: "var(--color-accent-blue)" }}
-                    >
-                      Open ↗
-                    </a>
-                  )}
-                </div>
-              </div>
-            )}
+
             {/* Text panel */}
             <div style={{ flex: 1, minWidth: 0 }}>
               <Label>{highlightChunk ? "Cited excerpt" : "Key claim"}</Label>
@@ -265,10 +220,253 @@ export function SourceCitationCard({
   );
 }
 
+const PreviewImage = React.forwardRef<
+  HTMLImageElement,
+  {
+    src: string;
+    alt: string;
+    onLoad: (naturalW: number, naturalH: number) => void;
+    onError: () => void;
+    highlightRects: WordBox[];
+  }
+>(function PreviewImage({ src, alt, onLoad, onError, highlightRects }, ref) {
+  const containerW = 180;
+  const containerH = 130;
+
+  return (
+    <div style={{ flexShrink: 0 }}>
+      <div
+        className="rounded-lg relative overflow-hidden flex items-center justify-center"
+        style={{
+          width: containerW,
+          height: containerH,
+          background: "var(--color-bg-dark)",
+          border: "1px solid var(--color-border-default)",
+        }}
+      >
+        <img
+          ref={ref}
+          src={src}
+          alt={alt}
+          style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+          onLoad={(e) => {
+            const img = e.currentTarget;
+            onLoad(img.naturalWidth, img.naturalHeight);
+          }}
+          onError={onError}
+        />
+        {highlightRects.length > 0 && (
+          <div className="absolute inset-0 pointer-events-none">
+            {highlightRects.map((rect, i) => (
+              <div
+                key={i}
+                className="absolute"
+                style={{
+                  left: rect.x,
+                  top: rect.y,
+                  width: rect.width,
+                  height: rect.height,
+                  background: "rgba(255, 180, 50, 0.3)",
+                  border: "1px solid rgba(255, 150, 30, 0.7)",
+                  borderRadius: 2,
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="text-2xs text-center mt-1" style={{ color: "var(--color-text-muted)" }}>
+        {alt} {highlightRects.length > 0 ? "— highlighted" : ""}
+      </div>
+    </div>
+  );
+});
+
+const PdfPreviewPage = React.forwardRef<
+  HTMLImageElement,
+  {
+    pageUrl: string;
+    filename: string;
+    highlightChunk: HighlightChunk;
+    onDisplaySizeChange: (size: { w: number; h: number; offsetX: number; offsetY: number }) => void;
+  }
+>(function PdfPreviewPage({ pageUrl, filename, highlightChunk, onDisplaySizeChange }, ref) {
+  const [loadError, setLoadError] = useState(false);
+  const containerW = 180;
+  const containerH = 130;
+
+  // pageWidth/pageHeight = reference coordinate space used during extraction
+  const refWidth = highlightChunk.pageWidth ?? 0;
+  const refHeight = highlightChunk.pageHeight ?? 0;
+
+  const highlightRects: WordBox[] = [];
+  if (highlightChunk.wordBoxes && refWidth > 0 && refHeight > 0) {
+    const sx = containerW / refWidth;
+    const sy = containerH / refHeight;
+    for (const wb of highlightChunk.wordBoxes) {
+      highlightRects.push({
+        x: wb.x * sx,
+        y: wb.y * sy,
+        width: wb.width * sx,
+        height: wb.height * sy,
+      });
+    }
+  }
+
+  return (
+    <div style={{ flexShrink: 0 }}>
+      <div
+        className="rounded-lg relative overflow-hidden flex items-center justify-center"
+        style={{
+          width: containerW,
+          height: containerH,
+          background: "var(--color-bg-dark)",
+          border: "1px solid var(--color-border-default)",
+        }}
+      >
+        {loadError ? (
+          <span style={{ color: "var(--color-text-muted)", fontSize: 11 }}>Page unavailable</span>
+        ) : (
+          <img
+            ref={ref}
+            src={pageUrl}
+            alt={`${filename} page ${highlightChunk.pageNumber}`}
+            style={{ width: "100%", height: "100%", objectFit: "contain" }}
+            onLoad={() => {
+              onDisplaySizeChange({
+                w: containerW,
+                h: containerH,
+                offsetX: 0,
+                offsetY: 0,
+              });
+            }}
+            onError={() => setLoadError(true)}
+          />
+        )}
+        {highlightRects.length > 0 && !loadError && (
+          <div className="absolute inset-0 pointer-events-none">
+            {highlightRects.map((rect, i) => (
+              <div
+                key={i}
+                className="absolute"
+                style={{
+                  left: rect.x,
+                  top: rect.y,
+                  width: rect.width,
+                  height: rect.height,
+                  background: "rgba(255, 180, 50, 0.3)",
+                  border: "1px solid rgba(255, 150, 30, 0.7)",
+                  borderRadius: 2,
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="text-2xs text-center mt-1" style={{ color: "var(--color-text-muted)" }}>
+        {filename} — page {highlightChunk.pageNumber}
+        {highlightRects.length > 0 ? " (highlighted)" : ""}
+      </div>
+    </div>
+  );
+});
+
+function PreviewHtmlContent({
+  html,
+  chunkId,
+  filename,
+}: {
+  html: string;
+  chunkId: string;
+  filename: string;
+}) {
+  return (
+    <div style={{ flexShrink: 0 }}>
+      <div
+        className="rounded-lg overflow-auto p-2.5"
+        style={{
+          width: 180,
+          height: 130,
+          background: "var(--color-bg-dark)",
+          border: "1px solid var(--color-border-default)",
+          fontSize: 11,
+          lineHeight: 1.4,
+        }}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+      <div className="text-2xs text-center mt-1" style={{ color: "var(--color-text-muted)" }}>
+        {filename} &mdash; {chunkId}
+      </div>
+      <style>{`
+        [data-chunk-id="${chunkId}"] {
+          background: rgba(255, 180, 50, 0.3);
+          border-left: 3px solid rgba(255, 150, 30, 0.8);
+          padding-left: 4px;
+          border-radius: 2px;
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function PreviewUnavailable({ filename }: { filename: string }) {
+  return (
+    <div style={{ flexShrink: 0 }}>
+      <div
+        className="rounded-lg flex flex-col items-center justify-center"
+        style={{
+          width: 180,
+          height: 130,
+          background: "var(--color-bg-dark)",
+          border: "1px solid var(--color-border-default)",
+          color: "var(--color-text-muted)",
+          fontSize: 12,
+        }}
+      >
+        <span>{filename}</span>
+        <span>(preview unavailable)</span>
+      </div>
+    </div>
+  );
+}
+
+function PreviewFallback({ filename, pageNumber, fileUrl }: { filename: string; pageNumber?: number; fileUrl?: string }) {
+  return (
+    <div style={{ flexShrink: 0 }}>
+      <div
+        className="rounded-lg flex flex-col items-center justify-center gap-1"
+        style={{
+          width: 180,
+          height: 100,
+          background: "var(--color-bg-dark)",
+          border: "1px solid var(--color-border-default)",
+          color: "var(--color-text-muted)",
+          fontSize: 12,
+        }}
+      >
+        <span style={{ fontSize: 24 }}>📄</span>
+        <span>{filename}</span>
+        {pageNumber && <span>(Page {pageNumber})</span>}
+        {fileUrl && (
+          <a
+            href={fileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs underline"
+            style={{ color: "var(--color-accent-blue)" }}
+          >
+            Open ↗
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Label({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="text-[10px] uppercase tracking-wider font-semibold mb-1"
+      className="text-2xs uppercase tracking-wider font-semibold mb-1"
       style={{ color: "var(--color-text-muted)" }}
     >
       {children}

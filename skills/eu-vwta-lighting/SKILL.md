@@ -2,65 +2,70 @@
 name: eu-vwta-lighting
 description: EU VWTA compliance review for vehicle lighting systems. Covers UN R48 (installation) and UN R112 (headlamp performance).
 triggers: ["VWTA", "lighting", "headlamp", "R48", "R112", "type approval"]
+regulation_ids:
+  - R48
+  - R112
 ---
 
-# EU VWTA Lighting Compliance
+## Checks
 
-## 1. Role Definition
+### light_source
+1. **type**: enum(led, halogen, xenon, other)
+2. **attention**: headlamp light source type LED halogen xenon
+3. **description**: Determines which clauses apply for headlamp requirements
+4. **clause**: R48.6.1
+5. **depends_on**: (none)
+6. **sample**: The vehicle uses LED headlamps [S1.c1], which require auto-leveling under R48.5.11.
 
-You are a senior EU VWTA certification expert specializing in vehicle lighting systems.
-You understand the intent behind each regulation clause.
-You use the built-in compliance-check tool for numerical pass/fail and your own expertise for anomaly detection.
+### auto_leveling
+1. **type**: enum(required, not_required, na)
+2. **attention**: headlamp auto leveling adjustment levelling
+3. **description**: Auto-leveling is mandatory if the light source is LED
+4. **clause**: R48.5.11
+5. **depends_on**: light_source
+6. **sample**: Since the light source is LED, auto-leveling is required under R48.5.11. The document confirms it is fitted [S1.c2].
 
-## 2. Execution Flow
+### mounting_height
+1. **type**: number(0-2000)
+2. **attention**: headlamp mounting height position installation
+3. **description**: Headlamp mounting height measured in mm from ground
+4. **clause**: R48.6.2
+5. **constraint**: range(500-1200)
+6. **depends_on**: (none)
+7. **sample**: The headlamp mounting height is 650 mm [S1.c3], within the required range of 500-1200 mm under R48.6.2.
 
-| # | Step | Executor |
-|---|------|----------|
-| 1 | Identify vehicle specs and lighting system configuration | llm |
-| 2 | Load applicable regulation references per §6 | builtin:load-references |
-| 3 | For each compliance check: evaluate against regulation, call compliance-check tool for numerical limits, apply professional judgment for qualitative checks | llm+tool |
+### colour_temperature
+1. **type**: number(3000-8000)
+2. **attention**: headlamp colour temperature Kelvin
+3. **description**: Colour temperature in Kelvin
+4. **clause**: R112.5.5
+5. **constraint**: <= 6000
+6. **depends_on**: (none)
+7. **sample**: The colour temperature is 5000 K [S1.c4], below the 6000 K limit under R112.5.5.
 
-## 3. Key Decision Points
+### beam_cutoff_angle
+1. **type**: number(0-2)
+2. **attention**: beam cutoff angle headlamp pattern aim
+3. **description**: Beam cutoff angle in degrees
+4. **clause**: R112.5.3
+5. **constraint**: <= 0.57
+6. **depends_on**: (none)
+7. **sample**: The beam cutoff angle measured 0.4 degrees [S1.c5], within the 0.57 degree limit under R112.5.3.
 
-### 3.1 Auto-Leveling (LED Source)
-If light source is LED → UN R48 §5.11 applies: auto-leveling MANDATORY.
+### luminous_flux
+1. **type**: number(0-500)
+2. **attention**: luminous flux light output lumens
+3. **description**: Luminous flux in lumens per lamp
+4. **clause**: R112.5.2
+5. **constraint**: >= 150
+6. **depends_on**: (none)
+7. **sample**: The luminous flux per lamp is 180 lumens [S1.c6], exceeding the 150 lumen minimum under R112.5.2.
 
-### 3.2 Mounting Height
-Range: 500-1200mm per UN R48 §6.2. Near-limit boundary: flag in conclusion.
-
-### 3.3 Beam Cutoff Angle
-UN R112 §5.3: ≤ 0.57°. Use compliance-check tool for determination.
-
-### 3.4 Color Temperature
-UN R112 §5.5: ≤ 6000K. Use compliance-check tool for determination.
-
-## 4. Red Lines
-
+## Red Lines
 - ❌ Do not issue PASS where data is insufficient
 - ❌ Do not skip auto-leveling check for LED — legally required
-- ❌ Do not make numerical pass/fail without calling the compliance-check tool (§5)
-- ❌ Do not reference clauses from memory — load from references/
+- ❌ Do not make numerical pass/fail without calling the compliance-check tool
+- ❌ Do not reference clauses from memory — load from Regulation API
 
-## 5. Numerical Judgement Rules
-
-| Check | Operator | Limit | Clause |
-|-------|----------|-------|--------|
-| Mounting Height | range | 500-1200 | R48 §6.2 |
-| Colour Temperature | <= | 6000 | R112 §5.5 |
-| Beam Cutoff Angle | <= | 0.57 | R112 §5.3 |
-
-## 6. Reference Loading Rules
-
-| Condition | Must Load |
-|-----------|-----------|
-| Any lighting check | references/un-r48.md |
-| Headlamp performance | references/un-r112.md |
-| Any task | references/common-pitfalls.md |
-
-## 7. Experience Accumulation
-
-> This section is auto-maintained by system experience, equally important as the initial flow.
-
+## Lessons Learnt
 (System-maintained area, initially empty.)
-- This assessment result has been recorded. Future evaluations will reference this outcome automatically.
-- When a vehicle uses LED lighting, R48 §5.11 requires auto-leveling — this check must never be skipped for LED-equipped vehicles, regardless of headlamp type.

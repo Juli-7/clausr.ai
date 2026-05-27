@@ -2,17 +2,15 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import type { AgentResponse } from "@/lib/agent/types";
-import type { ReportTemplate } from "@/lib/agent/template-types";
-import { generateDocx } from "@/lib/export-docx";
+import type { AgentResponse } from "@/lib/agent/shared/types";
+import { generateDocx } from "@/lib/agent/present/export/export-docx";
 
 interface DownloadDropdownProps {
   response: AgentResponse | null;
-  template?: ReportTemplate | null;
   skillName?: string;
 }
 
-export function DownloadDropdown({ response, template, skillName }: DownloadDropdownProps) {
+export function DownloadDropdown({ response, skillName }: DownloadDropdownProps) {
   const [open, setOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
@@ -53,7 +51,7 @@ export function DownloadDropdown({ response, template, skillName }: DownloadDrop
     setExporting(true);
 
     try {
-      const blob = await generateDocx(response, template, skillName);
+      const blob = await generateDocx(response, skillName);
       const title = skillName ? `${skillName} Compliance Report` : "Compliance Report";
       const date = new Date().toISOString().slice(0, 10);
       const url = URL.createObjectURL(blob);

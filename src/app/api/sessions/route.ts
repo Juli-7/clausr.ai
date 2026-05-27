@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAllSessions } from "@/lib/agent/memory/repository";
+import { getAllSessions } from "@/lib/agent/shared/memory/repository";
 
 export async function GET() {
   try {
