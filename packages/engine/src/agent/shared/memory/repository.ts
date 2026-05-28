@@ -230,6 +230,17 @@ export function getFileChunks(sessionId: string): string {
   return row?.file_chunks ?? "[]";
 }
 
+export function saveSessionFiles(sessionId: string, filesJson: string): void {
+  const db = getDb();
+  db.prepare("UPDATE sessions SET session_files = ? WHERE id = ?").run(filesJson, sessionId);
+}
+
+export function getSessionFiles(sessionId: string): string {
+  const db = getDb();
+  const row = db.prepare("SELECT session_files FROM sessions WHERE id = ?").get(sessionId) as { session_files: string } | undefined;
+  return row?.session_files ?? "[]";
+}
+
 export function deleteSession(sessionId: string): void {
   const db = getDb();
   db.prepare("DELETE FROM chunk_store WHERE session_id = ?").run(sessionId);
@@ -251,6 +262,12 @@ export function getRecentMemories(skillName: string, limit = 5): string[] {
     )
     .all(skillName, limit) as { content: string }[];
   return rows.map((r) => r.content.slice(0, 120));
+}
+
+export function getSessionMeta(sessionId: string): { skillName: string } | null {
+  const db = getDb();
+  const row = db.prepare("SELECT skill_name FROM sessions WHERE id = ?").get(sessionId) as { skill_name: string } | undefined;
+  return row ? { skillName: row.skill_name } : null;
 }
 
 export function getAllSessions(tenantId?: string): {

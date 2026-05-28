@@ -156,6 +156,7 @@ function runMigrations(db: Database.Database): void {
   try { db.exec("ALTER TABLE chunk_store ADD COLUMN page_width REAL"); } catch { }
   try { db.exec("ALTER TABLE chunk_store ADD COLUMN page_height REAL"); } catch { }
   try { db.exec("ALTER TABLE chunk_store ADD COLUMN chunk_html TEXT"); } catch { }
+  try { db.exec("ALTER TABLE sessions ADD COLUMN session_files TEXT NOT NULL DEFAULT '[]'"); } catch { }
 }
 
 function initSettings(db: Database.Database): void {
