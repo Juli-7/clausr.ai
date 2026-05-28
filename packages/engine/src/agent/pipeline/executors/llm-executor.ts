@@ -187,15 +187,15 @@ export async function executeLlmToolStep(
       ctx.checks.addResults([{
         name: currentCheck?.field ?? "check",
         type: "numerical" as const,
-        finding: narrative?.finding ?? `${currentCheck?.field}: ${run.value} ${run.comparison} → ${run.status}`,
-        verdict: run.status === "pass" ? ("PASS" as const) : ("FAIL" as const),
+        finding: narrative?.finding ?? `${currentCheck?.field}: ${run!.value} ${run!.comparison} → ${run!.status}`,
+        verdict: run!.status === "pass" ? ("PASS" as const) : ("FAIL" as const),
         citationRef: citRef,
         sourceCitation: srcCit,
         toolResult: {
-          value: run.value,
-          limit: run.limit as number,
-          comparison: run.comparison,
-          status: run.status,
+          value: run!.value,
+          limit: run!.limit as number,
+          comparison: run!.comparison,
+          status: run!.status,
         },
       }]);
       logPipeline(`  [LLM+TOOL] merged CheckResult from tool + narrative for "${currentCheck?.field}"`);
@@ -243,7 +243,7 @@ export async function executeLlmToolStep(
 function storeOutput(ctx: PipelineContext, stepNumber: number, text: string): void {
   let trimmed = text.trim();
   const fenceMatch = trimmed.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/);
-  if (fenceMatch) trimmed = fenceMatch[1].trim();
+  if (fenceMatch) trimmed = fenceMatch[1]!.trim();
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
     try {
       ctx.steps.write(stepNumber, JSON.parse(trimmed));
@@ -363,7 +363,7 @@ function extractChunkIdsFromFileChunks(fileChunks: string): string[] {
   const regex = /\[(S\d+(?:\.\S+?))\]/g;
   let match;
   while ((match = regex.exec(fileChunks)) !== null) {
-    ids.add(match[1]);
+    ids.add(match[1]!);
   }
   return [...ids];
 }

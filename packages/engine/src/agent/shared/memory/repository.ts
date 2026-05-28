@@ -40,17 +40,17 @@ export function saveChunks(
         id,
         sessionId,
         fileId,
-        chunks[i].text,
-        chunks[i].html ?? null,
-        chunks[i].pageNumber ?? null,
-        chunks[i].bbox ? JSON.stringify(chunks[i].bbox) : null,
-        chunks[i].wordBoxes ? JSON.stringify(chunks[i].wordBoxes) : null,
-        chunks[i].pageWidth ?? null,
-        chunks[i].pageHeight ?? null,
+        chunks[i]!.text,
+        chunks[i]!.html ?? null,
+        chunks[i]!.pageNumber ?? null,
+        chunks[i]!.bbox ? JSON.stringify(chunks[i]!.bbox) : null,
+        chunks[i]!.wordBoxes ? JSON.stringify(chunks[i]!.wordBoxes) : null,
+        chunks[i]!.pageWidth ?? null,
+        chunks[i]!.pageHeight ?? null,
         null,
         Date.now()
       );
-      indexChunkFts5(sessionId, fileId, i + 1, chunks[i].text);
+      indexChunkFts5(sessionId, fileId, i + 1, chunks[i]!.text);
     }
   });
   insert();

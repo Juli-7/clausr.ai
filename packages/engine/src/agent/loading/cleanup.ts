@@ -7,7 +7,7 @@ const UPLOADS_DIR = path.join(process.cwd(), "data", "uploads");
 function isValidSessionId(id: string): boolean {
   if (id.length < 1 || id.length > 128) return false;
   for (let i = 0; i < id.length; i++) {
-    const c = id[i];
+    const c = id[i]!;
     if ((c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || (c >= "0" && c <= "9") || c === "_" || c === "-") continue;
     return false;
   }

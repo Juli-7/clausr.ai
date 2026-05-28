@@ -104,14 +104,14 @@ function buildChunks(paragraphs: ParagraphInfo[]): TextChunk[] {
   });
 
   for (let i = 1; i < chunks.length; i++) {
-    const prev = chunks[i - 1];
+    const prev = chunks[i - 1]!;
     if (prev.text.length <= OVERLAP_CHARS) continue;
     const tail = prev.text.slice(-OVERLAP_CHARS);
     const lastNewline = tail.indexOf("\n");
     const overlap = lastNewline >= 0 ? tail.slice(lastNewline + 1) : tail;
     chunks[i] = {
-      ...chunks[i],
-      text: overlap + "\n" + chunks[i].text,
+      ...chunks[i]!,
+      text: overlap + "\n" + chunks[i]!.text,
     };
   }
 

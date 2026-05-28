@@ -112,7 +112,7 @@ export class FileRegistry {
 
     const fileBlocks: string[] = [];
     for (const [fileIdx, chunkResults] of grouped) {
-      const f = this.files[fileIdx];
+      const f = this.files[fileIdx]!;
       const sourceRef = `S${fileIdx + 1}`;
       const lines = chunkResults.map((c) => `[${sourceRef}.c${c.idx}] ${c.text}`);
       fileBlocks.push(`[File ${fileIdx + 1}: ${f.filename}]\n${lines.join("\n")}`);

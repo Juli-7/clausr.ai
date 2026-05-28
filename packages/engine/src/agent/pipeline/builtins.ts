@@ -141,7 +141,7 @@ function parseRounding(rounding?: number | string): { places: number; mode: "sta
   if (rounding === undefined) return null;
   if (typeof rounding === "number") return { places: rounding, mode: "standard" };
   const parts = rounding.split(":");
-  const places = parseInt(parts[0], 10);
+  const places = parseInt(parts[0]!, 10);
   if (isNaN(places) || places < 0) return null;
   const mode = parts[1] === "ceil" ? "ceil" : parts[1] === "floor" ? "floor" : "standard";
   return { places, mode };
@@ -173,8 +173,8 @@ export function executeComplianceCheck(
 
   if (operator === "range" && typeof limit === "string") {
     const parts = limit.split("-");
-    const lo = parseFloat(parts[0]);
-    const hi = parseFloat(parts[1]);
+    const lo = parseFloat(parts[0]!);
+    const hi = parseFloat(parts[1]!);
     comparison = `${compareValue} in [${lo}, ${hi}]`;
     if (compareValue < lo || compareValue > hi) {
       status = "fail";
@@ -187,8 +187,8 @@ export function executeComplianceCheck(
       note = `Invalid tolerance format: ${limit}`;
     } else {
       const [, nominalStr, tolStr, isPercent] = match;
-      const nominal = parseFloat(nominalStr);
-      const tol = parseFloat(tolStr);
+      const nominal = parseFloat(nominalStr!);
+      const tol = parseFloat(tolStr!);
       const delta = isPercent ? nominal * tol / 100 : tol;
       const lo = nominal - delta;
       const hi = nominal + delta;

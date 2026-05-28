@@ -171,7 +171,7 @@ export class CheckStore {
     const citationRefs = new Set(this.compiledCitations.map((c) => c.ref));
     // Match any [...] bracket content against known citation palette entries
     // Supports R48.5.11, GDPR.Art 4(7), Art 6, etc.
-    const allBracketRefs = [...content.matchAll(/\[([^\]]+)\]/g)].map((m) => m[1]);
+    const allBracketRefs = [...content.matchAll(/\[([^\]]+)\]/g)].map((m) => m[1]!);
 
     for (const marker of [...new Set(allBracketRefs)]) {
       if (!citationRefs.has(marker)) {
@@ -188,7 +188,7 @@ export class CheckStore {
     }
 
     const sourceRefs = new Set(this.compiledSourceCitations.map((c) => c.ref));
-    const sourceMarkers = [...content.matchAll(/\[(S\d+\.\S+?)\]/g)].map((m) => m[1]);
+    const sourceMarkers = [...content.matchAll(/\[(S\d+\.\S+?)\]/g)].map((m) => m[1]!);
 
     for (const marker of [...new Set(sourceMarkers)]) {
       if (!sourceRefs.has(marker)) {
@@ -232,7 +232,7 @@ export class CheckStore {
       .flatMap((r) => r.citationRef);
 
     // Match any [...] bracket content that corresponds to a known regulation citation
-    const allBracketRefs = [...content.matchAll(/\[([^\]]+)\]/g)].map((m) => m[1]);
+    const allBracketRefs = [...content.matchAll(/\[([^\]]+)\]/g)].map((m) => m[1]!);
     const valueRefs = allBracketRefs.filter(
       (ref) => !!paletteStore.findCitation(ref) || !!paletteStore.findSummaryForRef(ref)
     );

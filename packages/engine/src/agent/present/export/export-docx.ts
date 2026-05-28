@@ -24,7 +24,7 @@ const FIELD_ALIASES: Record<string, string[]> = {
 const DEFAULT_PLACEHOLDER_FALLBACKS: Record<string, string> = {
   "{vehicle-make-model}": "N/A",
   "{certifier-name}": "N/A",
-  "{certification-date}": new Date().toISOString().split("T")[0],
+  "{certification-date}": new Date().toISOString().split("T")[0]!,
 };
 
 export async function generateDocx(

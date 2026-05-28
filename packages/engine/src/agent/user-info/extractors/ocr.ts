@@ -61,12 +61,12 @@ function groupWordsIntoLines(words: Tesseract.Word[]): Tesseract.Word[][] {
   const avgHeight = sorted.reduce((s, w) => s + (w.bbox.y1 - w.bbox.y0), 0) / sorted.length;
   const tolerance = avgHeight * 0.5;
 
-  const lines: Tesseract.Word[][] = [[sorted[0]]];
+  const lines: Tesseract.Word[][] = [[sorted[0]!]];
 
   for (let i = 1; i < sorted.length; i++) {
-    const current = sorted[i];
-    const lastLine = lines[lines.length - 1];
-    const lastWord = lastLine[lastLine.length - 1];
+    const current = sorted[i]!;
+    const lastLine = lines[lines.length - 1]!;
+    const lastWord = lastLine[lastLine.length - 1]!;
     const yGap = Math.abs(current.bbox.y0 - lastWord.bbox.y0);
     if (yGap <= tolerance) {
       lastLine.push(current);
@@ -103,7 +103,7 @@ export async function extractImageText(dataUrl: string): Promise<OcrResult> {
   const overlapChars = 80;
   const chunks: TextChunk[] = rawChunks.map((chunk, i) => {
     if (i === 0) return chunk;
-    const prev = rawChunks[i - 1];
+    const prev = rawChunks[i - 1]!;
     if (prev.text.length <= overlapChars) return chunk;
     const tail = prev.text.slice(-overlapChars);
     return {

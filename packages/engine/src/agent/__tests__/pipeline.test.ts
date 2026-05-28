@@ -200,7 +200,7 @@ describe("Pipeline DB round-trip", () => {
     expect(loaded!.skillName).toBe("test-lighting");
     expect(loaded!.steps).toHaveLength(3);
     expect(loaded!.checks).toHaveLength(3);
-    expect(loaded!.checks[0].field).toBe("mounting_height");
+    expect(loaded!.checks[0]!.field).toBe("mounting_height");
     expect(loaded!.regulationIds).toEqual(["R48", "R112"]);
   });
 
@@ -221,9 +221,9 @@ describe("Pipeline DB round-trip", () => {
     expect(restored!.ctx.skill.name).toBe("test-lighting");
     expect(restored!.ctx.skill.checks).toHaveLength(3);
     expect(restored!.steps).toHaveLength(3);
-    expect(restored!.steps[0].number).toBe(1);
-    expect(restored!.steps[0].title).toBe("Evaluate: mounting_height");
-    expect(restored!.steps[0].type).toBe("llm+tool");
+    expect(restored!.steps[0]!.number).toBe(1);
+    expect(restored!.steps[0]!.title).toBe("Evaluate: mounting_height");
+    expect(restored!.steps[0]!.type).toBe("llm+tool");
   });
 
   it("returns null for missing session", async () => {
@@ -382,9 +382,9 @@ describe("executeLlmToolStep with mocked LLM", () => {
     expect(result.streamedTokens!.join("")).toContain("LED headlamps");
     const checkResults = ctx.checks.getResults();
     expect(checkResults).toHaveLength(1);
-    expect(checkResults[0].name).toBe("light_source");
-    expect(checkResults[0].verdict).toBe("PASS");
-    expect(checkResults[0].citationRef).toContain("R48.6.1");
+    expect(checkResults[0]!.name).toBe("light_source");
+    expect(checkResults[0]!.verdict).toBe("PASS");
+    expect(checkResults[0]!.citationRef).toContain("R48.6.1");
   });
 
   it("merges tool results for numerical steps", async () => {
@@ -416,9 +416,9 @@ describe("executeLlmToolStep with mocked LLM", () => {
     expect(result.success).toBe(true);
     const checkResults = ctx.checks.getResults();
     expect(checkResults).toHaveLength(1);
-    expect(checkResults[0].name).toBe("mounting_height");
-    expect(checkResults[0].verdict).toBe("PASS");
-    expect(checkResults[0].citationRef).toContain("R48.6.2");
+    expect(checkResults[0]!.name).toBe("mounting_height");
+    expect(checkResults[0]!.verdict).toBe("PASS");
+    expect(checkResults[0]!.citationRef).toContain("R48.6.2");
   });
 
   it("handles LLM error gracefully", async () => {
@@ -472,15 +472,15 @@ describe("generateStepsFromChecks", () => {
   });
 
   it("sets step numbers sequentially", () => {
-    expect(TEST_STEPS[0].number).toBe(1);
-    expect(TEST_STEPS[1].number).toBe(2);
-    expect(TEST_STEPS[2].number).toBe(3);
+    expect(TEST_STEPS[0]!.number).toBe(1);
+    expect(TEST_STEPS[1]!.number).toBe(2);
+    expect(TEST_STEPS[2]!.number).toBe(3);
   });
 
   it("includes field instructions", () => {
-    expect(TEST_STEPS[0].instructions).toContain("mounting_height");
-    expect(TEST_STEPS[0].instructions).toContain("range(500-1200)");
-    expect(TEST_STEPS[0].instructions).toContain("R48.6.2");
+    expect(TEST_STEPS[0]!.instructions).toContain("mounting_height");
+    expect(TEST_STEPS[0]!.instructions).toContain("range(500-1200)");
+    expect(TEST_STEPS[0]!.instructions).toContain("R48.6.2");
   });
 
   it("all steps are llm+tool type", () => {

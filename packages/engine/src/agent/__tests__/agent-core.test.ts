@@ -57,13 +57,13 @@ describe("parseChecks", () => {
 `;
     const checks = parseChecks(md);
     expect(checks).toHaveLength(2);
-    expect(checks[0].field).toBe("mounting_height");
-    expect(checks[0].type).toEqual({ kind: "number" });
-    expect(checks[0].constraint).toBe(">= 500");
-    expect(checks[0].clause).toBe("R48 §6.2");
-    expect(checks[0].description).toBe("Measured in mm from ground");
-    expect(checks[1].field).toBe("light_source");
-    expect(checks[1].type).toEqual({ kind: "string" });
+    expect(checks[0]!.field).toBe("mounting_height");
+    expect(checks[0]!.type).toEqual({ kind: "number" });
+    expect(checks[0]!.constraint).toBe(">= 500");
+    expect(checks[0]!.clause).toBe("R48 §6.2");
+    expect(checks[0]!.description).toBe("Measured in mm from ground");
+    expect(checks[1]!.field).toBe("light_source");
+    expect(checks[1]!.type).toEqual({ kind: "string" });
   });
 
   it("parses enum type", () => {
@@ -78,7 +78,7 @@ describe("parseChecks", () => {
 `;
     const checks = parseChecks(md);
     expect(checks).toHaveLength(1);
-    expect(checks[0].type).toEqual({ kind: "enum", values: ["red", "green", "blue"] });
+    expect(checks[0]!.type).toEqual({ kind: "enum", values: ["red", "green", "blue"] });
   });
 
   it("returns empty array when no ## Checks section", () => {
@@ -97,7 +97,7 @@ describe("parseChecks", () => {
 `;
     const checks = parseChecks(md);
     expect(checks).toHaveLength(1);
-    expect(checks[0].field).toBe("valid_field");
+    expect(checks[0]!.field).toBe("valid_field");
   });
 });
 
@@ -367,9 +367,9 @@ describe("createPipelineContext", () => {
     const scripts = [{ name: "test", path: "/scripts/test.py", desc: "Test", params: "" }];
     const ctx = createPipelineContext("s", "md", "sess-1", "corr-1", checks, scripts);
     expect(ctx.skill.checks).toHaveLength(1);
-    expect(ctx.skill.checks[0].field).toBe("x");
+    expect(ctx.skill.checks[0]!.field).toBe("x");
     expect(ctx.skill.scripts).toHaveLength(1);
-    expect(ctx.skill.scripts[0].name).toBe("test");
+    expect(ctx.skill.scripts[0]!.name).toBe("test");
   });
 });
 
@@ -406,7 +406,7 @@ describe("CheckStore", () => {
     const removed = store.removeResultsForField("a");
     expect(removed).toHaveLength(1);
     expect(store.getResults()).toHaveLength(1);
-    expect(store.getResults()[0].name).toBe("b");
+    expect(store.getResults()[0]!.name).toBe("b");
   });
 
   it("compiles citations from check results", () => {
@@ -420,7 +420,7 @@ describe("CheckStore", () => {
       []
     );
     expect(store.getCitations()).toHaveLength(1);
-    expect(store.getCitations()[0].ref).toBe("R48.6.2");
+    expect(store.getCitations()[0]!.ref).toBe("R48.6.2");
   });
 
   it("sets verdict to PASS when no results", () => {
@@ -432,7 +432,7 @@ describe("CheckStore", () => {
     const store = new CheckStore();
     store.addClaims([{ statement: "Height is 650mm", citationRef: "R48.6.2", sourceCitation: "S1.c1" }]);
     expect(store.getClaims()).toHaveLength(1);
-    expect(store.getClaims()[0].statement).toBe("Height is 650mm");
+    expect(store.getClaims()[0]!.statement).toBe("Height is 650mm");
   });
 });
 
@@ -479,7 +479,7 @@ describe("PaletteStore", () => {
     const store = new PaletteStore();
     store.loadReferences([{ filename: "r48.md", content: "# R48" }]);
     expect(store.getReferences()).toHaveLength(1);
-    expect(store.getReferences()[0].filename).toBe("r48.md");
+    expect(store.getReferences()[0]!.filename).toBe("r48.md");
   });
 
   it("stores citation palette", () => {
@@ -535,9 +535,9 @@ describe("FileRegistry", () => {
     });
     const palette = reg.getSourcePalette();
     expect(palette).toHaveLength(2);
-    expect(palette[0].id).toBe("S1");
-    expect(palette[1].id).toBe("S2.c1");
-    expect(palette[0].filename).toBe("a.pdf");
+    expect(palette[0]!.id).toBe("S1");
+    expect(palette[1]!.id).toBe("S2.c1");
+    expect(palette[0]!.filename).toBe("a.pdf");
   });
 
   it("builds context summary with chunks", () => {

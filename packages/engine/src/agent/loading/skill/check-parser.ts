@@ -76,7 +76,7 @@ export function parseChecks(skillmd: string): ParsedCheck[] {
 function isNumberedItem(line: string): boolean {
   const t = line.trim();
   if (t.length < 5) return false;
-  const first = t[0];
+  const first = t[0]!;
   if (first < "1" || first > "9") return false;
   return t.substring(1, 5) === ". **";
 }
@@ -101,7 +101,7 @@ function buildCheck(raw: Record<string, string>): ParsedCheck {
   const fieldType = parseFieldType(raw.type ?? "");
 
   return {
-    field: raw.field,
+    field: raw.field ?? "",
     type: fieldType ?? { kind: "string" },
     attention: raw.attention || null,
     constraint: raw.constraint || null,

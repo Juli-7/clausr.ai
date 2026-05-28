@@ -92,7 +92,7 @@ function getScriptDescription(filePath: string, filename: string): string {
   try {
     const content = fs.readFileSync(filePath, "utf-8");
     const docMatch = content.match(/^"""(.*?)"""/s);
-    if (docMatch) return docMatch[1].trim();
+    if (docMatch) return docMatch[1]?.trim() ?? "";
   } catch {
     // fall through to generic description
   }

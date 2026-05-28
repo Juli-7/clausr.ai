@@ -38,7 +38,7 @@ function itemToWordBoxes(item: PdfTextItem, pageHeight: number): WordBox[] {
   if (x == null || pdfY == null) return [];
 
   const width = item.width ?? 0;
-  const height = item.height || Math.abs(item.transform[3]) || 12;
+  const height = item.height || Math.abs(item.transform[3]!) || 12;
   const y = pageHeight - pdfY - height;
   const trimmedStart = text.search(/\S/);
   if (trimmedStart === -1) return [];
@@ -75,15 +75,15 @@ function groupItemsIntoLines(items: PdfTextItem[], pageHeight: number): PdfTextI
 
   if (withPos.length === 0) return [];
 
-  const positionedLines: PositionedTextItem[][] = [[withPos[0]]];
+  const positionedLines: PositionedTextItem[][] = [[withPos[0]!]];
   for (let i = 1; i < withPos.length; i++) {
-    const prevBox = withPos[i - 1].box;
-    const currBox = withPos[i].box;
+    const prevBox = withPos[i - 1]!.box;
+    const currBox = withPos[i]!.box;
     const tolerance = Math.max(prevBox.height, currBox.height) * 0.75;
     if (Math.abs(currBox.y - prevBox.y) <= tolerance) {
-      positionedLines[positionedLines.length - 1].push(withPos[i]);
+      positionedLines[positionedLines.length - 1]!.push(withPos[i]!);
     } else {
-      positionedLines.push([withPos[i]]);
+      positionedLines.push([withPos[i]!]);
     }
   }
 
@@ -169,10 +169,10 @@ const OVERLAP_CHARS = 120;
 
 function applyOverlap(chunks: TextChunk[]): TextChunk[] {
   if (chunks.length <= 1) return chunks;
-  const result: TextChunk[] = [chunks[0]];
+  const result: TextChunk[] = [chunks[0]!];
   for (let i = 1; i < chunks.length; i++) {
-    const prev = result[i - 1];
-    const curr = chunks[i];
+    const prev = result[i - 1]!;
+    const curr = chunks[i]!;
     if (prev.text.length <= OVERLAP_CHARS) {
       result.push(curr);
       continue;

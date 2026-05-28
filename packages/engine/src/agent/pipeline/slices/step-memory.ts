@@ -14,7 +14,7 @@ export class StepMemory {
       .filter((k) => !isNaN(Number(k)))
       .sort((a, b) => Number(a) - Number(b));
     if (keys.length === 0) return null;
-    const key = keys[keys.length - 1];
+    const key = keys[keys.length - 1]!;
     return { stepNumber: Number(key), value: this.outputs[key] };
   }
 

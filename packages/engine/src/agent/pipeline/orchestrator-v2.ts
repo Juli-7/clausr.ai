@@ -118,7 +118,7 @@ export async function* orchestratePipeline(
       // Also resolve any [R48.x.x] markers from the narrative text
       const fullContent = result.streamedTokens?.join("") ?? "";
       if (fullContent) {
-        const contentRefs = [...fullContent.matchAll(/\[(R\d+\.\d+(?:\.\d+)*)\]/g)].map((m) => m[1]);
+        const contentRefs = [...fullContent.matchAll(/\[(R\d+\.\d+(?:\.\d+)*)\]/g)].map((m) => m[1]!);
         await ctx.palette.resolveMissingRefs(contentRefs);
       }
 

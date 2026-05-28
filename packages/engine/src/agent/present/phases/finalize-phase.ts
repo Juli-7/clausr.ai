@@ -112,7 +112,7 @@ function formatContent(
   const sections: string[] = [];
 
   for (let i = 0; i < checks.length; i++) {
-    const result = checkResults.find(r => r.name === checks[i].field);
+    const result = checkResults.find(r => r.name === checks[i]!.field);
     const stepNum = i + 1;
     const output = stepOutputs[stepNum];
     const outputText = typeof output === "string" ? output.trim() : "";
@@ -150,7 +150,7 @@ function formatContent(
       }
     }
 
-    const header = `### ${checks[i].field}`;
+    const header = `### ${checks[i]!.field}`;
     if (badges.length > 0) {
       sections.push(header + "\n\n" + narrative + "\n\n" + badges.join(" "));
     } else {

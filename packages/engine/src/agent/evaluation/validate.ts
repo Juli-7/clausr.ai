@@ -83,7 +83,7 @@ export function validate({
 
   if (!reportContent) return errors;
 
-  const regulationMarkers = [...reportContent.matchAll(/\[(R\d+\.\d+(?:\.\d+)*)\]/g)].map((m) => m[1]);
+  const regulationMarkers = [...reportContent.matchAll(/\[(R\d+\.\d+(?:\.\d+)*)\]/g)].map((m) => m[1]).filter((x): x is string => x !== undefined);
   for (const marker of [...new Set(regulationMarkers)]) {
     if (!citationRefs.has(marker)) {
       errors.push({
@@ -93,7 +93,7 @@ export function validate({
     }
   }
 
-  const sourceMarkers = [...reportContent.matchAll(/\[(S\d+\.\S+?)\]/g)].map((m) => m[1]);
+  const sourceMarkers = [...reportContent.matchAll(/\[(S\d+\.\S+?)\]/g)].map((m) => m[1]).filter((x): x is string => x !== undefined);
   for (const marker of [...new Set(sourceMarkers)]) {
     if (!sourceRefs.has(marker)) {
       errors.push({
