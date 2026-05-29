@@ -76,7 +76,7 @@ Skills are file-based domain definitions under `skills/<skill-id>/`:
 - **## Checks** — Numbered checks with `type`, `description`, `clause`, `constraint`, `attention`
 - **Template sections** — `fields`, `table`, `markdown`, `verdict`
 
-See `skills/SKILL-SPEC.md` for the full specification and `skills/eu-vwta-lighting/` for a complete example.
+See `SKILL-SPEC.md` for the full specification and `skills/eu-vwta-lighting/` for a complete example.
 
 ### Prompt Versioning
 
