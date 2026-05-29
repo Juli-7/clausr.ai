@@ -25,6 +25,7 @@ export {
   saveContextSnapshot,
   getContextSnapshots,
   toggleStar,
+  toggleShare,
   searchChunksFts5,
   deleteSession,
   getRecentMemories,
@@ -93,6 +94,7 @@ export type {
 
 // ── Loading / Setup ──
 export { setupSession } from "./agent/loading/loading-orchestrator";
+export type { SetupSessionParams } from "./agent/loading/loading-orchestrator";
 export { loadSkill, listSkills } from "./agent/loading/skill/loader";
 export type { SkillLoader } from "./agent/loading/skill/loader";
 export { parseChecks } from "./agent/loading/skill/check-parser";

@@ -11,6 +11,7 @@ export interface SetupSessionParams {
   skillName?: string;
   sessionId: string;
   tenantId?: string;
+  userId?: string;
   files?: { name: string; size: number; type: string; dataUrl?: string }[];
   message?: string;
   lessonOverrides?: string[];
@@ -29,7 +30,7 @@ export async function setupSession(params: SetupSessionParams): Promise<{ correl
   logPipeline(`=== SETUP START === skill="${params.skillName ?? "(auto)"}" session="${params.sessionId}"`);
 
   // 1. Load or prepare skill + create DB session
-  const { skill, isAutoSkill } = await initSession(params.skillName, params.sessionId, params.tenantId);
+  const { skill, isAutoSkill } = await initSession(params.skillName, params.sessionId, params.tenantId, params.userId);
 
   // 2. Create fresh PipelineContext
   const ctx = createPipelineContext(

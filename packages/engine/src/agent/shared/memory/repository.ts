@@ -13,11 +13,11 @@ function safeJsonParse<T>(json: string, fallback?: T): T {
   }
 }
 
-export function getOrCreateSession(sessionId: string, skillName: string, tenantId?: string): void {
+export function getOrCreateSession(sessionId: string, skillName: string, tenantId?: string, userId?: string): void {
   const db = getDb();
   db.prepare(
-    "INSERT OR IGNORE INTO sessions (id, skill_name, tenant_id, created_at) VALUES (?, ?, ?, ?)"
-  ).run(sessionId, skillName, tenantId ?? "", Date.now());
+    "INSERT OR IGNORE INTO sessions (id, skill_name, tenant_id, user_id, created_at) VALUES (?, ?, ?, ?, ?)"
+  ).run(sessionId, skillName, tenantId ?? "", userId ?? "", Date.now());
 }
 
 // ── Chunk Store ──
@@ -270,7 +270,7 @@ export function getSessionMeta(sessionId: string): { skillName: string } | null 
   return row ? { skillName: row.skill_name } : null;
 }
 
-export function getAllSessions(tenantId?: string): {
+export function getAllSessions(tenantId?: string, userId?: string): {
   id: string;
   skillName: string;
   title: string;
@@ -279,6 +279,7 @@ export function getAllSessions(tenantId?: string): {
   roundCount: number;
   timestamp: number;
   starred: boolean;
+  shared: boolean;
   confidenceScore?: number;
   confidenceColor?: string;
   needsExpert?: boolean;
@@ -287,21 +288,28 @@ export function getAllSessions(tenantId?: string): {
   const rows = db
     .prepare(
       `SELECT
-        s.id, s.skill_name, s.created_at, s.starred,
+        s.id, s.skill_name, s.created_at, s.starred, s.shared,
         (SELECT content FROM messages WHERE session_id = s.id AND role = 'user' ORDER BY id ASC LIMIT 1) as first_msg,
         (SELECT content FROM messages WHERE session_id = s.id AND role = 'assistant' ORDER BY id DESC LIMIT 1) as last_msg,
         (SELECT verdict FROM responses WHERE session_id = s.id ORDER BY id DESC LIMIT 1) as verdict,
         (SELECT confidence_json FROM responses WHERE session_id = s.id AND confidence_json IS NOT NULL ORDER BY id DESC LIMIT 1) as confidence_json,
         (SELECT COUNT(*) FROM responses WHERE session_id = s.id) as round_count
       FROM sessions s
-      ${tenantId ? "WHERE s.tenant_id = ?" : ""}
+      ${
+        tenantId && userId
+          ? "WHERE s.tenant_id = ? AND (s.user_id = ? OR s.shared = 1)"
+          : tenantId
+            ? "WHERE s.tenant_id = ?"
+            : ""
+      }
       ORDER BY s.created_at DESC`
     )
-    .all(...(tenantId ? [tenantId] : [])) as {
+    .all(...(tenantId && userId ? [tenantId, userId] : tenantId ? [tenantId] : [])) as {
     id: string;
     skill_name: string;
     created_at: number;
     starred: number;
+    shared: number;
     first_msg: string | null;
     last_msg: string | null;
     verdict: string | null;
@@ -335,6 +343,7 @@ export function getAllSessions(tenantId?: string): {
       roundCount: r.round_count ?? 0,
       timestamp: r.created_at,
       starred: (r.starred ?? 0) === 1,
+      shared: (r.shared ?? 0) === 1,
       confidenceScore,
       confidenceColor,
       needsExpert,
@@ -541,6 +550,11 @@ export function getContextSnapshots(sessionId: string): ContextSnapshot[] {
 export function toggleStar(sessionId: string, starred: boolean): void {
   const db = getDb();
   db.prepare("UPDATE sessions SET starred = ? WHERE id = ?").run(starred ? 1 : 0, sessionId);
+}
+
+export function toggleShare(sessionId: string, shared: boolean): void {
+  const db = getDb();
+  db.prepare("UPDATE sessions SET shared = ? WHERE id = ?").run(shared ? 1 : 0, sessionId);
 }
 
 // ── Lesson Overrides ──
