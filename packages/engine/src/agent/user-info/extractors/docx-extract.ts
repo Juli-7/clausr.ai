@@ -28,21 +28,34 @@ function stripHtml(html: string): string {
   return text.trim();
 }
 
-interface ParagraphInfo {
+interface DocxElement {
   text: string;
   html: string;
+  headingLevel: number | null; // 1 for h1, 2 for h2, etc. null for body
 }
 
-function extractParagraphs(mammothHtml: string): ParagraphInfo[] {
-  const cleaned = mammothHtml.replace(/<\/p>/gi, "</p>\n");
-  const parts = cleaned.split(/<\/p>\s*\n?/i);
-  return parts
-    .filter((p) => p.trim().length > 0)
-    .map((p) => {
-      const fullHtml = p.trim() + "</p>";
-      const text = stripHtml(fullHtml);
-      return { text, html: fullHtml };
-    });
+export function extractElements(mammothHtml: string): DocxElement[] {
+  const elements: DocxElement[] = [];
+  // Split by common block-level tags: h1-h6, p, li
+  const tagPattern = /<(h[1-6]|p|li)[^>]*>([\s\S]*?)<\/\1>/gi;
+  let match;
+
+  while ((match = tagPattern.exec(mammothHtml)) !== null) {
+    const tag = match[1]!.toLowerCase();
+    const innerHtml = match[2]!;
+    const fullHtml = match[0]!;
+    const text = stripHtml(innerHtml);
+    if (!text) continue;
+
+    let headingLevel: number | null = null;
+    if (tag.startsWith("h")) {
+      headingLevel = parseInt(tag.slice(1), 10);
+    }
+
+    elements.push({ text, html: fullHtml, headingLevel });
+  }
+
+  return elements;
 }
 
 const MAX_CHUNK_SIZE = 1200;
@@ -64,35 +77,85 @@ export function splitLargeText(text: string): string[] {
   return chunks;
 }
 
-function buildChunks(paragraphs: ParagraphInfo[]): TextChunk[] {
-  const merged: { text: string; html: string }[] = [];
-  let current: ParagraphInfo[] = [];
+interface Section {
+  heading: DocxElement | null;
+  elements: DocxElement[];
+}
 
-  function flushCurrent(): void {
-    if (current.length === 0) return;
-    merged.push({
-      text: current.map((p) => p.text).join("\n"),
-      html: current.map((p) => p.html).join("\n"),
-    });
-    current = [];
+/**
+ * Build sections from DOCX elements.
+ * A section starts at a heading and includes all body elements until the next
+ * heading of the same or higher level (lower number).
+ */
+export function buildSections(elements: DocxElement[]): Section[] {
+  if (elements.length === 0) return [];
+
+  const sections: Section[] = [];
+  let current: Section = { heading: null, elements: [] };
+  let currentLevel = Infinity;
+
+  for (const el of elements) {
+    if (el.headingLevel !== null) {
+      // Heading encountered
+      if (current.elements.length > 0 || current.heading) {
+        sections.push(current);
+      }
+      current = { heading: el, elements: [] };
+      currentLevel = el.headingLevel;
+    } else {
+      // Body element
+      if (current.heading === null && current.elements.length === 0) {
+        // Content before first heading
+        current = { heading: null, elements: [el] };
+        currentLevel = Infinity;
+      } else {
+        current.elements.push(el);
+      }
+    }
   }
 
-  for (const para of paragraphs) {
-    if (para.text.length > MAX_CHUNK_SIZE) {
-      flushCurrent();
-      const parts = splitLargeText(para.text);
+  if (current.elements.length > 0 || current.heading) {
+    sections.push(current);
+  }
+
+  return sections;
+}
+
+function buildChunks(elements: DocxElement[]): TextChunk[] {
+  const sections = buildSections(elements);
+  const merged: { text: string; html: string }[] = [];
+
+  function flushSection(section: Section): void {
+    const allText = [
+      section.heading?.text ?? "",
+      ...section.elements.map((e) => e.text),
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const allHtml = [
+      section.heading?.html ?? "",
+      ...section.elements.map((e) => e.html),
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    if (!allText) return;
+
+    if (allText.length > MAX_CHUNK_SIZE) {
+      // Split oversized section at sentence boundaries
+      const parts = splitLargeText(allText);
       for (const part of parts) {
         merged.push({ text: part, html: `<p>${part}</p>` });
       }
-      continue;
+    } else {
+      merged.push({ text: allText, html: allHtml });
     }
-    const wouldBeTooLong =
-      current.reduce((s, p) => s + p.text.length + 1, 0) + para.text.length >
-      MAX_CHUNK_SIZE;
-    if (wouldBeTooLong) flushCurrent();
-    current.push(para);
   }
-  flushCurrent();
+
+  for (const section of sections) {
+    flushSection(section);
+  }
 
   const chunks: TextChunk[] = merged.map((chunk, i) => {
     const id = `c${i + 1}`;
@@ -129,8 +192,8 @@ export async function extractDocxText(dataUrl: string): Promise<DocxResult> {
     }
   }
 
-  const paragraphs = extractParagraphs(result.value);
-  const chunks = buildChunks(paragraphs);
+  const elements = extractElements(result.value);
+  const chunks = buildChunks(elements);
 
   return {
     text: chunks.map((c) => c.text).join("\n"),

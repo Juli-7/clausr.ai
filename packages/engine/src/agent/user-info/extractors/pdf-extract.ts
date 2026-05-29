@@ -58,8 +58,6 @@ function itemToWordBoxes(item: PdfTextItem, pageHeight: number): WordBox[] {
   const words = [...text.matchAll(/\S+/g)];
   if (words.length === 0) return [];
 
-  // pdf.js text items are often runs, not words. Approximate each word's
-  // rectangle inside the run so highlights are tighter than whole-line boxes.
   const charWidth = width > 0 ? width / text.length : 0;
   return words.map((match) => {
     const start = match.index ?? trimmedStart;
@@ -77,6 +75,68 @@ function itemToWordBox(item: PdfTextItem, pageHeight: number): WordBox | null {
   const boxes = itemToWordBoxes(item, pageHeight);
   return boxes.length > 0 ? mergeWordBoxes(boxes) : null;
 }
+
+// ── Multi-column detection (#5) ──
+
+/**
+ * Detect column boundaries by finding large horizontal gaps between item clusters.
+ * Returns an array of boundary X positions (sorted ascending).
+ */
+export function detectColumnBoundaries(items: PdfTextItem[], pageWidth: number): number[] {
+  if (items.length < 6) return [];
+  const centers = items
+    .map((i) => i.transform[4] + (i.width ?? 0) / 2)
+    .filter((x) => x > 0 && x < pageWidth)
+    .sort((a, b) => a - b);
+
+  if (centers.length < 6) return [];
+
+  const gaps: { index: number; gap: number }[] = [];
+  for (let i = 1; i < centers.length; i++) {
+    gaps.push({ index: i, gap: centers[i]! - centers[i - 1]! });
+  }
+
+  // Find gaps that are significant (> 18% of page width)
+  const threshold = pageWidth * 0.18;
+  const significant = gaps.filter((g) => g.gap > threshold);
+  if (significant.length === 0) return [];
+
+  // Return boundary positions (midpoint of each significant gap)
+  return significant
+    .map((g) => (centers[g.index - 1]! + centers[g.index]!) / 2)
+    .sort((a, b) => a - b);
+}
+
+/**
+ * Reorder items for correct multi-column reading order.
+ * Items are assigned to columns, then each column is read top-to-bottom.
+ */
+export function fixColumnOrder(items: PdfTextItem[], pageWidth: number): PdfTextItem[] {
+  const boundaries = detectColumnBoundaries(items, pageWidth);
+  if (boundaries.length === 0) return items;
+
+  // Assign each item to a column
+  const columns: PdfTextItem[][] = Array.from({ length: boundaries.length + 1 }, () => []);
+  for (const item of items) {
+    const center = item.transform[4] + (item.width ?? 0) / 2;
+    let col = 0;
+    for (const b of boundaries) {
+      if (center > b) col++;
+      else break;
+    }
+    columns[col]!.push(item);
+  }
+
+  // Sort each column by Y (top-to-bottom), then concatenate columns left-to-right
+  const result: PdfTextItem[] = [];
+  for (const col of columns) {
+    col.sort((a, b) => a.transform[5] - b.transform[5] || a.transform[4] - b.transform[4]);
+    result.push(...col);
+  }
+  return result;
+}
+
+// ── Line grouping ──
 
 function groupItemsIntoLines(items: PdfTextItem[], pageHeight: number): PdfTextItem[][] {
   const withPos = items
@@ -104,7 +164,10 @@ function groupItemsIntoLines(items: PdfTextItem[], pageHeight: number): PdfTextI
   );
 }
 
-function lineToChunkInput(line: PdfTextItem[], pageHeight: number): { text: string; bbox: WordBox; wordBoxes: WordBox[] } | null {
+function lineToChunkInput(
+  line: PdfTextItem[],
+  pageHeight: number
+): { text: string; bbox: WordBox; wordBoxes: WordBox[] } | null {
   const wordBoxes: WordBox[] = [];
   const texts: string[] = [];
 
@@ -124,6 +187,8 @@ function lineToChunkInput(line: PdfTextItem[], pageHeight: number): { text: stri
     wordBoxes,
   };
 }
+
+// ── Style detection ──
 
 export interface LineStyle {
   bucket: number;
@@ -162,94 +227,270 @@ export function isTableRow(words: WordBox[], _text: string): boolean {
   return largeGaps >= 1;
 }
 
-function linesToChunks(lines: PdfTextItem[][], pageNumber: number, pageWidth: number, pageHeight: number): TextChunk[] {
-  const chunks: TextChunk[] = [];
-  let current: TextChunk | null = null;
-  let currentLines = 0;
-  let currentStyle: LineStyle | null = null;
-  let currentHasListMarker = false;
-  let currentTableRows = 0;
+// ── Header / footer removal (#4) ──
 
-  function flushCurrent(): void {
-    if (!current) return;
-    chunks.push(current);
-    current = null;
-    currentLines = 0;
-    currentStyle = null;
-    currentHasListMarker = false;
-    currentTableRows = 0;
+interface StructuredLine {
+  items: PdfTextItem[];
+  pageNum: number;
+  pageWidth: number;
+  pageHeight: number;
+  style: LineStyle;
+  text: string;
+  bbox: WordBox;
+  wordBoxes: WordBox[];
+  normalizedY: number; // 0 = top, 1 = bottom
+}
+
+function normalizeHeaderFooterText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\d+/g, "#")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60);
+}
+
+/**
+ * Detect repeating header/footer lines across pages and remove them.
+ * A line is considered header/footer if it appears in the top/bottom 12%
+ * of pages on ≥3 pages with ≥50% page coverage.
+ */
+export function removeHeadersFooters(lines: StructuredLine[]): StructuredLine[] {
+  if (lines.length === 0) return lines;
+
+  const pageCount = new Set(lines.map((l) => l.pageNum)).size;
+  if (pageCount < 3) return lines;
+
+  const firstLinesPerPage = new Map<number, StructuredLine>();
+  const lastLinesPerPage = new Map<number, StructuredLine>();
+
+  // Group lines by page
+  const byPage = new Map<number, StructuredLine[]>();
+  for (const line of lines) {
+    const arr = byPage.get(line.pageNum) ?? [];
+    arr.push(line);
+    byPage.set(line.pageNum, arr);
   }
 
+  for (const [pageNum, pageLines] of byPage) {
+    if (pageLines.length === 0) continue;
+    // Sort by Y (top to bottom)
+    pageLines.sort((a, b) => a.normalizedY - b.normalizedY);
+    firstLinesPerPage.set(pageNum, pageLines[0]!);
+    lastLinesPerPage.set(pageNum, pageLines[pageLines.length - 1]!);
+  }
+
+  // Count occurrences of normalized first/last line text
+  const firstCounts = new Map<string, number>();
+  const lastCounts = new Map<string, number>();
+
+  for (const line of firstLinesPerPage.values()) {
+    const norm = normalizeHeaderFooterText(line.text);
+    if (!norm) continue;
+    firstCounts.set(norm, (firstCounts.get(norm) ?? 0) + 1);
+  }
+
+  for (const line of lastLinesPerPage.values()) {
+    const norm = normalizeHeaderFooterText(line.text);
+    if (!norm) continue;
+    lastCounts.set(norm, (lastCounts.get(norm) ?? 0) + 1);
+  }
+
+  const minOccurrences = Math.max(3, Math.floor(pageCount * 0.5));
+  const headerTexts = new Set(
+    [...firstCounts.entries()].filter(([, c]) => c >= minOccurrences).map(([t]) => t)
+  );
+  const footerTexts = new Set(
+    [...lastCounts.entries()].filter(([, c]) => c >= minOccurrences).map(([t]) => t)
+  );
+
+  // Also filter by position: header must be in top 12%, footer in bottom 12%
+  return lines.filter((line) => {
+    const norm = normalizeHeaderFooterText(line.text);
+    if (!norm) return true;
+
+    const isFirstOnPage = firstLinesPerPage.get(line.pageNum)?.text === line.text;
+    const isLastOnPage = lastLinesPerPage.get(line.pageNum)?.text === line.text;
+
+    if (isFirstOnPage && line.normalizedY < 0.12 && headerTexts.has(norm)) return false;
+    if (isLastOnPage && line.normalizedY > 0.88 && footerTexts.has(norm)) return false;
+
+    return true;
+  });
+}
+
+// ── Heading hierarchy + section-based chunking (#2) ──
+
+interface Section {
+  heading: StructuredLine | null;
+  lines: StructuredLine[];
+}
+
+/**
+ * Build document sections based on heading hierarchy.
+ * A section starts at a heading and includes all content until the next
+ * heading of the same or higher level.
+ */
+export function buildSections(lines: StructuredLine[]): Section[] {
+  if (lines.length === 0) return [];
+
+  // Determine heading levels from font size distribution
+  const bucketCounts = new Map<number, number>();
   for (const line of lines) {
-    const lineChunk = lineToChunkInput(line, pageHeight);
-    if (!lineChunk) continue;
+    bucketCounts.set(line.style.bucket, (bucketCounts.get(line.style.bucket) ?? 0) + 1);
+  }
 
-    const style = getLineStyle(line);
-    const lineIsListItem = isListItem(lineChunk.text);
-    const lineIsTableRow = isTableRow(lineChunk.wordBoxes ?? [], lineChunk.text);
+  // Most common bucket = body text
+  const sortedBuckets = [...bucketCounts.entries()].sort((a, b) => b[1] - a[1]);
+  const bodyBucket = sortedBuckets[0]?.[0] ?? 2;
 
-    const shouldStartNew = !current || !current.bbox || (() => {
-      const prevBottom = current.bbox.y + current.bbox.height;
-      const gap = lineChunk.bbox.y - prevBottom;
-      const gapThreshold = Math.max(current.bbox.height, lineChunk.bbox.height) * 1.35;
-      const isGapBreak = gap < 0 || gap > gapThreshold;
+  // Heading level: larger font = higher level (lower number = higher priority)
+  function getHeadingLevel(style: LineStyle): number | null {
+    if (style.bucket > bodyBucket) {
+      // Larger than body = heading. bucket 4 = level 1, bucket 3 = level 2, etc.
+      return 4 - style.bucket + 1;
+    }
+    if (style.bucket === bodyBucket && style.isBold) {
+      // Bold body text = sub-heading
+      return 3;
+    }
+    return null;
+  }
 
-      const projectedLen = current.text.length + lineChunk.text.length + 1;
-      const tooManyLines = currentLines >= MAX_CHUNK_LINES;
+  const sections: Section[] = [];
+  let current: Section = { heading: null, lines: [] };
+  let currentLevel = Infinity;
 
-      // Force-split: hard limit or line count exceeded
-      if (projectedLen > HARD_MAX_CHARS || tooManyLines) return true;
+  for (const line of lines) {
+    const level = getHeadingLevel(line.style);
 
-      // Heading boundary: style bucket or bold state changed
-      const styleChanged = currentStyle && (
-        currentStyle.bucket !== style.bucket ||
-        currentStyle.isBold !== style.isBold
-      );
-
-      // At soft limit, prefer splitting at a natural boundary
-      if (projectedLen > SOFT_MAX_CHARS) {
-        if (styleChanged || isGapBreak || (currentHasListMarker !== lineIsListItem && !lineIsListItem)) {
-          return true;
-        }
+    if (level !== null) {
+      // This is a heading
+      if (current.lines.length > 0 || current.heading) {
+        sections.push(current);
       }
+      current = { heading: line, lines: [] };
+      currentLevel = level;
+    } else {
+      // Content line
+      if (current.heading === null && current.lines.length === 0) {
+        // Content before first heading — create an implicit section
+        current = { heading: null, lines: [line] };
+        currentLevel = Infinity;
+      } else {
+        current.lines.push(line);
+      }
+    }
+  }
 
-      // Keep table rows together (don't break mid-table)
-      if (currentTableRows > 0 && lineIsTableRow) return false;
+  if (current.lines.length > 0 || current.heading) {
+    sections.push(current);
+  }
 
-      return isGapBreak || styleChanged;
-    })();
+  return sections;
+}
 
-    if (shouldStartNew) {
-      flushCurrent();
-      current = {
+/**
+ * Split section text at natural boundaries (paragraph gaps or sentences)
+ * if it exceeds the hard limit.
+ */
+function splitSectionText(text: string): string[] {
+  if (text.length <= HARD_MAX_CHARS) return [text];
+
+  // Try splitting at paragraph gaps (double newlines)
+  const paragraphs = text.split(/\n\n+/);
+  if (paragraphs.length > 1) {
+    const chunks: string[] = [];
+    let current = "";
+    for (const para of paragraphs) {
+      if (current.length + para.length + 2 > HARD_MAX_CHARS && current.length > 0) {
+        chunks.push(current.trim());
+        current = para;
+      } else {
+        current = current ? current + "\n\n" + para : para;
+      }
+    }
+    if (current.trim()) chunks.push(current.trim());
+    if (chunks.every((c) => c.length <= HARD_MAX_CHARS)) return chunks;
+  }
+
+  // Fallback: sentence boundaries
+  const sentences = text.match(/[^。！？\n.!?]+[。！？\n.!?]?/g) || [text];
+  const chunks: string[] = [];
+  let current = "";
+  for (const s of sentences) {
+    if (current.length + s.length > HARD_MAX_CHARS && current.length > 0) {
+      chunks.push(current.trim());
+      current = s;
+    } else {
+      current += s;
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+
+  // Last resort: word boundary split for single massive sentence
+  return chunks.flatMap((c) => {
+    if (c.length <= HARD_MAX_CHARS) return [c];
+    const forced: string[] = [];
+    let remaining = c;
+    while (remaining.length > HARD_MAX_CHARS) {
+      let splitAt = remaining.lastIndexOf(" ", HARD_MAX_CHARS);
+      if (splitAt < HARD_MAX_CHARS * 0.5) splitAt = HARD_MAX_CHARS;
+      forced.push(remaining.slice(0, splitAt).trim());
+      remaining = remaining.slice(splitAt).trim();
+    }
+    if (remaining) forced.push(remaining);
+    return forced;
+  });
+}
+
+export function sectionsToChunks(sections: Section[]): TextChunk[] {
+  const chunks: TextChunk[] = [];
+
+  for (const section of sections) {
+    const lines = section.heading ? [section.heading, ...section.lines] : section.lines;
+    if (lines.length === 0) continue;
+
+    const allText = lines.map((l) => l.text).join("\n");
+    const allWordBoxes = lines.flatMap((l) => l.wordBoxes);
+    const mergedBbox = mergeWordBoxes(lines.map((l) => l.bbox));
+    const pageNum = lines[0]!.pageNum;
+    const pageWidth = lines[0]!.pageWidth;
+    const pageHeight = lines[0]!.pageHeight;
+
+    // Try to keep section as one chunk if within soft limit
+    if (allText.length <= SOFT_MAX_CHARS) {
+      chunks.push({
         id: "",
-        text: lineChunk.text,
-        bbox: lineChunk.bbox,
-        wordBoxes: lineChunk.wordBoxes,
-        pageNumber,
+        text: allText,
+        bbox: mergedBbox,
+        wordBoxes: allWordBoxes,
+        pageNumber: pageNum,
         pageWidth,
         pageHeight,
-      };
-      currentLines = 1;
-      currentStyle = style;
-      currentHasListMarker = lineIsListItem;
-      currentTableRows = lineIsTableRow ? 1 : 0;
+      });
       continue;
     }
 
-    if (!current?.bbox) continue;
-
-    current.text += "\n" + lineChunk.text;
-    current.wordBoxes?.push(...lineChunk.wordBoxes);
-    current.bbox = mergeWordBoxes([current.bbox, lineChunk.bbox]);
-    currentLines++;
-    currentHasListMarker = currentHasListMarker || lineIsListItem;
-    if (lineIsTableRow) currentTableRows++;
+    // Split into sub-chunks
+    const parts = splitSectionText(allText);
+    for (const part of parts) {
+      chunks.push({
+        id: "",
+        text: part,
+        bbox: mergedBbox,
+        wordBoxes: allWordBoxes,
+        pageNumber: pageNum,
+        pageWidth,
+        pageHeight,
+      });
+    }
   }
 
-  flushCurrent();
   return chunks;
 }
+
+// ── Chunk finalization ──
 
 const OVERLAP_CHARS = 120;
 
@@ -281,12 +522,14 @@ function finalizeChunks(chunks: TextChunk[]): TextChunk[] {
     if (html) {
       html = html.replace(/data-chunk-id="[^"]*"/, `data-chunk-id="${id}"`);
     } else {
-      html = `<div data-chunk-id="${id}"><p>${chunk.text.replace(/\n/g, '<br>')}</p></div>`;
+      html = `<div data-chunk-id="${id}"><p>${chunk.text.replace(/\n/g, "<br>")}</p></div>`;
     }
     return { ...chunk, id, html };
   });
   return applyOverlap(withIds);
 }
+
+// ── Main extraction ──
 
 const PDF_MAGIC = /^%PDF/;
 
@@ -313,28 +556,55 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
     pdfjsDoc = await loadingTask.promise;
     const pageCount = pdfjsDoc.numPages;
 
-    const allChunks: TextChunk[] = [];
     let totalChars = 0;
+    const allStructuredLines: StructuredLine[] = [];
 
     for (let i = 1; i <= pageCount; i++) {
       const page = await pdfjsDoc.getPage(i);
       const viewport = page.getViewport({ scale: 1 });
       const textContent = await page.getTextContent();
       const items = textContent.items as PdfTextItem[];
-      const lines = groupItemsIntoLines(items, viewport.height);
-      const pageChunks = linesToChunks(lines, i, viewport.width, viewport.height);
-      allChunks.push(...pageChunks);
 
       for (const item of items) {
         totalChars += (item.str ?? "").length;
+      }
+
+      // Multi-column: reorder items before line grouping
+      const reordered = fixColumnOrder(items, viewport.width);
+      const lines = groupItemsIntoLines(reordered, viewport.height);
+
+      for (const lineItems of lines) {
+        const lineChunk = lineToChunkInput(lineItems, viewport.height);
+        if (!lineChunk) continue;
+        const style = getLineStyle(lineItems);
+        allStructuredLines.push({
+          items: lineItems,
+          pageNum: i,
+          pageWidth: viewport.width,
+          pageHeight: viewport.height,
+          style,
+          text: lineChunk.text,
+          bbox: lineChunk.bbox,
+          wordBoxes: lineChunk.wordBoxes,
+          normalizedY: lineChunk.bbox.y / viewport.height,
+        });
       }
 
       page.cleanup();
     }
 
     if (totalChars > 50) {
-      const chunks = finalizeChunks(allChunks);
+      // Remove headers/footers
+      const filteredLines = removeHeadersFooters(allStructuredLines);
+
+      // Build heading hierarchy and sections
+      const sections = buildSections(filteredLines);
+
+      // Convert to chunks
+      const rawChunks = sectionsToChunks(sections);
+      const chunks = finalizeChunks(rawChunks);
       const fullText = chunks.map((c) => c.text).join("\n\n");
+
       return {
         text: fullText,
         pageCount,
@@ -349,7 +619,7 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
     pdfjsDoc?.destroy();
   }
 
-  // Path B: Scanned PDF — render pages via pdf-parse's getScreenshot, then OCR
+  // Path B: Scanned PDF — OCR fallback
   try {
     const parser = new PDFParse({ data });
     const screenshots = await parser.getScreenshot({
@@ -371,7 +641,6 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
     }
 
     const validScreenshots = screenshots.pages.filter((s) => s.dataUrl);
-
     const ocrResults = await Promise.all(
       validScreenshots.map((screenshot) =>
         extractImageText(screenshot.dataUrl!).then(
