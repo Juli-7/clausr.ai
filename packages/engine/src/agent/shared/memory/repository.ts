@@ -13,11 +13,11 @@ function safeJsonParse<T>(json: string, fallback?: T): T {
   }
 }
 
-export function getOrCreateSession(sessionId: string, skillName: string, tenantId?: string, userId?: string): void {
+export function getOrCreateSession(sessionId: string, skillName: string, tenantId?: string, userId?: string, userEmail?: string): void {
   const db = getDb();
   db.prepare(
-    "INSERT OR IGNORE INTO sessions (id, skill_name, tenant_id, user_id, created_at) VALUES (?, ?, ?, ?, ?)"
-  ).run(sessionId, skillName, tenantId ?? "", userId ?? "", Date.now());
+    "INSERT OR IGNORE INTO sessions (id, skill_name, tenant_id, user_id, user_email, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+  ).run(sessionId, skillName, tenantId ?? "", userId ?? "", userEmail ?? "", Date.now());
 }
 
 // ── Chunk Store ──
@@ -273,13 +273,11 @@ export function getSessionMeta(sessionId: string): { skillName: string } | null 
 export function getAllSessions(tenantId?: string, userId?: string): {
   id: string;
   skillName: string;
-  title: string;
   verdict: string;
-  lastMessage: string;
-  roundCount: number;
   timestamp: number;
   starred: boolean;
   shared: boolean;
+  userEmail: string;
   confidenceScore?: number;
   confidenceColor?: string;
   needsExpert?: boolean;
@@ -288,12 +286,9 @@ export function getAllSessions(tenantId?: string, userId?: string): {
   const rows = db
     .prepare(
       `SELECT
-        s.id, s.skill_name, s.created_at, s.starred, s.shared,
-        (SELECT content FROM messages WHERE session_id = s.id AND role = 'user' ORDER BY id ASC LIMIT 1) as first_msg,
-        (SELECT content FROM messages WHERE session_id = s.id AND role = 'assistant' ORDER BY id DESC LIMIT 1) as last_msg,
+        s.id, s.skill_name, s.created_at, s.starred, s.shared, s.user_email,
         (SELECT verdict FROM responses WHERE session_id = s.id ORDER BY id DESC LIMIT 1) as verdict,
-        (SELECT confidence_json FROM responses WHERE session_id = s.id AND confidence_json IS NOT NULL ORDER BY id DESC LIMIT 1) as confidence_json,
-        (SELECT COUNT(*) FROM responses WHERE session_id = s.id) as round_count
+        (SELECT confidence_json FROM responses WHERE session_id = s.id AND confidence_json IS NOT NULL ORDER BY id DESC LIMIT 1) as confidence_json
       FROM sessions s
       ${
         tenantId && userId
@@ -310,11 +305,9 @@ export function getAllSessions(tenantId?: string, userId?: string): {
     created_at: number;
     starred: number;
     shared: number;
-    first_msg: string | null;
-    last_msg: string | null;
+    user_email: string;
     verdict: string | null;
     confidence_json: string | null;
-    round_count: number;
   }[];
 
   return rows.map((r) => {
@@ -337,16 +330,13 @@ export function getAllSessions(tenantId?: string, userId?: string): {
     return {
       id: r.id,
       skillName: r.skill_name,
-      title: (r.first_msg ?? "").slice(0, 60),
       verdict: r.verdict ?? "UNKNOWN",
-      lastMessage: (r.last_msg ?? "").slice(0, 100),
-      roundCount: r.round_count ?? 0,
       timestamp: r.created_at,
       starred: (r.starred ?? 0) === 1,
       shared: (r.shared ?? 0) === 1,
+      userEmail: r.user_email ?? "",
       confidenceScore,
       confidenceColor,
-      needsExpert,
     };
   });
 }

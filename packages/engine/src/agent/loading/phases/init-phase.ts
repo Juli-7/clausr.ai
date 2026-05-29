@@ -16,6 +16,7 @@ export async function initSession(
   sessionId: string,
   tenantId?: string,
   userId?: string,
+  userEmail?: string,
 ): Promise<{
   skill: {
     name: string;
@@ -50,7 +51,7 @@ export async function initSession(
     };
   }
 
-  getOrCreateSession(sessionId, skill.name, tenantId, userId);
+  getOrCreateSession(sessionId, skill.name, tenantId, userId, userEmail);
   return { skill, isAutoSkill };
 }
 
