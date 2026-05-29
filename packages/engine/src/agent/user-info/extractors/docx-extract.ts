@@ -45,10 +45,10 @@ function extractParagraphs(mammothHtml: string): ParagraphInfo[] {
     });
 }
 
-const MAX_CHUNK_SIZE = 2000;
+const MAX_CHUNK_SIZE = 1200;
 const OVERLAP_CHARS = 120;
 
-function splitLargeText(text: string): string[] {
+export function splitLargeText(text: string): string[] {
   const sentences = text.match(/[^。！？\n.!?]+[。！？\n.!?]?/g) || [text];
   const chunks: string[] = [];
   let current = "";

@@ -126,7 +126,7 @@ function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_chunk_store_session ON chunk_store(session_id);
     CREATE INDEX IF NOT EXISTS idx_chunk_store_file ON chunk_store(session_id, file_id);
 
-    CREATE VIRTUAL TABLE IF NOT EXISTS chunk_fts USING fts5(session_id UNINDEXED, file_id UNINDEXED, chunk_idx UNINDEXED, text, tokenize='unicode61');
+    CREATE VIRTUAL TABLE IF NOT EXISTS chunk_fts USING fts5(session_id UNINDEXED, file_id UNINDEXED, chunk_idx UNINDEXED, text, tokenize='porter unicode61', prefix='2,3,4');
 
     CREATE TABLE IF NOT EXISTS lesson_overrides (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -156,6 +156,26 @@ function runMigrations(db: Database.Database): void {
   try { db.exec("ALTER TABLE chunk_store ADD COLUMN page_width REAL"); } catch { }
   try { db.exec("ALTER TABLE chunk_store ADD COLUMN page_height REAL"); } catch { }
   try { db.exec("ALTER TABLE chunk_store ADD COLUMN chunk_html TEXT"); } catch { }
+  // Migration: upgrade FTS5 to use porter stemmer + prefix indices + tokenchars
+  try {
+    const fts5Upgraded = db.prepare("SELECT value FROM settings WHERE key = 'fts5_v2'").get() as { value: string } | undefined;
+    if (!fts5Upgraded) {
+      db.exec("DROP TABLE IF EXISTS chunk_fts");
+      db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS chunk_fts USING fts5(session_id UNINDEXED, file_id UNINDEXED, chunk_idx UNINDEXED, text, tokenize='porter unicode61', prefix='2,3,4')`);
+      // Reindex any existing chunks so old sessions remain searchable
+      const rows = db.prepare("SELECT id, session_id, file_id, text FROM chunk_store").all() as { id: string; session_id: string; file_id: string; text: string }[];
+      if (rows.length > 0) {
+        const stmt = db.prepare("INSERT INTO chunk_fts (session_id, file_id, chunk_idx, text) VALUES (?, ?, ?, ?)");
+        for (let i = 0; i < rows.length; i++) {
+          const r = rows[i]!;
+          const chunkIdx = Number(r.id.split('_').pop()) || i + 1;
+          stmt.run(r.session_id, r.file_id, chunkIdx, r.text);
+        }
+      }
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('fts5_v2', '1')").run();
+    }
+  } catch { /* no FTS5 available */ }
+
   try { db.exec("ALTER TABLE sessions ADD COLUMN session_files TEXT NOT NULL DEFAULT '[]'"); } catch { }
   try { db.exec("ALTER TABLE sessions ADD COLUMN user_id TEXT NOT NULL DEFAULT ''"); } catch { }
   try { db.exec("ALTER TABLE sessions ADD COLUMN shared INTEGER NOT NULL DEFAULT 0"); } catch { }
