@@ -39,8 +39,11 @@ export async function* orchestratePipeline(
   const store = getDocStore();
   const storedFiles = await store.getFiles(sessionId);
   if (storedFiles.length > 0) {
+    logPipeline(`[PIPELINE] storedFiles from doc store: ${storedFiles.map(f => `"${f.filename}" extractedText=${f.extractedText.length}chars chunks=${f.chunks?.length ?? 0}`).join(", ")}`);
     ctx.files.loadFiles(storedFiles);
-    logPipeline(`loaded ${storedFiles.length} file(s) with ${storedFiles.reduce((s, f) => s + f.chunks.length, 0)} chunk(s) from doc store`);
+    logPipeline(`[PIPELINE] after loadFiles: ctx.files has ${ctx.files.getFiles().length} file(s), first file extractedText="${(ctx.files.getFiles()[0]?.extractedText ?? "").slice(0, 80)}..."`);
+  } else {
+    logPipeline(`[PIPELINE] store.getFiles returned 0 files for session=${sessionId}`);
   }
 
   await loadRegulationSummaries(ctx);

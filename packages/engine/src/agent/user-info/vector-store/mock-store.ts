@@ -7,6 +7,7 @@ import {
   getFileChunks,
   saveFileChunks,
 } from "../../shared/memory/repository";
+import { logPipeline } from "../../pipeline/logger";
 import fs from "fs";
 import path from "path";
 
@@ -100,8 +101,16 @@ export class MockDocStore implements IDocStore {
     }[] = JSON.parse(fileMetaJson);
     return fileMeta.map((meta) => {
       const fetchedChunks = meta.chunkIds.length > 0 ? getChunksByIds(meta.chunkIds) : [];
+      logPipeline(`[MOCK] getFiles "${meta.filename}": meta.chunks=${meta.chunks.length} chunkIds=${meta.chunkIds.length} fetchedChunks=${fetchedChunks.length}`);
+      if (fetchedChunks.length !== meta.chunkIds.length) {
+        const missing = meta.chunkIds.filter((id) => !fetchedChunks.find((fc) => fc.id === id));
+        logPipeline(`[MOCK] getFiles "${meta.filename}": ${missing.length}/${meta.chunkIds.length} chunkId(s) not found in chunk_store: ${missing.slice(0, 5).join(", ")}...`);
+      }
       const chunks: ChunkInfo[] = meta.chunks.map((cMeta, i) => {
         const storedChunk = fetchedChunks.find((fc) => fc.id === meta.chunkIds[i]);
+        if (!storedChunk) {
+          logPipeline(`[MOCK] getFiles "${meta.filename}": chunkIdx=${i} id="${meta.chunkIds[i]}" NOT FOUND in chunk_store — text will be ""`);
+        }
         return {
           id: cMeta.id,
           text: storedChunk?.text ?? "",
@@ -114,6 +123,7 @@ export class MockDocStore implements IDocStore {
         };
       });
       const fullText = chunks.map((c) => c.text).join("\n");
+      logPipeline(`[MOCK] getFiles "${meta.filename}": reconstructed fullText=${fullText.length}chars (from ${chunks.length} chunk(s))`);
       return {
         fileId: meta.fileId,
         filename: meta.filename,

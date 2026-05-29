@@ -1,6 +1,7 @@
 import type { TextChunk } from "../../user-info/extractors";
 import type { SourcePaletteEntry } from "../pipeline-context";
 import { searchChunksFts5 } from "../../shared/memory/repository";
+import { logPipeline } from "../logger";
 
 export interface UploadedFileEntry {
   fileId: string;
@@ -80,7 +81,7 @@ export class FileRegistry {
 
     const fileBlocks = this.files.map((f, i) => {
       const sourceRef = `S${i + 1}`;
-      if (f.chunks && f.chunks.length > 0) {
+      if (f.chunks && f.chunks.length > 0 && f.chunks.some((c) => c.text.length > 0)) {
         const chunkLines = f.chunks.map((c) => `[${sourceRef}.${c.id}] ${c.text}`);
         return `[File ${i + 1}: ${f.filename}]\n${chunkLines.join("\n")}`;
       }
@@ -92,13 +93,43 @@ export class FileRegistry {
 
   /**
    * Search chunks relevant to `query` using FTS5 full-text search.
-   * Falls back to all chunks if FTS5 is unavailable or returns nothing.
+   * Runs multiple query variants (original, prefix-expanded, OR-fallback)
+   * and unions the results for better recall.
+   * Falls back to all chunks if nothing matches.
    */
   searchRelevantChunks(sessionId: string, query: string, topK = 10): string {
-    if (this.files.length === 0) return "";
+    if (this.files.length === 0) {
+      logPipeline(`[FILE-REGISTRY] searchRelevantChunks: files.length=0 — returning ""`);
+      return "";
+    }
 
-    const results = searchChunksFts5(sessionId, query, topK);
-    if (results.length === 0) return this.buildContextSummary();
+    const queries = expandFtsQueries(query);
+    logPipeline(`[FILE-REGISTRY] searchRelevantChunks: files=${this.files.length} query="${query}" queries=${JSON.stringify(queries)}`);
+
+    const seen = new Set<string>();
+    const allResults: { fileId: string; chunkIdx: number; text: string; rank: number }[] = [];
+
+    for (const q of queries) {
+      const ftsResults = searchChunksFts5(sessionId, q, topK * 2);
+      logPipeline(`[FILE-REGISTRY] FTS5 query="${q}" returned ${ftsResults.length} result(s)`);
+      for (const r of ftsResults) {
+        const key = `${r.fileId}_${r.chunkIdx}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          allResults.push(r);
+        }
+      }
+    }
+
+    allResults.sort((a, b) => a.rank - b.rank);
+    const results = allResults.slice(0, topK);
+    logPipeline(`[FILE-REGISTRY] after dedup+sort: ${allResults.length} unique result(s), top ${topK}: ${results.length} result(s)`);
+    if (results.length === 0) {
+      logPipeline(`[FILE-REGISTRY] FTS5 returned 0 results — falling back to buildContextSummary()`);
+      const fallback = this.buildContextSummary();
+      logPipeline(`[FILE-REGISTRY] fallback buildContextSummary() returned ${fallback.length} chars`);
+      return fallback;
+    }
 
     const fileMap = new Map(this.files.map((f, i) => [f.fileId, i]));
 
@@ -136,4 +167,29 @@ export class FileRegistry {
     if (withOcr.length === 0) return 100;
     return withOcr.reduce((s, f) => s + (f.ocrConfidence ?? 100), 0) / withOcr.length;
   }
+}
+
+export function expandFtsQueries(query: string): string[] {
+  if (!query.trim()) return [query];
+
+  const queries = [query];
+
+  // Split into words (ignore quoted phrases, operators, special chars)
+  const words = query
+    .toLowerCase()
+    .replace(/["^~*(){}[\]\\]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !/^(and|or|not|near)$/i.test(w));
+
+  if (words.length === 0) return queries;
+
+  // Variant: each word as prefix term AND'd together
+  const prefixAnd = words.map((w) => `${w}*`).join(" ");
+  if (prefixAnd !== query) queries.push(prefixAnd);
+
+  // Variant: all words OR'd (recall fallback)
+  const prefixOr = words.map((w) => `${w}*`).join(" OR ");
+  if (prefixOr !== prefixAnd) queries.push(prefixOr);
+
+  return queries;
 }

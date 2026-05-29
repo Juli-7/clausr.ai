@@ -86,6 +86,7 @@ export async function executeLlmToolStep(
 
     const attentionQuery = revisionContext?.userFeedback ?? step.attention ?? step.title.replace(/^Evaluate: /, "");
     const fileChunks = ctx.files.searchRelevantChunks(ctx.sessionId, attentionQuery);
+    logPipeline(`  [LLM+TOOL] step=${step.number} attentionQuery="${attentionQuery}" fileChunks=${fileChunks.length}chars containsAvailableChunks=${fileChunks.includes("Uploaded Files")} startsWith=${JSON.stringify(fileChunks.slice(0, 100))}`);
 
     const userMessage = buildUserMessage(
       step.number,
@@ -102,6 +103,8 @@ export async function executeLlmToolStep(
           }
         : undefined,
     );
+
+    logPipeline(`  [LLM+TOOL] step=${step.number} FINAL PROMPT: systemPrompt=${systemPrompt.length}chars userMessage=${userMessage.length}chars includesFileChunks=${userMessage.includes("Available Chunks") || userMessage.includes("Uploaded Files")} userMessagePreview=${JSON.stringify(userMessage.slice(0, 200))}`);
 
     const result = streamText({
       model: createModel(),
