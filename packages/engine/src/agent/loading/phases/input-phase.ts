@@ -21,15 +21,19 @@ export async function inputPhase(
 
   for (const f of files) {
     try {
-      const { extractedText } = await store.processFile(f, sessionId);
-      extractedTexts.push(extractedText);
+      const result = await store.processFile(f, sessionId);
+      extractedTexts.push(result.extractedText);
       ctx.files.addFile({
         fileId: f.name,
         filename: f.name,
         dataUrl: `/api/files/${sessionId}/${encodeURIComponent(f.name)}`,
-        extractedText,
+        extractedText: result.extractedText,
+        chunks: result.chunks,
+        pageCount: result.pageCount,
+        ocrConfidence: result.ocrConfidence,
+        extractorUsed: result.extractorUsed,
       });
-      logPipeline(`  processed "${f.name}": ${extractedText.length} chars`);
+      logPipeline(`  processed "${f.name}": ${result.extractedText.length} chars`);
     } catch (err) {
       logPipeline(`  processing FAILED "${f.name}": ${err}`);
       extractedTexts.push(`[Processing failed: ${err}]`);

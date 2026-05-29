@@ -1,4 +1,4 @@
-import type { ChunkInfo, IDocStore, ProcessedFile, WordBox } from "./types";
+import type { ChunkInfo, IDocStore, ProcessedFile, ProcessFileResult, WordBox } from "./types";
 import { extractFileContent } from "../../user-info/extractors";
 import {
   saveChunks,
@@ -42,13 +42,23 @@ export class MockDocStore implements IDocStore {
   async processFile(
     file: { name: string; size: number; type: string; dataUrl?: string },
     sessionId: string
-  ): Promise<{ extractedText: string }> {
+  ): Promise<ProcessFileResult> {
     deleteChunksBySession(sessionId);
     const extracted = await extractFileContent(file);
     const chunkIds = saveChunks(sessionId, file.name, extracted.chunks);
     if (file.dataUrl) {
       saveRawFile(sessionId, file.name, file.dataUrl);
     }
+    const chunkInfos: ChunkInfo[] = extracted.chunks.map((c) => ({
+      id: c.id,
+      text: c.text,
+      html: c.html,
+      pageNumber: c.pageNumber,
+      bbox: c.bbox,
+      wordBoxes: c.wordBoxes,
+      pageWidth: c.pageWidth,
+      pageHeight: c.pageHeight,
+    }));
     const meta = {
       fileId: file.name,
       filename: file.name,
@@ -56,18 +66,16 @@ export class MockDocStore implements IDocStore {
       ocrConfidence: extracted.ocrConfidence,
       extractorUsed: extracted.extractorUsed,
       chunkIds,
-      chunks: extracted.chunks.map((c) => ({
-        id: c.id,
-        html: c.html,
-        pageNumber: c.pageNumber,
-        bbox: c.bbox,
-        wordBoxes: c.wordBoxes,
-        pageWidth: c.pageWidth,
-        pageHeight: c.pageHeight,
-      })),
+      chunks: chunkInfos,
     };
     saveFileChunks(sessionId, JSON.stringify([meta]));
-    return { extractedText: extracted.text };
+    return {
+      extractedText: extracted.text,
+      chunks: chunkInfos,
+      pageCount: extracted.pageCount,
+      ocrConfidence: extracted.ocrConfidence,
+      extractorUsed: extracted.extractorUsed,
+    };
   }
 
   async getFiles(sessionId: string): Promise<ProcessedFile[]> {

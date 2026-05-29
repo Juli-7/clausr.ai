@@ -27,11 +27,19 @@ export interface ProcessedFile {
   extractorUsed?: string;
 }
 
+export interface ProcessFileResult {
+  extractedText: string;
+  chunks: ChunkInfo[];
+  pageCount?: number;
+  ocrConfidence?: number;
+  extractorUsed?: string;
+}
+
 export interface IDocStore {
   processFile(
     file: { name: string; size: number; type: string; dataUrl?: string },
     sessionId: string
-  ): Promise<{ extractedText: string }>;
+  ): Promise<ProcessFileResult>;
 
   getFiles(sessionId: string): Promise<ProcessedFile[]>;
 }
