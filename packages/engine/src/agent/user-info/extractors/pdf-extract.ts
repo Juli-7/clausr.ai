@@ -1,5 +1,15 @@
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
-pdfjs.GlobalWorkerOptions.workerSrc = "";
+// @ts-expect-error — pdf.worker.mjs has no type declarations
+import * as pdfjsWorker from "pdfjs-dist/legacy/build/pdf.worker.mjs";
+// Node.js 24 structuredClone({ transfer }) is broken — pdfjs-dist's LoopbackPort
+// depends on it. Monkeypatch: copy instead of transfer (safe for in-process worker).
+// MUST run before any pdfjs getDocument() call.
+const __origStructuredClone = globalThis.structuredClone;
+globalThis.structuredClone = ((value: unknown, options?: Parameters<typeof globalThis.structuredClone>[1]) => {
+  if (options?.transfer) return __origStructuredClone(value);
+  return __origStructuredClone(value, options);
+}) as typeof globalThis.structuredClone;
+(globalThis as Record<string, unknown>).pdfjsWorker = pdfjsWorker;
 import { PDFParse } from "pdf-parse";
 import { extractImageText } from "./ocr";
 import { mergeWordBoxes, type TextChunk, type WordBox } from "./index";
@@ -12,11 +22,12 @@ export interface PdfResult {
   extractorUsed: string;
 }
 
-interface PdfTextItem {
+export interface PdfTextItem {
   str: string;
   transform: number[];
   width: number;
   height: number;
+  fontName?: string;
 }
 
 interface PositionedTextItem {
@@ -24,7 +35,8 @@ interface PositionedTextItem {
   box: WordBox;
 }
 
-const MAX_CHUNK_CHARS = 900;
+const SOFT_MAX_CHARS = 800;
+const HARD_MAX_CHARS = 1200;
 const MAX_CHUNK_LINES = 8;
 
 function itemToWordBoxes(item: PdfTextItem, pageHeight: number): WordBox[] {
@@ -113,29 +125,98 @@ function lineToChunkInput(line: PdfTextItem[], pageHeight: number): { text: stri
   };
 }
 
+export interface LineStyle {
+  bucket: number;
+  isBold: boolean;
+}
+
+export function getLineStyle(line: PdfTextItem[]): LineStyle {
+  let totalLen = 0;
+  let weightedSize = 0;
+  let boldCount = 0;
+  for (const item of line) {
+    const len = (item.str ?? "").length;
+    if (len === 0) continue;
+    totalLen += len;
+    weightedSize += Math.abs(item.transform[0] ?? 12) * len;
+    if (/bold|black|heavy|demi/i.test(item.fontName ?? "")) boldCount++;
+  }
+  const avgSize = totalLen > 0 ? weightedSize / totalLen : 12;
+  const bucket = avgSize < 8 ? 0 : avgSize < 11 ? 1 : avgSize < 14 ? 2 : avgSize < 18 ? 3 : 4;
+  return { bucket, isBold: boldCount > line.length / 2 };
+}
+
+export function isListItem(text: string): boolean {
+  return /^\s*[-*•]\s/.test(text) || /^\s*\d+[.)]\s/.test(text);
+}
+
+export function isTableRow(words: WordBox[], _text: string): boolean {
+  if (words.length < 3) return false;
+  const gaps: number[] = [];
+  for (let i = 1; i < words.length; i++) {
+    gaps.push(words[i]!.x - (words[i - 1]!.x + words[i - 1]!.width));
+  }
+  if (gaps.length < 2) return false;
+  const avgGap = gaps.reduce((s, g) => s + g, 0) / gaps.length;
+  const largeGaps = gaps.filter((g) => g > avgGap * 2).length;
+  return largeGaps >= 1;
+}
+
 function linesToChunks(lines: PdfTextItem[][], pageNumber: number, pageWidth: number, pageHeight: number): TextChunk[] {
   const chunks: TextChunk[] = [];
   let current: TextChunk | null = null;
   let currentLines = 0;
+  let currentStyle: LineStyle | null = null;
+  let currentHasListMarker = false;
+  let currentTableRows = 0;
 
   function flushCurrent(): void {
     if (!current) return;
     chunks.push(current);
     current = null;
     currentLines = 0;
+    currentStyle = null;
+    currentHasListMarker = false;
+    currentTableRows = 0;
   }
 
   for (const line of lines) {
     const lineChunk = lineToChunkInput(line, pageHeight);
     if (!lineChunk) continue;
 
+    const style = getLineStyle(line);
+    const lineIsListItem = isListItem(lineChunk.text);
+    const lineIsTableRow = isTableRow(lineChunk.wordBoxes ?? [], lineChunk.text);
+
     const shouldStartNew = !current || !current.bbox || (() => {
       const prevBottom = current.bbox.y + current.bbox.height;
       const gap = lineChunk.bbox.y - prevBottom;
       const gapThreshold = Math.max(current.bbox.height, lineChunk.bbox.height) * 1.35;
-      const wouldBeTooLong = current.text.length + lineChunk.text.length + 1 > MAX_CHUNK_CHARS;
+      const isGapBreak = gap < 0 || gap > gapThreshold;
+
+      const projectedLen = current.text.length + lineChunk.text.length + 1;
       const tooManyLines = currentLines >= MAX_CHUNK_LINES;
-      return gap < 0 || gap > gapThreshold || wouldBeTooLong || tooManyLines;
+
+      // Force-split: hard limit or line count exceeded
+      if (projectedLen > HARD_MAX_CHARS || tooManyLines) return true;
+
+      // Heading boundary: style bucket or bold state changed
+      const styleChanged = currentStyle && (
+        currentStyle.bucket !== style.bucket ||
+        currentStyle.isBold !== style.isBold
+      );
+
+      // At soft limit, prefer splitting at a natural boundary
+      if (projectedLen > SOFT_MAX_CHARS) {
+        if (styleChanged || isGapBreak || (currentHasListMarker !== lineIsListItem && !lineIsListItem)) {
+          return true;
+        }
+      }
+
+      // Keep table rows together (don't break mid-table)
+      if (currentTableRows > 0 && lineIsTableRow) return false;
+
+      return isGapBreak || styleChanged;
     })();
 
     if (shouldStartNew) {
@@ -150,6 +231,9 @@ function linesToChunks(lines: PdfTextItem[][], pageNumber: number, pageWidth: nu
         pageHeight,
       };
       currentLines = 1;
+      currentStyle = style;
+      currentHasListMarker = lineIsListItem;
+      currentTableRows = lineIsTableRow ? 1 : 0;
       continue;
     }
 
@@ -159,6 +243,8 @@ function linesToChunks(lines: PdfTextItem[][], pageNumber: number, pageWidth: nu
     current.wordBoxes?.push(...lineChunk.wordBoxes);
     current.bbox = mergeWordBoxes([current.bbox, lineChunk.bbox]);
     currentLines++;
+    currentHasListMarker = currentHasListMarker || lineIsListItem;
+    if (lineIsTableRow) currentTableRows++;
   }
 
   flushCurrent();
