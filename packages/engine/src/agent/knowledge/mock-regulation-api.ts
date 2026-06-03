@@ -132,53 +132,6 @@ function seedData(db: Database.Database): void {
     clauseStmt.run("r112-6.4", "R112", "6.4", "Colour temperature", "The colour temperature of the light source shall be between 2,800 K and 6,500 K. For LED sources, the chromaticity coordinates shall fall within the boundaries defined in Annex 7.", null);
     clauseStmt.run("r112-6.5", "R112", "6.5", "Beam pattern — Uniformity", "The illumination across the beam pattern shall be uniform, with no abrupt changes in intensity.", null);
 
-    // R83 — Emissions
-    regStmt.run("un-r83", "R83", "UN Regulation No. 83 — Emission of Pollutants", "Uniform provisions concerning the approval of vehicles with regard to the emission of pollutants according to engine fuel requirements.", "UNECE", JSON.stringify(["R49", "R96"]));
-    for (const a of ["R83", "r83", "UN R83", "UN-R83", "UNR83"]) aliasStmt.run(a, "R83");
-    verStmt.run("R83", "07", "2017-01-01", 0, "");
-    verStmt.run("R83", "08", "2023-01-01", 1, "WLTP test cycle integration");
-    clauseStmt.run("r83-5", "R83", "5", "Application for approval", "The application for approval shall be submitted by the vehicle manufacturer.", null);
-    clauseStmt.run("r83-5.1", "R83", "5.1", "Application — Test vehicle", "A vehicle representative of the type to be approved shall be submitted to the technical service.", null);
-    clauseStmt.run("r83-5.2", "R83", "5.2", "Application — Documentation", "The application shall include a description of the engine, fuel system, and emission control devices.", null);
-    clauseStmt.run("r83-5.3", "R83", "5.3", "Vehicle mass and CO2 limits", "The CO2 emission limit applicable to a vehicle shall be determined by its reference mass in running order, following the formula specified in Annex 3.", null);
-    clauseStmt.run("r83-5.4", "R83", "5.4", "NOx emission limits", "The NOx emission limit shall not exceed the values specified in Table 2 of Annex 3. Stricter limits apply for compression-ignition engines.", null);
-    clauseStmt.run("r83-5.5", "R83", "5.5", "OBD system requirements", "Vehicles shall be equipped with an on-board diagnostic (OBD) system capable of detecting malfunctions of emission-related components and illuminating a malfunction indicator.", null);
-    clauseStmt.run("r83-6", "R83", "6", "Specifications and tests", "The vehicle shall be tested according to the procedures described in Annex 4.", null);
-    clauseStmt.run("r83-6.1", "R83", "6.1", "Exhaust emissions — Type I test", "The Type I test shall measure CO, HC, NOx, and PM emissions over the applicable driving cycle.", null);
-    clauseStmt.run("r83-6.2", "R83", "6.2", "Exhaust emissions — Type III test", "The Type III test (crankcase emissions) shall verify that no crankcase gases are discharged to the atmosphere.", null);
-    clauseStmt.run("r83-6.3", "R83", "6.3", "Evaporative emissions — Type IV test", "The Type IV test shall measure hydrocarbon emissions from the fuel system.", null);
-    clauseStmt.run("r83-6.4", "R83", "6.4", "Durability — Type V test", "The durability test shall verify that emission limits are maintained over the vehicle's useful life.", null);
-    clauseStmt.run("r83-6.5", "R83", "6.5", "OBD system", "The OBD system shall detect malfunctions in emission-related components and illuminate the MIL.", null);
-
-    // R154 — WLTP
-    regStmt.run("un-r154", "R154", "UN Regulation No. 154 — WLTP Emissions", "Uniform provisions concerning the approval of M1, N1 and M2 vehicles with regard to WLTP emissions.", "UNECE", JSON.stringify(["R83"]));
-    for (const a of ["R154", "r154", "UN R154", "UN-R154", "UNR154"]) aliasStmt.run(a, "R154");
-    verStmt.run("R154", "00", "2020-01-01", 0, "");
-    verStmt.run("R154", "01", "2024-01-01", 1, "Supplement 2 — RDE provisions");
-    clauseStmt.run("r154-5", "R154", "5", "Application for approval", "The application for approval of a vehicle type with regard to WLTP emissions shall be submitted by the manufacturer.", null);
-    clauseStmt.run("r154-6", "R154", "6", "WLTP test procedure", "The WLTP test shall be conducted according to the procedures specified in Annex 1.", null);
-    clauseStmt.run("r154-6.1", "R154", "6.1", "WLTP — Vehicle preparation", "The test vehicle shall be preconditioned according to the procedures in Annex 1, paragraph 2.", null);
-    clauseStmt.run("r154-6.2", "R154", "6.2", "WLTP — Dynamometer settings", "Road load coefficients shall be determined according to Annex 4.", null);
-    clauseStmt.run("r154-6.3", "R154", "6.3", "WLTP — Test cycle", "The applicable WLTC cycle shall be determined based on the vehicle's power-to-mass ratio and maximum speed.", null);
-
-    // R13 — Braking
-    regStmt.run("un-r13", "R13", "UN Regulation No. 13 — Braking", "Uniform provisions concerning the approval of vehicles of categories M, N and O with regard to braking.", "UNECE", JSON.stringify(["R13H", "R79"]));
-    for (const a of ["R13", "r13", "UN R13", "UN-R13", "UNR13"]) aliasStmt.run(a, "R13");
-    verStmt.run("R13", "11", "2018-01-01", 0, "");
-    verStmt.run("R13", "12", "2023-01-01", 1, "AEBS and ESC provisions");
-    clauseStmt.run("r13-5", "R13", "5", "Application for approval", "The application for approval shall be submitted by the vehicle manufacturer or authorized representative.", null);
-    clauseStmt.run("r13-5.1", "R13", "5.1", "Braking system description", "The application shall include a detailed description of the service, secondary, and parking braking systems.", null);
-    clauseStmt.run("r13-5.2", "R13", "5.2", "ABS documentation", "If equipped with ABS, documentation describing the system architecture and performance characteristics.", null);
-    clauseStmt.run("r13-5.3", "R13", "5.3", "Secondary braking", "The secondary braking system shall be capable of stopping the vehicle within a reasonable distance in the event of service brake failure. Documentation shall describe the system architecture and performance characteristics.", null);
-    clauseStmt.run("r13-5.4", "R13", "5.4", "Parking braking performance", "The parking brake system shall be capable of holding the vehicle stationary on a specified gradient. Documentation shall include test results demonstrating compliance.", null);
-    clauseStmt.run("r13-5.6", "R13", "5.6", "ABS requirements", "Vehicles fitted with anti-lock braking systems shall comply with the performance and documentation requirements specified in Annex 13. ABS documentation shall include system architecture, wheel-speed sensor layout, and adhesion utilisation data.", null);
-    clauseStmt.run("r13-5.7", "R13", "5.7", "Brake fade test", "The Type I (fade) test procedure and results shall be documented, including hot brake performance after repeated braking applications as specified in Annex 3.", null);
-    clauseStmt.run("r13-6", "R13", "6", "Braking performance", "The vehicle shall meet the braking performance requirements specified in Annex 3.", null);
-    clauseStmt.run("r13-6.1", "R13", "6.1", "Service braking — Type 0 test", "The Type 0 test shall verify braking performance with cold brakes at the prescribed test speed.", null);
-    clauseStmt.run("r13-6.2", "R13", "6.2", "Service braking — Type I test", "The Type I test (fade test) shall verify braking performance after repeated applications.", null);
-    clauseStmt.run("r13-6.3", "R13", "6.3", "Parking braking", "The parking brake shall hold the vehicle stationary on a 20% gradient, both laden and unladen.", null);
-    clauseStmt.run("r13-6.4", "R13", "6.4", "ABS performance", "ABS-equipped vehicles shall meet the adhesion utilization and wheel lock requirements.", null);
-
     // GDPR — General Data Protection Regulation
     regStmt.run("eu-gdpr", "GDPR", "EU General Data Protection Regulation", "Regulation on the protection of natural persons with regard to the processing of personal data and on the free movement of such data.", "EU", JSON.stringify([]));
     for (const a of ["GDPR", "gdpr", "EU GDPR", "eu-gdpr"]) aliasStmt.run(a, "GDPR");

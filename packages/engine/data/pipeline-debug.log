@@ -1,0 +1,257 @@
+[2026-05-29T05:59:36.244Z]   [CHECK-STORE] compiled 1 regulation + 0 source citations
+[2026-05-29T05:59:37.581Z] [REVISION] explicit targets: fields=mounting_height,colour_temperature → steps=1,3
+[2026-05-29T05:59:37.592Z] [REVISION] explicit targets: fields=nonexistent → steps=
+[2026-05-29T05:59:37.599Z] [REVISION] explicit targets: fields=colour_temperature,light_source,colour_temperature → steps=2,3
+[2026-05-29T05:59:37.601Z] [REVISION] explicit targets: fields= → steps=
+[2026-05-29T05:59:37.616Z]   [CHECK-STORE] compiled 1 regulation + 0 source citations
+[2026-05-29T06:00:55.446Z]   [CHECK-STORE] compiled 3 regulation + 3 source citations
+[2026-05-29T06:00:55.511Z] → EVAL: running evaluation layer
+[2026-05-29T06:00:55.609Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T06:00:55.626Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T06:00:55.669Z] === PIPELINE DONE === round=1
+[2026-05-29T06:00:55.711Z]   [CHECK-STORE] compiled 3 regulation + 3 source citations
+[2026-05-29T06:00:55.724Z] → EVAL: running evaluation layer
+[2026-05-29T06:00:55.769Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T06:00:55.818Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T06:00:55.828Z] === PIPELINE DONE === round=1
+[2026-05-29T06:00:55.861Z]   [CHECK-STORE] compiled 3 regulation + 3 source citations
+[2026-05-29T06:00:55.875Z] → EVAL: running evaluation layer
+[2026-05-29T06:00:55.885Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T06:00:55.893Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T06:00:55.899Z] === PIPELINE DONE === round=1
+[2026-05-29T06:00:55.908Z] → EVAL: running evaluation layer
+[2026-05-29T06:00:55.909Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T06:00:55.913Z] final response: content=25chars citations=0 verdict=undefined
+[2026-05-29T06:00:55.924Z] === PIPELINE DONE === round=1
+[2026-05-29T06:00:55.926Z]   [CHECK-STORE] compiled 3 regulation + 3 source citations
+[2026-05-29T06:00:55.927Z] → EVAL: running evaluation layer
+[2026-05-29T06:00:55.928Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T06:00:55.930Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T06:00:55.934Z] === PIPELINE DONE === round=1
+[2026-05-29T06:00:55.936Z] → EVAL: running evaluation layer
+[2026-05-29T06:00:55.942Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T06:00:55.942Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T06:00:55.944Z] === PIPELINE DONE === round=2
+[2026-05-29T06:00:55.956Z]   [LLM+TOOL] step=2 promptLen=1802chars scripts=0
+[2026-05-29T06:00:55.962Z]   [LLM+TOOL] step=2 calling streamText with 0 tool(s)
+[2026-05-29T06:00:55.978Z]   [LLM+TOOL] step=2 finalText=140chars preview=```json
+{"light_source": {"value": "LED headlamps [S1.c1]", "sourceCitation": ["S1.c1"], "citationRef": ["R48.6.1"], "verdict": "PASS"}}
+```
+[2026-05-29T06:00:55.979Z]   [LLM+TOOL] extracted 1 CheckResult(s) from LLM text output
+[2026-05-29T06:00:56.014Z]   [LLM+TOOL] step=1 promptLen=1756chars scripts=0
+[2026-05-29T06:00:56.044Z]   [LLM+TOOL] step=1 calling streamText with 1 tool(s)
+[2026-05-29T06:00:56.079Z]   [LLM+TOOL] step=1 onStepFinish: toolResults=1 textLen=155
+[2026-05-29T06:00:56.091Z]   [LLM+TOOL] step=1 finalText=155chars preview={"mounting_height": {"value": "Mounting height is 650 mm from ground [S1.c3]", "sourceCitation": ["S1.c3"], "citationRef": ["R48.6.2"], "verdict": "PA… (5 more chars)
+[2026-05-29T06:00:56.095Z]   [LLM+TOOL] merged CheckResult from tool + narrative for "mounting_height"
+[2026-05-29T06:00:56.102Z]   [LLM+TOOL] step=1 promptLen=1682chars scripts=0
+[2026-05-29T06:00:56.103Z]   [LLM+TOOL] step=1 calling streamText with 1 tool(s)
+[2026-05-29T06:00:56.114Z] [REVISION] explicit targets: fields=mounting_height,colour_temperature → steps=1,3
+[2026-05-29T06:00:56.116Z] [REVISION] explicit targets: fields=nonexistent → steps=
+[2026-05-29T06:00:56.118Z] [REVISION] explicit targets: fields=colour_temperature,light_source,colour_temperature → steps=2,3
+[2026-05-29T06:00:56.119Z] [REVISION] explicit targets: fields= → steps=
+[2026-05-29T06:00:56.122Z]   [CHECK-STORE] compiled 3 regulation + 3 source citations
+[2026-05-29T06:00:56.122Z] → EVAL: running evaluation layer
+[2026-05-29T06:00:56.124Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T06:00:56.127Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T06:00:56.128Z] === PIPELINE DONE === round=1
+[2026-05-29T06:00:56.130Z]   [CHECK-STORE] compiled 1 regulation + 0 source citations
+[2026-05-29T06:00:56.130Z] → EVAL: running evaluation layer
+[2026-05-29T06:00:56.131Z]   ✓ confidence=95.5% errors=0
+[2026-05-29T06:00:56.132Z] final response: content=128chars citations=1 verdict=undefined
+[2026-05-29T06:00:56.133Z] === PIPELINE DONE === round=1
+[2026-05-29T06:01:16.635Z]   [CHECK-STORE] compiled 1 regulation + 0 source citations
+[2026-05-29T06:01:18.587Z]   [CHECK-STORE] compiled 3 regulation + 3 source citations
+[2026-05-29T06:01:18.598Z] → EVAL: running evaluation layer
+[2026-05-29T06:01:18.609Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T06:01:18.622Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T06:01:18.790Z] === PIPELINE DONE === round=1
+[2026-05-29T06:01:18.822Z]   [CHECK-STORE] compiled 3 regulation + 3 source citations
+[2026-05-29T06:01:18.824Z] → EVAL: running evaluation layer
+[2026-05-29T06:01:18.859Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T06:01:18.869Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T06:01:18.876Z] === PIPELINE DONE === round=1
+[2026-05-29T06:01:18.881Z]   [CHECK-STORE] compiled 3 regulation + 3 source citations
+[2026-05-29T06:01:18.889Z] → EVAL: running evaluation layer
+[2026-05-29T06:01:18.921Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T06:01:18.928Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T06:01:18.940Z] === PIPELINE DONE === round=1
+[2026-05-29T06:01:18.948Z] → EVAL: running evaluation layer
+[2026-05-29T06:01:18.948Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T06:01:18.962Z] final response: content=25chars citations=0 verdict=undefined
+[2026-05-29T06:01:18.970Z] === PIPELINE DONE === round=1
+[2026-05-29T06:01:18.971Z]   [CHECK-STORE] compiled 3 regulation + 3 source citations
+[2026-05-29T06:01:18.975Z] → EVAL: running evaluation layer
+[2026-05-29T06:01:18.976Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T06:01:18.978Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T06:01:18.980Z] === PIPELINE DONE === round=1
+[2026-05-29T06:01:18.981Z] → EVAL: running evaluation layer
+[2026-05-29T06:01:18.982Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T06:01:18.983Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T06:01:18.985Z] === PIPELINE DONE === round=2
+[2026-05-29T06:01:18.989Z]   [LLM+TOOL] step=2 promptLen=1802chars scripts=0
+[2026-05-29T06:01:18.989Z]   [LLM+TOOL] step=2 calling streamText with 0 tool(s)
+[2026-05-29T06:01:18.996Z]   [LLM+TOOL] step=2 finalText=140chars preview=```json
+{"light_source": {"value": "LED headlamps [S1.c1]", "sourceCitation": ["S1.c1"], "citationRef": ["R48.6.1"], "verdict": "PASS"}}
+```
+[2026-05-29T06:01:18.997Z]   [LLM+TOOL] extracted 1 CheckResult(s) from LLM text output
+[2026-05-29T06:01:19.001Z]   [LLM+TOOL] step=1 promptLen=1756chars scripts=0
+[2026-05-29T06:01:19.002Z]   [LLM+TOOL] step=1 calling streamText with 1 tool(s)
+[2026-05-29T06:01:19.005Z]   [LLM+TOOL] step=1 onStepFinish: toolResults=1 textLen=155
+[2026-05-29T06:01:19.005Z]   [LLM+TOOL] step=1 finalText=155chars preview={"mounting_height": {"value": "Mounting height is 650 mm from ground [S1.c3]", "sourceCitation": ["S1.c3"], "citationRef": ["R48.6.2"], "verdict": "PA… (5 more chars)
+[2026-05-29T06:01:19.006Z]   [LLM+TOOL] merged CheckResult from tool + narrative for "mounting_height"
+[2026-05-29T06:01:19.008Z]   [LLM+TOOL] step=1 promptLen=1682chars scripts=0
+[2026-05-29T06:01:19.008Z]   [LLM+TOOL] step=1 calling streamText with 1 tool(s)
+[2026-05-29T06:01:19.014Z] [REVISION] explicit targets: fields=mounting_height,colour_temperature → steps=1,3
+[2026-05-29T06:01:19.015Z] [REVISION] explicit targets: fields=nonexistent → steps=
+[2026-05-29T06:01:19.017Z] [REVISION] explicit targets: fields=colour_temperature,light_source,colour_temperature → steps=2,3
+[2026-05-29T06:01:19.150Z] [REVISION] explicit targets: fields= → steps=
+[2026-05-29T06:01:19.156Z]   [CHECK-STORE] compiled 3 regulation + 3 source citations
+[2026-05-29T06:01:19.156Z] → EVAL: running evaluation layer
+[2026-05-29T06:01:19.190Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T06:01:19.191Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T06:01:19.208Z] === PIPELINE DONE === round=1
+[2026-05-29T06:01:19.210Z]   [CHECK-STORE] compiled 1 regulation + 0 source citations
+[2026-05-29T06:01:19.210Z] → EVAL: running evaluation layer
+[2026-05-29T06:01:19.215Z]   ✓ confidence=95.5% errors=0
+[2026-05-29T06:01:19.216Z] final response: content=128chars citations=1 verdict=undefined
+[2026-05-29T06:01:19.221Z] === PIPELINE DONE === round=1
+[2026-05-29T14:21:46.387Z]   [CHECK-STORE] compiled 1 regulation + 0 source citations
+[2026-05-29T14:21:47.712Z]   [CHECK-STORE] compiled 3 regulation + 3 source citations
+[2026-05-29T14:21:47.717Z] → EVAL: running evaluation layer
+[2026-05-29T14:21:47.719Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T14:21:47.721Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T14:21:47.741Z] === PIPELINE DONE === round=1
+[2026-05-29T14:21:47.753Z]   [CHECK-STORE] compiled 3 regulation + 3 source citations
+[2026-05-29T14:21:47.754Z] → EVAL: running evaluation layer
+[2026-05-29T14:21:47.755Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T14:21:47.756Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T14:21:47.779Z] === PIPELINE DONE === round=1
+[2026-05-29T14:21:47.790Z]   [CHECK-STORE] compiled 3 regulation + 3 source citations
+[2026-05-29T14:21:47.790Z] → EVAL: running evaluation layer
+[2026-05-29T14:21:47.792Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T14:21:47.794Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T14:21:47.909Z] === PIPELINE DONE === round=1
+[2026-05-29T14:21:47.926Z] → EVAL: running evaluation layer
+[2026-05-29T14:21:47.927Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T14:21:47.930Z] final response: content=25chars citations=0 verdict=undefined
+[2026-05-29T14:21:47.934Z] === PIPELINE DONE === round=1
+[2026-05-29T14:21:47.936Z]   [CHECK-STORE] compiled 3 regulation + 3 source citations
+[2026-05-29T14:21:47.936Z] → EVAL: running evaluation layer
+[2026-05-29T14:21:47.938Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T14:21:47.938Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T14:21:47.940Z] === PIPELINE DONE === round=1
+[2026-05-29T14:21:47.940Z] → EVAL: running evaluation layer
+[2026-05-29T14:21:47.942Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T14:21:47.942Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T14:21:47.944Z] === PIPELINE DONE === round=2
+[2026-05-29T14:21:47.948Z]   [LLM+TOOL] step=2 promptLen=1802chars scripts=0
+[2026-05-29T14:21:47.949Z]   [LLM+TOOL] step=2 calling streamText with 0 tool(s)
+[2026-05-29T14:21:47.950Z] [FILE-REGISTRY] searchRelevantChunks: files=1 query="light_source" queries=["light_source","light_source*"]
+[2026-05-29T14:21:47.951Z] [FILE-REGISTRY] FTS5 query="light_source" returned 0 result(s)
+[2026-05-29T14:21:47.952Z] [FILE-REGISTRY] FTS5 query="light_source*" returned 0 result(s)
+[2026-05-29T14:21:47.952Z] [FILE-REGISTRY] after dedup+sort: 0 unique result(s), top 10: 0 result(s)
+[2026-05-29T14:21:47.952Z] [FILE-REGISTRY] FTS5 returned 0 results — falling back to buildContextSummary()
+[2026-05-29T14:21:47.953Z] [FILE-REGISTRY] fallback buildContextSummary() returned 57 chars
+[2026-05-29T14:21:47.953Z]   [LLM+TOOL] step=2 attentionQuery="light_source" fileChunks=57chars containsAvailableChunks=true startsWith="Uploaded Files:\n[File 1: spec.pdf]\n[S1.c1] LED headlamps."
+[2026-05-29T14:21:47.953Z]   [LLM+TOOL] step=2 FINAL PROMPT: systemPrompt=1802chars userMessage=183chars includesFileChunks=true userMessagePreview="### Step 2: Evaluate: light_source\n\nRetrieve relevant chunks. Search the context for 'light source type'.\n\n# Available Chunks\nUploaded Files:\n[File 1: spec.pdf]\n[S1.c1] LED headlamps."
+[2026-05-29T14:21:47.955Z]   [LLM+TOOL] step=2 finalText=140chars preview=```json
+{"light_source": {"value": "LED headlamps [S1.c1]", "sourceCitation": ["S1.c1"], "citationRef": ["R48.6.1"], "verdict": "PASS"}}
+```
+[2026-05-29T14:21:47.956Z]   [LLM+TOOL] extracted 1 CheckResult(s) from LLM text output
+[2026-05-29T14:21:47.958Z]   [LLM+TOOL] step=1 promptLen=1756chars scripts=0
+[2026-05-29T14:21:47.959Z]   [LLM+TOOL] step=1 calling streamText with 1 tool(s)
+[2026-05-29T14:21:47.960Z] [FILE-REGISTRY] searchRelevantChunks: files.length=0 — returning ""
+[2026-05-29T14:21:47.960Z]   [LLM+TOOL] step=1 attentionQuery="mounting_height" fileChunks=0chars containsAvailableChunks=false startsWith=""
+[2026-05-29T14:21:47.961Z]   [LLM+TOOL] step=1 FINAL PROMPT: systemPrompt=1756chars userMessage=158chars includesFileChunks=false userMessagePreview="### Step 1: Evaluate: mounting_height\n\nRetrieve relevant chunks. Search the context for 'headlamp mounting height'. Type: number. Constraint: range(500-1200)."
+[2026-05-29T14:21:47.962Z]   [LLM+TOOL] step=1 onStepFinish: toolResults=1 textLen=155
+[2026-05-29T14:21:47.962Z]   [LLM+TOOL] step=1 finalText=155chars preview={"mounting_height": {"value": "Mounting height is 650 mm from ground [S1.c3]", "sourceCitation": ["S1.c3"], "citationRef": ["R48.6.2"], "verdict": "PA… (5 more chars)
+[2026-05-29T14:21:47.964Z]   [LLM+TOOL] merged CheckResult from tool + narrative for "mounting_height"
+[2026-05-29T14:21:47.965Z]   [LLM+TOOL] step=1 promptLen=1682chars scripts=0
+[2026-05-29T14:21:47.966Z]   [LLM+TOOL] step=1 calling streamText with 1 tool(s)
+[2026-05-29T14:21:47.967Z] [FILE-REGISTRY] searchRelevantChunks: files.length=0 — returning ""
+[2026-05-29T14:21:47.967Z]   [LLM+TOOL] step=1 attentionQuery="mounting_height" fileChunks=0chars containsAvailableChunks=false startsWith=""
+[2026-05-29T14:21:47.967Z]   [LLM+TOOL] step=1 FINAL PROMPT: systemPrompt=1682chars userMessage=56chars includesFileChunks=false userMessagePreview="### Step 1: Evaluate: mounting_height\n\nTest instructions"
+[2026-05-29T14:21:47.968Z] [REVISION] explicit targets: fields=mounting_height,colour_temperature → steps=1,3
+[2026-05-29T14:21:47.969Z] [REVISION] explicit targets: fields=nonexistent → steps=
+[2026-05-29T14:21:47.970Z] [REVISION] explicit targets: fields=colour_temperature,light_source,colour_temperature → steps=2,3
+[2026-05-29T14:21:47.971Z] [REVISION] explicit targets: fields= → steps=
+[2026-05-29T14:21:47.973Z]   [CHECK-STORE] compiled 3 regulation + 3 source citations
+[2026-05-29T14:21:47.974Z] → EVAL: running evaluation layer
+[2026-05-29T14:21:47.975Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T14:21:47.975Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T14:21:47.976Z] === PIPELINE DONE === round=1
+[2026-05-29T14:21:47.977Z]   [CHECK-STORE] compiled 1 regulation + 0 source citations
+[2026-05-29T14:21:47.977Z] → EVAL: running evaluation layer
+[2026-05-29T14:21:47.978Z]   ✓ confidence=95.5% errors=0
+[2026-05-29T14:21:47.979Z] final response: content=128chars citations=1 verdict=undefined
+[2026-05-29T14:21:47.980Z] === PIPELINE DONE === round=1
+[2026-05-29T14:44:45.733Z]   [CHECK-STORE] compiled 1 regulation + 0 source citations
+[2026-05-29T14:44:46.617Z]   [CHECK-STORE] compiled 3 regulation + 3 source citations
+[2026-05-29T14:44:46.621Z] → EVAL: running evaluation layer
+[2026-05-29T14:44:46.623Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T14:44:46.624Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T14:44:46.823Z] === PIPELINE DONE === round=1
+[2026-05-29T14:44:46.851Z]   [CHECK-STORE] compiled 3 regulation + 3 source citations
+[2026-05-29T14:44:46.852Z] → EVAL: running evaluation layer
+[2026-05-29T14:44:46.855Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T14:44:46.857Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T14:44:46.866Z] === PIPELINE DONE === round=1
+[2026-05-29T14:44:46.869Z]   [CHECK-STORE] compiled 3 regulation + 3 source citations
+[2026-05-29T14:44:46.869Z] → EVAL: running evaluation layer
+[2026-05-29T14:44:46.870Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T14:44:46.871Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T14:44:46.881Z] === PIPELINE DONE === round=1
+[2026-05-29T14:44:46.882Z] → EVAL: running evaluation layer
+[2026-05-29T14:44:46.883Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T14:44:46.884Z] final response: content=25chars citations=0 verdict=undefined
+[2026-05-29T14:44:46.885Z] === PIPELINE DONE === round=1
+[2026-05-29T14:44:46.886Z]   [CHECK-STORE] compiled 3 regulation + 3 source citations
+[2026-05-29T14:44:46.887Z] → EVAL: running evaluation layer
+[2026-05-29T14:44:46.888Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T14:44:46.888Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T14:44:46.970Z] === PIPELINE DONE === round=1
+[2026-05-29T14:44:46.970Z] → EVAL: running evaluation layer
+[2026-05-29T14:44:47.015Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T14:44:47.016Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T14:44:47.017Z] === PIPELINE DONE === round=2
+[2026-05-29T14:44:47.020Z]   [LLM+TOOL] step=2 promptLen=1802chars scripts=0
+[2026-05-29T14:44:47.020Z]   [LLM+TOOL] step=2 calling streamText with 0 tool(s)
+[2026-05-29T14:44:47.022Z] [FILE-REGISTRY] searchRelevantChunks: files=1 query="light_source" queries=["light_source","light_source*"]
+[2026-05-29T14:44:47.024Z] [FILE-REGISTRY] FTS5 query="light_source" returned 0 result(s)
+[2026-05-29T14:44:47.025Z] [FILE-REGISTRY] FTS5 query="light_source*" returned 0 result(s)
+[2026-05-29T14:44:47.025Z] [FILE-REGISTRY] after dedup+sort: 0 unique result(s), top 10: 0 result(s)
+[2026-05-29T14:44:47.026Z] [FILE-REGISTRY] FTS5 returned 0 results — falling back to buildContextSummary()
+[2026-05-29T14:44:47.027Z] [FILE-REGISTRY] fallback buildContextSummary() returned 57 chars
+[2026-05-29T14:44:47.027Z]   [LLM+TOOL] step=2 attentionQuery="light_source" fileChunks=57chars containsAvailableChunks=true startsWith="Uploaded Files:\n[File 1: spec.pdf]\n[S1.c1] LED headlamps."
+[2026-05-29T14:44:47.029Z]   [LLM+TOOL] step=2 FINAL PROMPT: systemPrompt=1802chars userMessage=183chars includesFileChunks=true userMessagePreview="### Step 2: Evaluate: light_source\n\nRetrieve relevant chunks. Search the context for 'light source type'.\n\n# Available Chunks\nUploaded Files:\n[File 1: spec.pdf]\n[S1.c1] LED headlamps."
+[2026-05-29T14:44:47.031Z]   [LLM+TOOL] step=2 finalText=140chars preview=```json
+{"light_source": {"value": "LED headlamps [S1.c1]", "sourceCitation": ["S1.c1"], "citationRef": ["R48.6.1"], "verdict": "PASS"}}
+```
+[2026-05-29T14:44:47.033Z]   [LLM+TOOL] extracted 1 CheckResult(s) from LLM text output
+[2026-05-29T14:44:47.035Z]   [LLM+TOOL] step=1 promptLen=1756chars scripts=0
+[2026-05-29T14:44:47.035Z]   [LLM+TOOL] step=1 calling streamText with 1 tool(s)
+[2026-05-29T14:44:47.036Z] [FILE-REGISTRY] searchRelevantChunks: files.length=0 — returning ""
+[2026-05-29T14:44:47.036Z]   [LLM+TOOL] step=1 attentionQuery="mounting_height" fileChunks=0chars containsAvailableChunks=false startsWith=""
+[2026-05-29T14:44:47.036Z]   [LLM+TOOL] step=1 FINAL PROMPT: systemPrompt=1756chars userMessage=158chars includesFileChunks=false userMessagePreview="### Step 1: Evaluate: mounting_height\n\nRetrieve relevant chunks. Search the context for 'headlamp mounting height'. Type: number. Constraint: range(500-1200)."
+[2026-05-29T14:44:47.037Z]   [LLM+TOOL] step=1 onStepFinish: toolResults=1 textLen=155
+[2026-05-29T14:44:47.037Z]   [LLM+TOOL] step=1 finalText=155chars preview={"mounting_height": {"value": "Mounting height is 650 mm from ground [S1.c3]", "sourceCitation": ["S1.c3"], "citationRef": ["R48.6.2"], "verdict": "PA… (5 more chars)
+[2026-05-29T14:44:47.039Z]   [LLM+TOOL] merged CheckResult from tool + narrative for "mounting_height"
+[2026-05-29T14:44:47.040Z]   [LLM+TOOL] step=1 promptLen=1682chars scripts=0
+[2026-05-29T14:44:47.041Z]   [LLM+TOOL] step=1 calling streamText with 1 tool(s)
+[2026-05-29T14:44:47.041Z] [FILE-REGISTRY] searchRelevantChunks: files.length=0 — returning ""
+[2026-05-29T14:44:47.042Z]   [LLM+TOOL] step=1 attentionQuery="mounting_height" fileChunks=0chars containsAvailableChunks=false startsWith=""
+[2026-05-29T14:44:47.043Z]   [LLM+TOOL] step=1 FINAL PROMPT: systemPrompt=1682chars userMessage=56chars includesFileChunks=false userMessagePreview="### Step 1: Evaluate: mounting_height\n\nTest instructions"
+[2026-05-29T14:44:47.045Z] [REVISION] explicit targets: fields=mounting_height,colour_temperature → steps=1,3
+[2026-05-29T14:44:47.046Z] [REVISION] explicit targets: fields=nonexistent → steps=
+[2026-05-29T14:44:47.047Z] [REVISION] explicit targets: fields=colour_temperature,light_source,colour_temperature → steps=2,3
+[2026-05-29T14:44:47.047Z] [REVISION] explicit targets: fields= → steps=
+[2026-05-29T14:44:47.050Z]   [CHECK-STORE] compiled 3 regulation + 3 source citations
+[2026-05-29T14:44:47.050Z] → EVAL: running evaluation layer
+[2026-05-29T14:44:47.052Z]   ✓ confidence=100.0% errors=0
+[2026-05-29T14:44:47.053Z] final response: content=853chars citations=3 verdict=undefined
+[2026-05-29T14:44:47.054Z] === PIPELINE DONE === round=1
+[2026-05-29T14:44:47.055Z]   [CHECK-STORE] compiled 1 regulation + 0 source citations
+[2026-05-29T14:44:47.056Z] → EVAL: running evaluation layer
+[2026-05-29T14:44:47.056Z]   ✓ confidence=95.5% errors=0
+[2026-05-29T14:44:47.057Z] final response: content=128chars citations=1 verdict=undefined
+[2026-05-29T14:44:47.057Z] === PIPELINE DONE === round=1

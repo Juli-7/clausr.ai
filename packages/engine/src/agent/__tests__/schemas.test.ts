@@ -56,7 +56,7 @@ describe("AgentResponseSchema", () => {
   it("accepts response with lesson", () => {
     const result = AgentResponseSchema.safeParse({
       ...validResponse,
-      lesson: { text: "Learned something new", confidence: 8, sourceSkill: "eu-vwta-lighting" },
+      lesson: { text: "Learned something new", confidence: 8, sourceSkill: "gdpr" },
     });
     expect(result.success).toBe(true);
   });

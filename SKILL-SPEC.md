@@ -111,4 +111,4 @@ The engine parses `## Checks` by scanning for:
 
 ## Canonical Example
 
-See `eu-vwta-lighting/SKILL.md`.
+See `gdpr/SKILL.md`.

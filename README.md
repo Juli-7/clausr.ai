@@ -5,7 +5,7 @@ AI-powered regulatory compliance assessment. Upload vehicle specs and source doc
 ## What It Does
 
 1. **Upload** a vehicle specification document (PDF, DOCX, or images)
-2. **Select** a regulatory skill (e.g., EU VWTA Lighting, EU VWTA Emissions)
+2. **Select** a regulatory skill (e.g., GDPR)
 3. **Chat** with the agent about the document — it extracts values and checks them against regulation clauses
 4. **Review** the assessment report with PASS/FAIL verdicts, confidence scores, and clickable citations
 
@@ -69,14 +69,14 @@ Skills are file-based domain definitions under `skills/<skill-id>/`:
 - `assets/template.docx` — Optional Word template for export
 - `scripts/` — Optional Python scripts for custom checks
 
-**Built-in skills**: EU VWTA Emissions, EU VWTA Lighting, UN R13 Braking.
+**Built-in skills**: GDPR.
 
 `SKILL.md` format:
 - **Frontmatter** — `title`, `description`, `domain`
 - **## Checks** — Numbered checks with `type`, `description`, `clause`, `constraint`, `attention`
 - **Template sections** — `fields`, `table`, `markdown`, `verdict`
 
-See `SKILL-SPEC.md` for the full specification and `skills/eu-vwta-lighting/` for a complete example.
+See `SKILL-SPEC.md` for the full specification and `skills/gdpr/` for a complete example.
 
 ### Prompt Versioning
 
@@ -136,7 +136,7 @@ src/
     present/         # Response formatting, finalize phase
     shared/          # Schemas, types, memory (SQLite repository)
     __tests__/       # Integration tests (139 tests)
-skills/              # Skill definitions (3 built-in)
+skills/              # Skill definitions (1 built-in)
 data/                # SQLite database + uploads (runtime, not committed)
 ```
 
