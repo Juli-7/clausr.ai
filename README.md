@@ -1,13 +1,15 @@
 # clausr.ai
 
-AI-powered regulatory compliance assessment. Upload vehicle specs and source documents; the agent checks every value against regulation text with inline citations back to specific document chunks.
+An engine for pattern-matching jobs. Upload a document, pick a pattern definition (a "skill"), and the agent extracts relevant values, checks them against reference rules, and produces a structured assessment with inline citations.
+
+**Compliance assessment** is the first and most mature use case — and **GDPR** is one example of a compliance skill. The same architecture can drive inspection, auditing, quality assurance, or any job that follows the pattern: *extract fields → check constraints → report with evidence*.
 
 ## What It Does
 
-1. **Upload** a vehicle specification document (PDF, DOCX, or images)
-2. **Select** a regulatory skill (e.g., GDPR)
-3. **Chat** with the agent about the document — it extracts values and checks them against regulation clauses
-4. **Review** the assessment report with PASS/FAIL verdicts, confidence scores, and clickable citations
+1. **Upload** a document (PDF, DOCX, or images)
+2. **Select** a skill (a pattern definition; e.g., GDPR compliance)
+3. **Chat** with the agent — it extracts values and checks them against the skill's rules
+4. **Review** the report with PASS/FAIL verdicts, confidence scores, and clickable citations
 
 ## Architecture
 
@@ -34,7 +36,7 @@ Each turn:
 
 Citations are **requested from the LLM and validated**, not structurally guaranteed:
 
-1. **Prompted** — System prompt instructs the LLM to include `[R48.6.2]` regulation references and `[S1.c1]` source chunk IDs in its JSON output
+1. **Prompted** — System prompt instructs the LLM to include `[REF.id]` reference IDs and `[S1.c1]` source chunk IDs in its JSON output
 2. **Backfilled** — If the LLM omits `citationRef` or `sourceCitation`, the pipeline falls back to the check's clause or available file chunks
 3. **Validated** — A validation layer checks that cited regulation IDs exist in the palette and that claim text roughly matches source chunk content (word overlap heuristic)
 
@@ -62,14 +64,14 @@ Color stops: dark green ≥99%, green ≥80%, amber ≥50%, red <50%.
 
 ### Skills
 
-Skills are file-based domain definitions under `skills/<skill-id>/`:
+Skills are file-based pattern definitions under `skills/<skill-id>/`:
 
 - `SKILL.md` — Agent role, `## Checks` block with per-field constraints, optional template definition
-- `references.json` — Regulation clause text indexed by `[R48.5.11]` ID
+- `references.json` — Reference text (regulations, specs, manuals) indexed by ID
 - `assets/template.docx` — Optional Word template for export
 - `scripts/` — Optional Python scripts for custom checks
 
-**Built-in skills**: GDPR.
+**Built-in skills**: GDPR (compliance — the reference skill).
 
 `SKILL.md` format:
 - **Frontmatter** — `title`, `description`, `domain`
@@ -136,7 +138,7 @@ src/
     present/         # Response formatting, finalize phase
     shared/          # Schemas, types, memory (SQLite repository)
     __tests__/       # Integration tests (139 tests)
-skills/              # Skill definitions (1 built-in)
+skills/              # Pattern definitions (skills; 1 built-in: GDPR)
 data/                # SQLite database + uploads (runtime, not committed)
 ```
 
