@@ -130,13 +130,20 @@ pnpm build    # Production build
 ```
 src/
   app/api/           # REST + SSE streaming endpoints
+  app/prototype/     # Rapid prototyping routes
   components/        # React components (panels, drawers, badges, chat)
-  lib/agent/         # Core agent logic
+  lib/               # App-wide utilities, React context
+packages/engine/src/
+  agent/
     loading/         # Skill parser, phase loaders
     pipeline/        # Orchestrator, executors, prompts
     evaluation/      # Confidence scoring, validation
-    present/         # Response formatting, finalize phase
-    shared/          # Schemas, types, memory (SQLite repository)
+    present/         # Response formatting, export (DOCX)
+    shared/          # Schemas, types, SQLite repository
+    knowledge/       # Mock regulation API, reference data
+    llm/             # LLM client abstraction
+    evolution/       # Skill evolution / learning
+    user-info/       # User profile extraction
     __tests__/       # Integration tests (139 tests)
 skills/              # Pattern definitions (skills; 1 built-in: GDPR)
 data/                # SQLite database + uploads (runtime, not committed)
