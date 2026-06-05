@@ -36,6 +36,7 @@ export const SourceCitationSchema = z.object({
     })
     .optional(),
   pageNumber: z.number().optional(),
+  pageCount: z.number().optional(),
 });
 
 // ── Response ──

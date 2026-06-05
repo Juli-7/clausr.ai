@@ -39,6 +39,17 @@ function saveRawFile(sessionId: string, filename: string, dataUrl: string): void
   fs.writeFileSync(path.join(dir, filename), Buffer.from(base64, "base64"));
 }
 
+function savePageImages(sessionId: string, filename: string, pageImages: string[]): void {
+  const dir = path.join(UPLOADS_DIR, sessionId, `${filename}.pages`);
+  fs.mkdirSync(dir, { recursive: true });
+  for (let i = 0; i < pageImages.length; i++) {
+    const dataUrl = pageImages[i];
+    if (!dataUrl) continue;
+    const base64 = dataUrl.split(",")[1] ?? dataUrl;
+    fs.writeFileSync(path.join(dir, `${i}.png`), Buffer.from(base64, "base64"));
+  }
+}
+
 export class MockDocStore implements IDocStore {
   async processFile(
     file: { name: string; size: number; type: string; dataUrl?: string },
@@ -49,6 +60,9 @@ export class MockDocStore implements IDocStore {
     const chunkIds = saveChunks(sessionId, file.name, extracted.chunks);
     if (file.dataUrl) {
       saveRawFile(sessionId, file.name, file.dataUrl);
+    }
+    if (extracted.pageImages && extracted.pageImages.length > 0) {
+      savePageImages(sessionId, file.name, extracted.pageImages);
     }
     const chunkInfos: ChunkInfo[] = extracted.chunks.map((c) => ({
       id: c.id,

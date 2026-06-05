@@ -57,8 +57,9 @@ export class CheckStore {
     citationPalette: CitationPaletteEntry[],
     sourcePalette: SourcePaletteEntry[]
   ): void {
-    const citationMap = new Map<string, Citation>();
-    const sourceMap = new Map<string, SourceCitation>();
+    // Seed with existing entries so supplements from content survive
+    const citationMap = new Map(this.compiledCitations.map(c => [c.ref, c]));
+    const sourceMap = new Map(this.compiledSourceCitations.map(s => [s.ref, s]));
 
     for (const check of this.checkResults) {
       for (const ref of check.citationRef) {
@@ -88,6 +89,7 @@ export class CheckStore {
               chunks: entry.chunks,
               boundingBox: entry.chunks?.[0]?.bbox,
               pageNumber: entry.pageNumber,
+              pageCount: entry.pageCount,
             });
           }
         }
@@ -146,6 +148,7 @@ export class CheckStore {
             chunks: entry.chunks,
             boundingBox: entry.chunks?.[0]?.bbox,
             pageNumber: entry.pageNumber,
+            pageCount: entry.pageCount,
           });
         }
       }

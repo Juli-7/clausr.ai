@@ -37,6 +37,7 @@ export interface ExtractionResult {
   pageCount?: number;
   ocrConfidence?: number;
   extractorUsed?: string;
+  pageImages?: string[];
 }
 
 /**
@@ -92,6 +93,7 @@ export async function extractFileContent(file: {
         pageCount: result.pageCount,
         ocrConfidence: result.ocrConfidence,
         extractorUsed: result.extractorUsed,
+        pageImages: result.pageImages,
       };
     } catch (err) {
       console.error(`[extractors] PDF parse failed for ${file.name}:`, err);

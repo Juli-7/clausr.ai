@@ -57,6 +57,7 @@ export class FileRegistry {
           keyExcerpt: f.extractedText.slice(0, 200),
           dataUrl: f.dataUrl,
           pageNumber: f.pageCount,
+          pageCount: f.pageCount,
         }];
       }
       return chunks.map(c => ({
@@ -68,6 +69,7 @@ export class FileRegistry {
         chunks: [c],
         dataUrl: f.dataUrl,
         pageNumber: c.pageNumber ?? f.pageCount,
+        pageCount: f.pageCount,
       }));
     });
   }

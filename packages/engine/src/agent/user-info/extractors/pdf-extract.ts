@@ -20,6 +20,7 @@ export interface PdfResult {
   chunks: TextChunk[];
   ocrConfidence: number;
   extractorUsed: string;
+  pageImages?: string[];
 }
 
 export interface PdfTextItem {
@@ -390,58 +391,58 @@ export function buildSections(lines: StructuredLine[]): Section[] {
   return sections;
 }
 
-/**
- * Split section text at natural boundaries (paragraph gaps or sentences)
- * if it exceeds the hard limit.
- */
-function splitSectionText(text: string): string[] {
-  if (text.length <= HARD_MAX_CHARS) return [text];
+function makeChunkFromLines(lines: StructuredLine[]): TextChunk {
+  const pageNum = lines[0]!.pageNum;
+  const pageWidth = lines[0]!.pageWidth;
+  const pageHeight = lines[0]!.pageHeight;
+  const text = lines.map((l) => l.text).join("\n");
+  const wordBoxes = lines.flatMap((l) => l.wordBoxes);
+  const bbox = mergeWordBoxes(lines.map((l) => l.bbox));
+  return { id: "", text, bbox, wordBoxes, pageNumber: pageNum, pageWidth, pageHeight };
+}
 
-  // Try splitting at paragraph gaps (double newlines)
-  const paragraphs = text.split(/\n\n+/);
-  if (paragraphs.length > 1) {
-    const chunks: string[] = [];
-    let current = "";
-    for (const para of paragraphs) {
-      if (current.length + para.length + 2 > HARD_MAX_CHARS && current.length > 0) {
-        chunks.push(current.trim());
-        current = para;
-      } else {
-        current = current ? current + "\n\n" + para : para;
+/**
+ * Split lines at page boundaries, then sub-split if still over HARD_MAX_CHARS.
+ * Each resulting chunk has its own pageNumber and bbox derived from its lines.
+ */
+function splitLinesIntoChunks(lines: StructuredLine[]): TextChunk[] {
+  // Group consecutive lines by page number
+  const pageGroups: StructuredLine[][] = [];
+  for (const line of lines) {
+    const last = pageGroups[pageGroups.length - 1];
+    if (last && last[0]!.pageNum === line.pageNum) {
+      last.push(line);
+    } else {
+      pageGroups.push([line]);
+    }
+  }
+
+  const result: TextChunk[] = [];
+  for (const group of pageGroups) {
+    const groupText = group.map((l) => l.text).join("\n");
+    if (groupText.length <= HARD_MAX_CHARS) {
+      result.push(makeChunkFromLines(group));
+    } else {
+      // Sub-split: walk lines, accumulating until hitting the hard limit
+      let currentLines: StructuredLine[] = [];
+      let currentLen = 0;
+      for (const line of group) {
+        const addLen = (currentLines.length > 0 ? 1 : 0) + line.text.length;
+        if (currentLen + addLen > HARD_MAX_CHARS && currentLines.length > 0) {
+          result.push(makeChunkFromLines(currentLines));
+          currentLines = [line];
+          currentLen = line.text.length;
+        } else {
+          currentLines.push(line);
+          currentLen += addLen;
+        }
+      }
+      if (currentLines.length > 0) {
+        result.push(makeChunkFromLines(currentLines));
       }
     }
-    if (current.trim()) chunks.push(current.trim());
-    if (chunks.every((c) => c.length <= HARD_MAX_CHARS)) return chunks;
   }
-
-  // Fallback: sentence boundaries
-  const sentences = text.match(/[^。！？\n.!?]+[。！？\n.!?]?/g) || [text];
-  const chunks: string[] = [];
-  let current = "";
-  for (const s of sentences) {
-    if (current.length + s.length > HARD_MAX_CHARS && current.length > 0) {
-      chunks.push(current.trim());
-      current = s;
-    } else {
-      current += s;
-    }
-  }
-  if (current.trim()) chunks.push(current.trim());
-
-  // Last resort: word boundary split for single massive sentence
-  return chunks.flatMap((c) => {
-    if (c.length <= HARD_MAX_CHARS) return [c];
-    const forced: string[] = [];
-    let remaining = c;
-    while (remaining.length > HARD_MAX_CHARS) {
-      let splitAt = remaining.lastIndexOf(" ", HARD_MAX_CHARS);
-      if (splitAt < HARD_MAX_CHARS * 0.5) splitAt = HARD_MAX_CHARS;
-      forced.push(remaining.slice(0, splitAt).trim());
-      remaining = remaining.slice(splitAt).trim();
-    }
-    if (remaining) forced.push(remaining);
-    return forced;
-  });
+  return result;
 }
 
 export function sectionsToChunks(sections: Section[]): TextChunk[] {
@@ -452,39 +453,14 @@ export function sectionsToChunks(sections: Section[]): TextChunk[] {
     if (lines.length === 0) continue;
 
     const allText = lines.map((l) => l.text).join("\n");
-    const allWordBoxes = lines.flatMap((l) => l.wordBoxes);
-    const mergedBbox = mergeWordBoxes(lines.map((l) => l.bbox));
-    const pageNum = lines[0]!.pageNum;
-    const pageWidth = lines[0]!.pageWidth;
-    const pageHeight = lines[0]!.pageHeight;
 
-    // Try to keep section as one chunk if within soft limit
     if (allText.length <= SOFT_MAX_CHARS) {
-      chunks.push({
-        id: "",
-        text: allText,
-        bbox: mergedBbox,
-        wordBoxes: allWordBoxes,
-        pageNumber: pageNum,
-        pageWidth,
-        pageHeight,
-      });
+      chunks.push(makeChunkFromLines(lines));
       continue;
     }
 
-    // Split into sub-chunks
-    const parts = splitSectionText(allText);
-    for (const part of parts) {
-      chunks.push({
-        id: "",
-        text: part,
-        bbox: mergedBbox,
-        wordBoxes: allWordBoxes,
-        pageNumber: pageNum,
-        pageWidth,
-        pageHeight,
-      });
-    }
+    const subChunks = splitLinesIntoChunks(lines);
+    chunks.push(...subChunks);
   }
 
   return chunks;
@@ -527,6 +503,43 @@ function finalizeChunks(chunks: TextChunk[]): TextChunk[] {
     return { ...chunk, id, html };
   });
   return applyOverlap(withIds);
+}
+
+// ── Quality gate ──
+
+function isAcceptableNativeText(text: string): boolean {
+  if (text.length < 50) return false;
+
+  const tokens = text.split(/\s+/).filter((t) => t.length > 0);
+  if (tokens.length < 5) return text.length > 200;
+
+  const commonShort = new Set([
+    "a", "i",
+    "am", "an", "as", "at", "be", "by", "do", "go", "he", "hi",
+    "if", "in", "is", "it", "me", "my", "no", "of", "on", "or",
+    "so", "to", "up", "us", "we",
+    "ad", "ce", "co", "dd", "de", "dr", "ec", "eg", "el", "en",
+    "eu", "ex", "gb", "id", "ie", "inc", "la", "le", "lo", "ltd",
+    "ma", "mr", "ms", "mx", "mrs", "ok", "pc", "pp", "st", "tv",
+    "uk", "us", "vs",
+  ]);
+
+  let suspicious = 0;
+  let valid = 0;
+
+  for (const token of tokens) {
+    const w = token.replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, "");
+    if (w.length === 0) continue;
+    valid++;
+    if (w.length <= 2 && /[a-zA-Z]/.test(w) && !commonShort.has(w.toLowerCase())) {
+      suspicious++;
+    }
+  }
+
+  if (valid === 0) return false;
+  const ratio = suspicious / valid;
+  console.log(`[pdf-extract] native text quality: ${suspicious}/${valid} suspicious (ratio=${ratio.toFixed(3)})`);
+  return ratio < 0.35;
 }
 
 // ── Main extraction ──
@@ -594,24 +607,86 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
     }
 
     if (totalChars > 50) {
-      // Remove headers/footers
       const filteredLines = removeHeadersFooters(allStructuredLines);
-
-      // Build heading hierarchy and sections
       const sections = buildSections(filteredLines);
-
-      // Convert to chunks
       const rawChunks = sectionsToChunks(sections);
       const chunks = finalizeChunks(rawChunks);
       const fullText = chunks.map((c) => c.text).join("\n\n");
 
-      return {
-        text: fullText,
-        pageCount,
-        chunks,
-        ocrConfidence: 100,
-        extractorUsed: "pdfjs-dist",
-      };
+      if (isAcceptableNativeText(fullText)) {
+        let pageImages: string[] | undefined;
+        let screenshots: Awaited<ReturnType<PDFParse["getScreenshot"]>> | undefined;
+        try {
+          const parser = new PDFParse({ data });
+          screenshots = await parser.getScreenshot({ imageDataUrl: true, imageBuffer: false });
+          await parser.destroy();
+          pageImages = [];
+          for (const s of screenshots.pages) {
+            pageImages[s.pageNumber] = s.dataUrl!;
+          }
+        } catch (e) {
+          console.warn(`[pdf-extract] Could not generate page screenshots:`, e);
+        }
+
+        // OCR any pages where pdfjs found no native text
+        const chunkPageNums = new Set(chunks.map((c) => c.pageNumber));
+        const missingPages: number[] = [];
+        for (let p = 1; p <= pageCount; p++) {
+          if (!chunkPageNums.has(p)) missingPages.push(p);
+        }
+
+        if (missingPages.length > 0 && screenshots?.pages.length) {
+          console.log(`[pdf-extract] ${missingPages.length}/${pageCount} pages lack native text. OCRing them.`);
+          const ocrChunks: TextChunk[] = [];
+
+          for (const screenshot of screenshots.pages) {
+            if (!missingPages.includes(screenshot.pageNumber)) continue;
+            if (!screenshot.dataUrl) continue;
+
+            try {
+              const result = await extractImageText(screenshot.dataUrl);
+              if (result && result.text.trim().length > 0) {
+                for (const chunk of result.chunks) {
+                  ocrChunks.push({
+                    ...chunk,
+                    id: "",
+                    pageNumber: screenshot.pageNumber,
+                    pageWidth: screenshot.width ?? 0,
+                    pageHeight: screenshot.height ?? 0,
+                  });
+                }
+              }
+            } catch (err) {
+              console.warn(`[pdf-extract] OCR failed for page ${screenshot.pageNumber}:`, err);
+            }
+          }
+
+          if (ocrChunks.length > 0) {
+            const finalizedOcr = finalizeChunks(ocrChunks);
+            const allChunks = [...chunks, ...finalizedOcr];
+            const combinedText = allChunks.map((c) => c.text).join("\n\n");
+            return {
+              text: combinedText,
+              pageCount,
+              chunks: allChunks,
+              ocrConfidence: 100,
+              extractorUsed: "pdfjs-dist+ocr",
+              pageImages,
+            };
+          }
+        }
+
+        return {
+          text: fullText,
+          pageCount,
+          chunks,
+          ocrConfidence: 100,
+          extractorUsed: "pdfjs-dist",
+          pageImages,
+        };
+      }
+
+      console.warn(`[pdf-extract] Native text quality too low (${fullText.length} chars). Falling back to OCR.`);
     }
   } catch (err) {
     console.warn(`[pdf-extract] pdfjs-dist extraction failed:`, err);
@@ -641,6 +716,12 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
     }
 
     const validScreenshots = screenshots.pages.filter((s) => s.dataUrl);
+
+    const pageImages: string[] = [];
+    for (const s of validScreenshots) {
+      pageImages[s.pageNumber] = s.dataUrl!;
+    }
+
     const ocrResults = await Promise.all(
       validScreenshots.map((screenshot) =>
         extractImageText(screenshot.dataUrl!).then(
@@ -683,6 +764,7 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
         chunks,
         ocrConfidence: avgConfidence,
         extractorUsed: "tesseract",
+        pageImages,
       };
     }
 
@@ -692,6 +774,7 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
       chunks: [],
       ocrConfidence: 0,
       extractorUsed: "fallback",
+      pageImages,
     };
   } catch (err) {
     console.error(`[pdf-extract] OCR fallback failed:`, err);

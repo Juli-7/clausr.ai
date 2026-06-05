@@ -25,6 +25,7 @@ export interface SourcePaletteEntry {
   chunks?: TextChunk[];
   dataUrl?: string;
   pageNumber?: number;
+  pageCount?: number;
 }
 
 export interface CheckResult {
