@@ -85,7 +85,7 @@ function itemToWordBox(item: PdfTextItem, pageHeight: number): WordBox | null {
 export function detectColumnBoundaries(items: PdfTextItem[], pageWidth: number): number[] {
   if (items.length < 6) return [];
   const centers = items
-    .map((i) => i.transform[4] + (i.width ?? 0) / 2)
+    .map((i) => i.transform[4]! + (i.width ?? 0) / 2)
     .filter((x) => x > 0 && x < pageWidth)
     .sort((a, b) => a - b);
 
@@ -118,7 +118,7 @@ export function fixColumnOrder(items: PdfTextItem[], pageWidth: number): PdfText
   // Assign each item to a column
   const columns: PdfTextItem[][] = Array.from({ length: boundaries.length + 1 }, () => []);
   for (const item of items) {
-    const center = item.transform[4] + (item.width ?? 0) / 2;
+    const center = item.transform[4]! + (item.width ?? 0) / 2;
     let col = 0;
     for (const b of boundaries) {
       if (center > b) col++;
@@ -130,7 +130,7 @@ export function fixColumnOrder(items: PdfTextItem[], pageWidth: number): PdfText
   // Sort each column by Y (top-to-bottom), then concatenate columns left-to-right
   const result: PdfTextItem[] = [];
   for (const col of columns) {
-    col.sort((a, b) => a.transform[5] - b.transform[5] || a.transform[4] - b.transform[4]);
+    col.sort((a, b) => a.transform[5]! - b.transform[5]! || a.transform[4]! - b.transform[4]!);
     result.push(...col);
   }
   return result;

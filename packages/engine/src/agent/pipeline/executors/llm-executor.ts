@@ -347,7 +347,7 @@ function extractCheckResultsFromText(
   }
 
     const data = validation.data;
-  const verdict = data.verdict.toUpperCase() === "FAIL" ? "FAIL" as const : "PASS" as const;
+  const verdict = data.verdict.toUpperCase().startsWith("FAIL") ? "FAIL" as const : "PASS" as const;
 
   if (!data.value) return [];
 

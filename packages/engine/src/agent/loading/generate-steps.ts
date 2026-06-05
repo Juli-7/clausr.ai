@@ -11,6 +11,7 @@ export function generateStepsFromChecks(
     type: "llm+tool" as const,
     instructions: buildFieldInstructions(c, regulationIds),
     attention: c.attention ?? undefined,
+    dependsOn: c.dependsOn ?? undefined,
   }));
 }
 
