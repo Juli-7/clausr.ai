@@ -576,6 +576,7 @@ export interface UserSkillRow {
   skillmd: string;
   checksJson: string;
   regulationIdsJson: string;
+  redline: string;
   createdBy: string;
   createdAt: number;
   updatedAt: number;
@@ -587,19 +588,21 @@ export function saveUserSkill(params: {
   skillmd: string;
   checks: { field: string; type: { kind: string; values?: string[] }; description?: string; clause?: string; constraint?: string; dependsOn?: string; sample?: string; attention?: string }[];
   regulationIds: string[];
+  redline?: string;
   tenantId?: string;
   createdBy?: string;
 }): void {
   const db = getDb();
   db.prepare(
-    `INSERT OR REPLACE INTO user_skills (name, description, skillmd, checks_json, regulation_ids_json, tenant_id, created_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM user_skills WHERE name = ?), ?), ?)`
+    `INSERT OR REPLACE INTO user_skills (name, description, skillmd, checks_json, regulation_ids_json, redline, tenant_id, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM user_skills WHERE name = ?), ?), ?)`
   ).run(
     params.name,
     params.description,
     params.skillmd,
     JSON.stringify(params.checks),
     JSON.stringify(params.regulationIds),
+    params.redline ?? "",
     params.tenantId ?? "",
     params.createdBy ?? "",
     params.name,
@@ -637,6 +640,7 @@ export function loadUserSkill(name: string): UserSkillRow | null {
     skillmd: row.skillmd as string,
     checksJson: row.checks_json as string,
     regulationIdsJson: row.regulation_ids_json as string,
+    redline: (row.redline as string) ?? "",
     createdBy: row.created_by as string,
     createdAt: row.created_at as number,
     updatedAt: row.updated_at as number,
