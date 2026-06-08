@@ -88,6 +88,31 @@ export function listSkills(): string[] {
     .map((d) => d.name);
 }
 
+/**
+ * Save a SKILL.md to the filesystem at skills/{name}/SKILL.md.
+ * Creates the directory if needed. Optionally writes a meta.json with createdBy.
+ */
+export function saveSkillToFs(name: string, fullText: string, createdBy?: string): void {
+  const skillDir = path.join(SKILLS_DIR, name);
+  if (!fs.existsSync(skillDir)) {
+    fs.mkdirSync(skillDir, { recursive: true });
+  }
+  fs.writeFileSync(path.join(skillDir, "SKILL.md"), fullText, "utf-8");
+  if (createdBy) {
+    fs.writeFileSync(path.join(skillDir, "meta.json"), JSON.stringify({ createdBy }, null, 2), "utf-8");
+  }
+}
+
+/**
+ * Remove a skill directory from the filesystem at skills/{name}/.
+ */
+export function deleteSkillFromFs(name: string): void {
+  const skillDir = path.join(SKILLS_DIR, name);
+  if (fs.existsSync(skillDir)) {
+    fs.rmSync(skillDir, { recursive: true, force: true });
+  }
+}
+
 function getScriptDescription(filePath: string, filename: string): string {
   try {
     const content = fs.readFileSync(filePath, "utf-8");

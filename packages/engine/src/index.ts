@@ -100,7 +100,7 @@ export type {
 // ── Loading / Setup ──
 export { setupSession } from "./agent/loading/loading-orchestrator";
 export type { SetupSessionParams } from "./agent/loading/loading-orchestrator";
-export { loadSkill, listSkills } from "./agent/loading/skill/loader";
+export { loadSkill, listSkills, saveSkillToFs, deleteSkillFromFs } from "./agent/loading/skill/loader";
 export type { SkillLoader } from "./agent/loading/skill/loader";
 export { parseChecks, extractRedline, extractLessons } from "./agent/loading/skill/check-parser";
 export type { ParsedCheck, CheckFieldType } from "./agent/loading/skill/check-parser";
