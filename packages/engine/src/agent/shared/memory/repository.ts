@@ -567,3 +567,71 @@ export function getLessonOverrides(skillId: string, tenantId?: string): string[]
     .all(skillId, tenantId ?? "") as { lesson_text: string }[];
   return rows.map((r) => r.lesson_text);
 }
+
+// ── User-Created Skills ──
+
+export interface UserSkillRow {
+  name: string;
+  description: string;
+  skillmd: string;
+  checksJson: string;
+  regulationIdsJson: string;
+  createdBy: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export function saveUserSkill(params: {
+  name: string;
+  description: string;
+  skillmd: string;
+  checks: { field: string; type: { kind: string; values?: string[] }; description?: string; clause?: string; constraint?: string; dependsOn?: string; sample?: string; attention?: string }[];
+  regulationIds: string[];
+  tenantId?: string;
+  createdBy?: string;
+}): void {
+  const db = getDb();
+  db.prepare(
+    `INSERT OR REPLACE INTO user_skills (name, description, skillmd, checks_json, regulation_ids_json, tenant_id, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM user_skills WHERE name = ?), ?), ?)`
+  ).run(
+    params.name,
+    params.description,
+    params.skillmd,
+    JSON.stringify(params.checks),
+    JSON.stringify(params.regulationIds),
+    params.tenantId ?? "",
+    params.createdBy ?? "",
+    params.name,
+    Date.now(),
+    Date.now(),
+  );
+}
+
+export function deleteUserSkill(name: string): void {
+  getDb().prepare("DELETE FROM user_skills WHERE name = ?").run(name);
+}
+
+export function listUserSkillNames(): string[] {
+  const rows = getDb()
+    .prepare("SELECT name FROM user_skills ORDER BY updated_at DESC")
+    .all() as { name: string }[];
+  return rows.map((r) => r.name);
+}
+
+export function loadUserSkill(name: string): UserSkillRow | null {
+  const row = getDb()
+    .prepare("SELECT * FROM user_skills WHERE name = ?")
+    .get(name) as Record<string, unknown> | undefined;
+  if (!row) return null;
+  return {
+    name: row.name as string,
+    description: row.description as string,
+    skillmd: row.skillmd as string,
+    checksJson: row.checks_json as string,
+    regulationIdsJson: row.regulation_ids_json as string,
+    createdBy: row.created_by as string,
+    createdAt: row.created_at as number,
+    updatedAt: row.updated_at as number,
+  };
+}

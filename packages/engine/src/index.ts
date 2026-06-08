@@ -31,9 +31,13 @@ export {
   getRecentMemories,
   saveLessonOverride,
   getLessonOverrides,
+  saveUserSkill,
+  deleteUserSkill,
+  listUserSkillNames,
+  loadUserSkill,
 } from "./agent/shared/memory/repository";
 
-export type { SessionSetupData, StoredChunk, Fts5Result } from "./agent/shared/memory/repository";
+export type { SessionSetupData, StoredChunk, Fts5Result, UserSkillRow } from "./agent/shared/memory/repository";
 
 // ── Schemas & Types ──
 export {

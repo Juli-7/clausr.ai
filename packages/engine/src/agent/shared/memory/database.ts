@@ -180,6 +180,19 @@ function runMigrations(db: Database.Database): void {
   try { db.exec("ALTER TABLE sessions ADD COLUMN user_id TEXT NOT NULL DEFAULT ''"); } catch { }
   try { db.exec("ALTER TABLE sessions ADD COLUMN shared INTEGER NOT NULL DEFAULT 0"); } catch { }
   try { db.exec("ALTER TABLE sessions ADD COLUMN user_email TEXT NOT NULL DEFAULT ''"); } catch { }
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS user_skills (
+      name TEXT PRIMARY KEY,
+      description TEXT NOT NULL DEFAULT '',
+      skillmd TEXT NOT NULL,
+      checks_json TEXT NOT NULL DEFAULT '[]',
+      regulation_ids_json TEXT NOT NULL DEFAULT '[]',
+      tenant_id TEXT NOT NULL DEFAULT '',
+      created_by TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )`);
+  } catch { }
 }
 
 function initSettings(db: Database.Database): void {
