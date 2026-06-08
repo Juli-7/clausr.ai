@@ -99,7 +99,7 @@ export class FileRegistry {
    * and unions the results for better recall.
    * Falls back to all chunks if nothing matches.
    */
-  searchRelevantChunks(sessionId: string, query: string, topK = 10): string {
+  searchRelevantChunks(sessionId: string, query: string, topK = 3): string {
     if (this.files.length === 0) {
       logPipeline(`[FILE-REGISTRY] searchRelevantChunks: files.length=0 — returning ""`);
       return "";
