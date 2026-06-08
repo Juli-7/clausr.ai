@@ -619,6 +619,13 @@ export function listUserSkillNames(): string[] {
   return rows.map((r) => r.name);
 }
 
+export function listUserSkillNamesByTenant(tenantId: string): string[] {
+  const rows = getDb()
+    .prepare("SELECT name FROM user_skills WHERE tenant_id = ? ORDER BY updated_at DESC")
+    .all(tenantId) as { name: string }[];
+  return rows.map((r) => r.name);
+}
+
 export function loadUserSkill(name: string): UserSkillRow | null {
   const row = getDb()
     .prepare("SELECT * FROM user_skills WHERE name = ?")

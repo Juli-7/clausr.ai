@@ -34,6 +34,7 @@ export {
   saveUserSkill,
   deleteUserSkill,
   listUserSkillNames,
+  listUserSkillNamesByTenant,
   loadUserSkill,
 } from "./agent/shared/memory/repository";
 
