@@ -21,9 +21,8 @@ export async function executeLlmToolStep(
   try {
     const scripts = ctx.skill.scripts;
 
-    const isRevision = !!revisionContext;
-    const contextSummary = buildContextSummary(ctx, isRevision);
-    const systemPrompt = buildSystemPrompt(contextSummary, previousError);
+    const regulationSection = formatRegulationSection(ctx);
+    const systemPrompt = buildSystemPrompt(regulationSection, previousError);
 
     logPipeline(`  [LLM+TOOL] step=${step.number} promptLen=${systemPrompt.length}chars scripts=${scripts.length}`);
 
@@ -88,20 +87,23 @@ export async function executeLlmToolStep(
     const fileChunks = ctx.files.searchRelevantChunks(ctx.sessionId, attentionQuery);
     logPipeline(`  [LLM+TOOL] step=${step.number} attentionQuery="${attentionQuery}" fileChunks=${fileChunks.length}chars containsAvailableChunks=${fileChunks.includes("Uploaded Files")} startsWith=${JSON.stringify(fileChunks.slice(0, 100))}`);
 
+    const dependencyContext = buildDependencyContext(ctx, step.number);
     const userMessage = buildUserMessage(
       step.number,
       step.title,
       step.instructions,
       fileChunks,
+      dependencyContext,
       revisionContext
         ? {
             userFeedback: revisionContext.userFeedback,
             previousOutput: (() => {
-              const prevOutput = ctx.steps.read(step.number);
-              return typeof prevOutput === "string" ? prevOutput : JSON.stringify(prevOutput, null, 2);
+              const raw = ctx.steps.read(step.number);
+              if (!raw) throw new Error("Revision requires previous step output");
+              return typeof raw === "string" ? raw : JSON.stringify(raw, null, 2);
             })(),
           }
-        : undefined,
+        : undefined
     );
 
     logPipeline(`  [LLM+TOOL] step=${step.number} FINAL PROMPT: systemPrompt=${systemPrompt.length}chars userMessage=${userMessage.length}chars includesFileChunks=${userMessage.includes("Available Chunks") || userMessage.includes("Uploaded Files")} userMessagePreview=${JSON.stringify(userMessage.slice(0, 200))}`);
@@ -229,7 +231,7 @@ export async function executeLlmToolStep(
     storeOutput(ctx, step.number, fullText);
     return {
       success: true,
-      contextSnapshot: { systemPrompt, userMessage, contextSummary },
+      contextSnapshot: { systemPrompt, userMessage, contextSummary: "" },
       streamedTokens: tokens,
       usage: {
         promptTokens: inputTokens ?? 0,
@@ -268,41 +270,45 @@ function resolveCitationRef(_palette: readonly CitationPaletteEntry[], clause: s
   return [clause];
 }
 
-function buildContextSummary(ctx: PipelineContext, excludeCheckResults = false): string {
+/**
+ * Format regulation summaries into a stable section for the system prompt.
+ * Identical across all steps — enables DeepSeek context caching.
+ */
+function formatRegulationSection(ctx: PipelineContext): string {
   const parts: string[] = [];
-
-  const citationSummary = ctx.palette.formatContextSummary();
-  if (citationSummary) parts.push(citationSummary);
-
-  if (!excludeCheckResults && ctx.checks.getResults().length > 0) {
-    const summary = ctx.checks.getResults()
-      .map((c) => `${c.name}: ${c.verdict} — ${c.finding} [${c.citationRef.join(", ")}]`)
-      .join("\n");
-    parts.push(`Check Results:\n${summary}`);
+  const summaries = ctx.palette.getSummaries();
+  if (summaries.length > 0) {
+    parts.push("# Available Regulations");
+    for (const s of summaries) {
+      const clauses = s.clauseIndex
+        .map((c) => (c.title ? `\xA7${c.number} — ${c.title}` : `\xA7${c.number}`))
+        .join(", ");
+      parts.push(`${s.code} — ${s.title}\n  Clauses: ${clauses}`);
+    }
   }
-
-  const sourcePalette = ctx.files.getSourcePalette();
-  if (sourcePalette.length > 0) {
-    const summary = ctx.palette.formatSourceSummary(sourcePalette);
-    if (summary) parts.push(summary);
-  }
-
-  const latestStep = ctx.steps.latest();
-  if (latestStep) {
-    const text = typeof latestStep.value === "string"
-      ? latestStep.value
-      : JSON.stringify(latestStep.value, null, 2);
-    parts.push(`Previous Step Output:\n[Step ${latestStep.stepNumber} Output]\n${text.slice(0, 500)}`);
-  }
-
-  if (ctx.previousTurns.length > 0) {
-    const summary = ctx.previousTurns
-      .map((t) => `Turn ${t.turnNumber}: ${t.reasoningSummary}`)
-      .join("\n");
-    parts.push(`Previous Turns:\n${summary}`);
-  }
-
   return parts.join("\n\n");
+}
+
+/**
+ * Build dependency context for a step — only includes previous check results
+ * that the current step explicitly depends on (via depends_on).
+ * Steps with no dependencies get an empty string (no context overhead).
+ */
+function buildDependencyContext(ctx: PipelineContext, stepNumber: number): string {
+  const currentCheck = ctx.skill.checks[stepNumber - 1];
+  if (!currentCheck?.dependsOn) return "";
+
+  const allResults = ctx.checks.getResults();
+  const depField = currentCheck.dependsOn;
+
+  // Find results whose field name starts with the dependency
+  const relevant = allResults.filter((r) => r.name.startsWith(depField));
+  if (relevant.length === 0) return "";
+
+  const lines = relevant.map(
+    (c) => `${c.name}: ${c.verdict} — ${c.finding} [${c.citationRef.join(", ")}]`
+  );
+  return `Dependent Check Results:\n${lines.join("\n")}`;
 }
 
 const CheckFieldEntrySchema = z.object({

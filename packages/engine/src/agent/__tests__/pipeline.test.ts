@@ -346,6 +346,7 @@ describe("executeLlmToolStep with mocked LLM", () => {
         textStream: (async function* () {
           yield jsonOutput;
         })(),
+        usage: Promise.resolve({ inputTokens: 0, outputTokens: 0 }),
       };
     });
   }
@@ -562,7 +563,6 @@ describe("executeComplianceCheck", () => {
 describe("Prompt building", () => {
   it("buildSystemPrompt includes context and retry message", () => {
     const prompt = buildSystemPrompt("Context: test data", "Previous attempt failed");
-    expect(prompt).toContain("Session Context");
     expect(prompt).toContain("Context: test data");
     expect(prompt).toContain("PREVIOUS ATTEMPT FAILED");
     expect(prompt).toContain("Previous attempt failed");
@@ -578,7 +578,7 @@ describe("Prompt building", () => {
   });
 
   it("buildUserMessage includes step info and file chunks", () => {
-    const msg = buildUserMessage(1, "Evaluate: height", "Check mounting height", "[S1.c3] 650mm", undefined);
+    const msg = buildUserMessage(1, "Evaluate: height", "Check mounting height", "[S1.c3] 650mm");
     expect(msg).toContain("Step 1: Evaluate: height");
     expect(msg).toContain("Check mounting height");
     expect(msg).toContain("[S1.c3] 650mm");
@@ -586,7 +586,7 @@ describe("Prompt building", () => {
   });
 
   it("buildUserMessage includes revision context when provided", () => {
-    const msg = buildUserMessage(1, "Evaluate: height", "Check mounting height", "[S1.c3] 650mm", {
+    const msg = buildUserMessage(1, "Evaluate: height", "Check mounting height", "[S1.c3] 650mm", undefined, {
       userFeedback: "Check again, value seems wrong",
       previousOutput: '{"height": {"value": "300mm"}}',
     });
@@ -596,7 +596,7 @@ describe("Prompt building", () => {
   });
 
   it("buildUserMessage omits file chunks when empty", () => {
-    const msg = buildUserMessage(1, "Evaluate: height", "Check mounting height", "", undefined);
+    const msg = buildUserMessage(1, "Evaluate: height", "Check mounting height", "");
     expect(msg).not.toContain("Available Chunks");
     expect(msg).toContain("Check mounting height");
   });

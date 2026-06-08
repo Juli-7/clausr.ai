@@ -1,11 +1,10 @@
 /**
- * System prompt for LLM compliance-check execution steps.
- *
- * Built per-step with dynamic context (session state, available chunks,
- * previous results, citation palette).
+ * Static system prompt for LLM compliance-check execution steps.
+ * Identical across all steps in a pipeline — enables DeepSeek context caching.
+ * Regulation summaries are formatted outside and appended as the stable prefix.
  */
 export function buildSystemPrompt(
-  contextSummary: string,
+  regulationSection: string,
   previousError?: string,
 ): string {
   const retryContext = previousError
@@ -21,8 +20,7 @@ You are an expert in executing information handling jobs in general.
 - For numerical steps: output the JSON FIRST with your narrative assessment, source chunk references, and regulation citation. Put "PASS" as a preliminary verdict — the final verdict is determined by the compliance-check tool result. The JSON output is always required regardless of tool calls.
 - Output ONLY the JSON format — do not write any prose outside the JSON block.
 
-# Session Context
-${contextSummary}
+${regulationSection}
 ${retryContext}
 
 # Output Format
