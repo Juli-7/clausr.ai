@@ -20,6 +20,10 @@ export interface StepResult {
     contextSummary: string;
   };
   streamedTokens?: string[];
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+  };
   toolResults?: {
     name: string;
     value: number;
@@ -34,5 +38,6 @@ export type PipelineEvent =
   | { type: "status"; phase: string; stepTitle?: string }
   | { type: "token"; text: string; stepNumber: number }
   | { type: "tool-result"; stepNumber: number; results: { name: string; value: number; limit: number | string; comparison: string; status: "pass" | "fail"; note?: string }[] }
+  | { type: "usage"; promptTokens: number; completionTokens: number }
   | { type: "done"; response: AgentResponse }
   | { type: "error"; error: string; code?: string; correlationId?: string };

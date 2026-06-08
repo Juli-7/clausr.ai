@@ -151,6 +151,7 @@ export async function executeLlmToolStep(
       tokens.push(token);
     }
     const fullText = tokens.join("");
+    const { inputTokens, outputTokens } = await result.usage;
 
     logPipeline(`  [LLM+TOOL] step=${step.number} finalText=${fullText.length}chars preview=${truncate(fullText, 150)}`);
 
@@ -230,6 +231,10 @@ export async function executeLlmToolStep(
       success: true,
       contextSnapshot: { systemPrompt, userMessage, contextSummary },
       streamedTokens: tokens,
+      usage: {
+        promptTokens: inputTokens ?? 0,
+        completionTokens: outputTokens ?? 0,
+      },
       toolResults: perCheckResults.length > 0 ? perCheckResults : undefined,
     };
   } catch (err) {

@@ -85,6 +85,9 @@ export async function* orchestratePipeline(
     pending.push({ step, saved });
   }
 
+  let totalPromptTokens = 0;
+  let totalCompletionTokens = 0;
+
   if (pending.length > 0) {
     // Compute topological depths for pending steps
     const pendingDepths = computePendingDepths(pending, ctx.skill.checks);
@@ -114,6 +117,11 @@ export async function* orchestratePipeline(
 
         // Phase 2: process results sequentially (yield events, citation cross-check, snapshots)
         for (const { step, result } of completed) {
+          if (result.usage) {
+            totalPromptTokens += result.usage.promptTokens;
+            totalCompletionTokens += result.usage.completionTokens;
+          }
+
           if (!result.success) {
             logPipeline(`✗ STEP ${step.number} FAILED: ${result.error}`);
             const saved = pending.find(p => p.step.number === step.number)?.saved ?? [];
@@ -207,6 +215,9 @@ export async function* orchestratePipeline(
     [...ctx.palette.getCitationPalette()],
     ctx.files.getSourcePalette()
   );
+
+  // ── Yield aggregated usage ──
+  yield { type: "usage", promptTokens: totalPromptTokens, completionTokens: totalCompletionTokens };
 
   // ── Evaluate + finalize ──
   yield { type: "status", phase: "evaluating" };

@@ -26,7 +26,7 @@ export interface SetupSessionParams {
  * Regulation reference loading and chunk retrieval happen
  * in the pipeline layer — loading only sets up skill + steps.
  */
-export async function setupSession(params: SetupSessionParams): Promise<{ correlationId: string }> {
+export async function setupSession(params: SetupSessionParams): Promise<{ correlationId: string; autoSkillUsage?: { promptTokens: number; completionTokens: number } }> {
   const correlationId = generateCorrelationId();
   logPipeline(`=== SETUP START === skill="${params.skillName ?? "(auto)"}" session="${params.sessionId}"`);
 
@@ -52,12 +52,13 @@ export async function setupSession(params: SetupSessionParams): Promise<{ correl
   }
 
   // 4. Auto-skill generation (loading layer decides if it needs file texts)
+  let autoSkillUsage: { promptTokens: number; completionTokens: number } | undefined;
   if (isAutoSkill) {
     if (!params.message) {
       throw new Error("Auto-skill requires a 'message' describing what to assess");
     }
     logPipeline("[SETUP] generating auto-skill from user message + file texts");
-    await skillGenPhase(ctx, params.message, fileTexts);
+    autoSkillUsage = await skillGenPhase(ctx, params.message, fileTexts);
   }
 
   // 5. Merge lesson overrides into skillmd (tenant-specific evolution)
@@ -85,5 +86,5 @@ export async function setupSession(params: SetupSessionParams): Promise<{ correl
   });
 
   logPipeline(`=== SETUP DONE === session="${params.sessionId}" cid=${correlationId}`);
-  return { correlationId };
+  return { correlationId, autoSkillUsage };
 }

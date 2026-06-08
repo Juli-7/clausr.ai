@@ -80,7 +80,7 @@ Now generate the SKILL.md for the user's request below.`;
 export async function generateSkill(
   message: string,
   fileTexts: string[]
-): Promise<SkillLoader> {
+): Promise<{ skill: SkillLoader; usage: { promptTokens: number; completionTokens: number } }> {
   const fileContext =
     fileTexts.length > 0
       ? `\n\n## Uploaded Files (${fileTexts.length})\n${fileTexts
@@ -103,8 +103,9 @@ export async function generateSkill(
   for await (const chunk of result.textStream) {
     fullText += chunk;
   }
+  const { inputTokens, outputTokens } = await result.usage;
 
-  logPipeline(`[SKILL-GEN] raw output length=${fullText.length}chars`);
+  logPipeline(`[SKILL-GEN] raw output length=${fullText.length}chars usage=${inputTokens ?? 0}/${outputTokens ?? 0}`);
 
   let parsed: matter.GrayMatterFile<string>;
   try {
@@ -127,13 +128,19 @@ export async function generateSkill(
   );
 
   return {
-    name: parsed.data?.name ?? "auto-generated",
-    description: parsed.data?.description ?? "",
-    triggers: parsed.data?.triggers ?? [],
-    skillmd,
-    scripts: [],
-    checks,
-    regulationIds,
-    hasTemplate: false,
+    skill: {
+      name: parsed.data?.name ?? "auto-generated",
+      description: parsed.data?.description ?? "",
+      triggers: parsed.data?.triggers ?? [],
+      skillmd,
+      scripts: [],
+      checks,
+      regulationIds,
+      hasTemplate: false,
+    },
+    usage: {
+      promptTokens: inputTokens ?? 0,
+      completionTokens: outputTokens ?? 0,
+    },
   };
 }
