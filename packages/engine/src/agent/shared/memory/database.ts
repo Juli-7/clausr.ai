@@ -190,11 +190,13 @@ function runMigrations(db: Database.Database): void {
       tenant_id TEXT NOT NULL DEFAULT '',
       created_by TEXT NOT NULL DEFAULT '',
       redline TEXT NOT NULL DEFAULT '',
+      lessons TEXT NOT NULL DEFAULT '',
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     )`);
   } catch { }
   try { db.exec("ALTER TABLE user_skills ADD COLUMN redline TEXT NOT NULL DEFAULT ''"); } catch { }
+  try { db.exec("ALTER TABLE user_skills ADD COLUMN lessons TEXT NOT NULL DEFAULT ''"); } catch { }
 }
 
 function initSettings(db: Database.Database): void {

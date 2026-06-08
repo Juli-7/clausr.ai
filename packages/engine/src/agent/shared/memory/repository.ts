@@ -577,6 +577,7 @@ export interface UserSkillRow {
   checksJson: string;
   regulationIdsJson: string;
   redline: string;
+  lessons: string;
   createdBy: string;
   createdAt: number;
   updatedAt: number;
@@ -589,13 +590,14 @@ export function saveUserSkill(params: {
   checks: { field: string; type: { kind: string; values?: string[] }; description?: string; clause?: string; constraint?: string; dependsOn?: string; sample?: string; attention?: string }[];
   regulationIds: string[];
   redline?: string;
+  lessons?: string;
   tenantId?: string;
   createdBy?: string;
 }): void {
   const db = getDb();
   db.prepare(
-    `INSERT OR REPLACE INTO user_skills (name, description, skillmd, checks_json, regulation_ids_json, redline, tenant_id, created_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM user_skills WHERE name = ?), ?), ?)`
+    `INSERT OR REPLACE INTO user_skills (name, description, skillmd, checks_json, regulation_ids_json, redline, lessons, tenant_id, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM user_skills WHERE name = ?), ?), ?)`
   ).run(
     params.name,
     params.description,
@@ -603,6 +605,7 @@ export function saveUserSkill(params: {
     JSON.stringify(params.checks),
     JSON.stringify(params.regulationIds),
     params.redline ?? "",
+    params.lessons ?? "",
     params.tenantId ?? "",
     params.createdBy ?? "",
     params.name,
@@ -641,6 +644,7 @@ export function loadUserSkill(name: string): UserSkillRow | null {
     checksJson: row.checks_json as string,
     regulationIdsJson: row.regulation_ids_json as string,
     redline: (row.redline as string) ?? "",
+    lessons: (row.lessons as string) ?? "",
     createdBy: row.created_by as string,
     createdAt: row.created_at as number,
     updatedAt: row.updated_at as number,
