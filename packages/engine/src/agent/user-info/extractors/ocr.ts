@@ -156,7 +156,7 @@ function collectParagraphs(page: Tesseract.Page): { words: Tesseract.Word[]; tex
 const HARD_MAX_CHARS = 1200;
 const OVERLAP_CHARS = 120;
 
-const MIN_RENDER_WIDTH = 2400;
+const MIN_RENDER_WIDTH = 1200;
 
 async function preprocessImage(dataUrl: string): Promise<string> {
   const base64 = dataUrl.split(",")[1];
@@ -166,12 +166,14 @@ async function preprocessImage(dataUrl: string): Promise<string> {
   let img = sharp(buf);
 
   const meta = await img.metadata();
-  const width = meta.width ?? 0;
-  const height = meta.height ?? 0;
+  let width = meta.width ?? 0;
+  let height = meta.height ?? 0;
 
   if (width < MIN_RENDER_WIDTH && width > 0) {
     const scale = MIN_RENDER_WIDTH / width;
-    img = img.resize(Math.round(MIN_RENDER_WIDTH), Math.round(height * scale), {
+    width = Math.round(MIN_RENDER_WIDTH);
+    height = Math.round(height * scale);
+    img = img.resize(width, height, {
       kernel: "lanczos3",
       fit: "inside",
       withoutEnlargement: false,
@@ -182,9 +184,8 @@ async function preprocessImage(dataUrl: string): Promise<string> {
     img = img.grayscale();
   }
 
-  img = img.clahe({ width: 3, height: 3, maxSlope: 3 });
-  img = img.normalise();
-  img = img.sharpen();
+  const tileSize = Math.max(Math.round(Math.max(width, height) / 40), 50);
+  img = img.clahe({ width: tileSize, height: tileSize, maxSlope: 2 }).normalise();
 
   const outBuf = await img.png().toBuffer();
   return `data:image/png;base64,${outBuf.toString("base64")}`;
@@ -192,8 +193,21 @@ async function preprocessImage(dataUrl: string): Promise<string> {
 
 export async function extractImageText(dataUrl: string): Promise<OcrResult> {
   const processedUrl = await preprocessImage(dataUrl);
+
+  // Scale wordBoxes from processed image coordinates back to original coordinates
+  const originalSize = parseImageDimensions(dataUrl);
+  const processedSize = parseImageDimensions(processedUrl);
+  const scaleX = originalSize && processedSize?.width ? originalSize.width / processedSize.width : 1;
+  const scaleY = originalSize && processedSize?.height ? originalSize.height / processedSize.height : 1;
+  const scaleWord = (b: Tesseract.Bbox): WordBox => ({
+    x: b.x0 * scaleX,
+    y: b.y0 * scaleY,
+    width: (b.x1 - b.x0) * scaleX,
+    height: (b.y1 - b.y0) * scaleY,
+  });
+
   const worker = await getTesseractWorker();
-  await worker.setParameters({ tessedit_pageseg_mode: "3" });
+  await worker.setParameters({ tessedit_pageseg_mode: Tesseract.PSM.AUTO });
   const result = await worker.recognize(processedUrl, undefined, { blocks: true });
 
   const imageSize = parseImageDimensions(dataUrl);
@@ -209,14 +223,15 @@ export async function extractImageText(dataUrl: string): Promise<OcrResult> {
     let idx = 0;
     for (const para of paragraphs) {
       const parts = splitParagraph(para.text, HARD_MAX_CHARS);
-      const wordBoxes = para.words.map((w) => toWordBox(w.bbox));
+      const wordBoxes = para.words.map((w) => scaleWord(w.bbox));
+      const bbox = mergeWordBoxes(wordBoxes);
       for (const part of parts) {
         idx++;
         rawChunks.push({
           id: `c${idx}`,
           text: part,
           html: `<div data-chunk-id="c${idx}"><p>${part}</p></div>`,
-          bbox: para.bbox,
+          bbox,
           wordBoxes,
           pageWidth: imageSize?.width,
           pageHeight: imageSize?.height,
@@ -238,7 +253,7 @@ export async function extractImageText(dataUrl: string): Promise<OcrResult> {
 
     const lines = groupWordsIntoLines(words);
     rawChunks = lines.map((lineWords, i) => {
-      const wordBoxes = lineWords.map((w) => toWordBox(w.bbox));
+      const wordBoxes = lineWords.map((w) => scaleWord(w.bbox));
       const lineText = lineWords.map((w) => w.text).join(" ");
       const id = `c${i + 1}`;
       return {
