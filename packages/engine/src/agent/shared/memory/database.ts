@@ -187,7 +187,6 @@ function runMigrations(db: Database.Database): void {
       skillmd TEXT NOT NULL,
       checks_json TEXT NOT NULL DEFAULT '[]',
       regulation_ids_json TEXT NOT NULL DEFAULT '[]',
-      triggers_json TEXT NOT NULL DEFAULT '[]',
       tenant_id TEXT NOT NULL DEFAULT '',
       created_by TEXT NOT NULL DEFAULT '',
       redline TEXT NOT NULL DEFAULT '',
@@ -198,7 +197,6 @@ function runMigrations(db: Database.Database): void {
   } catch { }
   try { db.exec("ALTER TABLE user_skills ADD COLUMN redline TEXT NOT NULL DEFAULT ''"); } catch { }
   try { db.exec("ALTER TABLE user_skills ADD COLUMN lessons TEXT NOT NULL DEFAULT ''"); } catch { }
-  try { db.exec("ALTER TABLE user_skills ADD COLUMN triggers_json TEXT NOT NULL DEFAULT '[]'"); } catch { }
 }
 
 function initSettings(db: Database.Database): void {

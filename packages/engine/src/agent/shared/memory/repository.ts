@@ -576,7 +576,6 @@ export interface UserSkillRow {
   skillmd: string;
   checksJson: string;
   regulationIdsJson: string;
-  triggersJson: string;
   redline: string;
   lessons: string;
   createdBy: string;
@@ -588,9 +587,8 @@ export function saveUserSkill(params: {
   name: string;
   description: string;
   skillmd: string;
-  checks: { field: string; type: { kind: string; values?: string[] }; description?: string; clause?: string; constraint?: string; rounding?: string; dependsOn?: string; sample?: string; attention?: string }[];
+  checks: { field: string; type: { kind: string; values?: string[] }; description?: string; clause?: string; constraint?: string; dependsOn?: string; sample?: string; attention?: string }[];
   regulationIds: string[];
-  triggers: string[];
   redline?: string;
   lessons?: string;
   tenantId?: string;
@@ -598,15 +596,14 @@ export function saveUserSkill(params: {
 }): void {
   const db = getDb();
   db.prepare(
-    `INSERT OR REPLACE INTO user_skills (name, description, skillmd, checks_json, regulation_ids_json, triggers_json, redline, lessons, tenant_id, created_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM user_skills WHERE name = ?), ?), ?)`
+    `INSERT OR REPLACE INTO user_skills (name, description, skillmd, checks_json, regulation_ids_json, redline, lessons, tenant_id, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM user_skills WHERE name = ?), ?), ?)`
   ).run(
     params.name,
     params.description,
     params.skillmd,
     JSON.stringify(params.checks),
     JSON.stringify(params.regulationIds),
-    JSON.stringify(params.triggers),
     params.redline ?? "",
     params.lessons ?? "",
     params.tenantId ?? "",
@@ -646,7 +643,6 @@ export function loadUserSkill(name: string): UserSkillRow | null {
     skillmd: row.skillmd as string,
     checksJson: row.checks_json as string,
     regulationIdsJson: row.regulation_ids_json as string,
-    triggersJson: row.triggers_json as string,
     redline: (row.redline as string) ?? "",
     lessons: (row.lessons as string) ?? "",
     createdBy: row.created_by as string,
