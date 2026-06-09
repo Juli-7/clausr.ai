@@ -60,14 +60,20 @@ export async function finalizePhase(
     sessionId,
     sections: {
       findings: result.findings,
-      _checkResults: JSON.stringify(ctx.checks.getResults().map((r) => ({
-        name: r.name,
-        type: r.type,
-        finding: r.finding,
-        verdict: r.verdict,
-        citationRef: r.citationRef,
-        sourceCitation: r.sourceCitation,
-      }))),
+      _checkResults: JSON.stringify(
+        [...ctx.checks.getResults()].sort((a, b) => {
+          const ai = ctx.skill.checks.findIndex((c) => c.field === a.name);
+          const bi = ctx.skill.checks.findIndex((c) => c.field === b.name);
+          return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+        }).map((r) => ({
+          name: r.name,
+          type: r.type,
+          finding: r.finding,
+          verdict: r.verdict,
+          citationRef: r.citationRef,
+          sourceCitation: r.sourceCitation,
+        }))
+      ),
     },
     clauseTexts: Object.keys(clauseTexts).length > 0 ? clauseTexts : undefined,
   };

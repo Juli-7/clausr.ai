@@ -99,7 +99,7 @@ export class FileRegistry {
    * and unions the results for better recall.
    * Falls back to all chunks if nothing matches.
    */
-  searchRelevantChunks(sessionId: string, query: string, topK = 3): string {
+  searchRelevantChunks(sessionId: string, query: string, topK = 5): string {
     if (this.files.length === 0) {
       logPipeline(`[FILE-REGISTRY] searchRelevantChunks: files.length=0 — returning ""`);
       return "";
@@ -171,6 +171,23 @@ export class FileRegistry {
   }
 }
 
+function isCjkChar(ch: string): boolean {
+  const code = ch.charCodeAt(0);
+  return (
+    (code >= 0x4E00 && code <= 0x9FFF) ||
+    (code >= 0x3400 && code <= 0x4DBF) ||
+    (code >= 0x2E80 && code <= 0x2EFF) ||
+    (code >= 0x3000 && code <= 0x303F) ||
+    (code >= 0xFF00 && code <= 0xFFEF) ||
+    (code >= 0xF900 && code <= 0xFAFF) ||
+    (code >= 0xFE30 && code <= 0xFE4F)
+  );
+}
+
+function hasCjk(text: string): boolean {
+  return [...text].some((c) => isCjkChar(c));
+}
+
 export function expandFtsQueries(query: string): string[] {
   if (!query.trim()) return [query];
 
@@ -181,17 +198,33 @@ export function expandFtsQueries(query: string): string[] {
     .toLowerCase()
     .replace(/["^~*(){}[\]\\]/g, " ")
     .split(/\s+/)
-    .filter((w) => w.length > 2 && !/^(and|or|not|near)$/i.test(w));
+    .filter((w) => w.length > 0)
+    .filter((w) => (w.length > 2 || hasCjk(w)) && !/^(and|or|not|near)$/i.test(w));
 
   if (words.length === 0) return queries;
 
-  // Variant: each word as prefix term AND'd together
-  const prefixAnd = words.map((w) => `${w}*`).join(" ");
-  if (prefixAnd !== query) queries.push(prefixAnd);
+  // Separate CJK words from Latin words.
+  // FTS5's unicode61 tokenizer indexes each CJK character as an individual
+  // token, so multi-character CJK prefix terms match nothing.
+  // Expand CJK words into individual characters for matching.
+  const cjkWords = words.filter((w) => hasCjk(w));
+  const latinWords = words.filter((w) => !hasCjk(w));
+  const cjkChars = [...new Set(cjkWords.flatMap((w) => [...w].filter((c) => isCjkChar(c))))];
 
-  // Variant: all words OR'd (recall fallback)
-  const prefixOr = words.map((w) => `${w}*`).join(" OR ");
-  if (prefixOr !== prefixAnd) queries.push(prefixOr);
+  const expandedTerms = [
+    ...cjkChars,
+    ...latinWords.map((w) => `${w}*`),
+  ];
+
+  if (expandedTerms.length > 0) {
+    // Variant: all expanded terms AND'd (more restrictive)
+    const prefixAnd = expandedTerms.join(" ");
+    if (prefixAnd !== query) queries.push(prefixAnd);
+
+    // Variant: all expanded terms OR'd (recall fallback)
+    const prefixOr = expandedTerms.join(" OR ");
+    if (prefixOr !== prefixAnd) queries.push(prefixOr);
+  }
 
   return queries;
 }
