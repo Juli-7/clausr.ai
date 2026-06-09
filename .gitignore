@@ -54,3 +54,5 @@ frontend-mock.html
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+data/
+node_modules/
