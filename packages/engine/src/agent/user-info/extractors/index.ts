@@ -1,6 +1,6 @@
-import { extractImageText } from "./ocr";
-import type { PdfResult } from "./pdf-extract";
-import { extractDocxText } from "./docx-extract";
+// Extractors are loaded lazily via dynamic import() inside extractFileContent()
+// to avoid pulling heavy/browser-only dependencies (pdfjs-dist, tesseract.js, sharp) at
+// module-load time, which breaks Next.js production bundles where these are not available.
 
 export interface WordBox {
   x: number;
@@ -70,6 +70,7 @@ export async function extractFileContent(file: {
   const imageExts = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "tiff", "tif"];
   if (type.startsWith("image/") || imageExts.includes(ext)) {
     try {
+      const { extractImageText } = await import("./ocr");
       const result = await extractImageText(file.dataUrl);
       return {
         text: result.text,
@@ -83,11 +84,11 @@ export async function extractFileContent(file: {
     }
   }
 
-  // PDF — lazy import to avoid pulling pdfjs-dist eagerly (DOMMatrix not available in Node.js)
+  // PDF — lazy import to avoid pdfjs-dist DOMMatrix crash in Node.js
   if (type === "application/pdf" || ext === "pdf") {
     try {
       const { extractPdfText } = await import("./pdf-extract");
-      const result: PdfResult = await extractPdfText(file.dataUrl);
+      const result = await extractPdfText(file.dataUrl);
       return {
         text: result.text,
         chunks: result.chunks,
@@ -108,6 +109,7 @@ export async function extractFileContent(file: {
     ext === "docx"
   ) {
     try {
+      const { extractDocxText } = await import("./docx-extract");
       const result = await extractDocxText(file.dataUrl);
       return { text: result.text, chunks: result.chunks, ocrConfidence: result.ocrConfidence, extractorUsed: result.extractorUsed };
     } catch (err) {
