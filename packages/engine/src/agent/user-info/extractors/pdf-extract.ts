@@ -538,6 +538,7 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
   // isn't available in Node.js. Load lazily so this module can be imported
   // without crashing in production builds.
   const pdfjsMod = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  // @ts-expect-error — pdf.worker.mjs has no type declarations
   const pdfjsWorkerMod = await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
   // Node.js 24 structuredClone({ transfer }) is broken — pdfjs-dist's LoopbackPort
   // depends on it. Monkeypatch: copy instead of transfer (safe for in-process worker).
