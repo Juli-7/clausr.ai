@@ -1,16 +1,3 @@
-import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
-// @ts-expect-error — pdf.worker.mjs has no type declarations
-import * as pdfjsWorker from "pdfjs-dist/legacy/build/pdf.worker.mjs";
-// Node.js 24 structuredClone({ transfer }) is broken — pdfjs-dist's LoopbackPort
-// depends on it. Monkeypatch: copy instead of transfer (safe for in-process worker).
-// MUST run before any pdfjs getDocument() call.
-const __origStructuredClone = globalThis.structuredClone;
-globalThis.structuredClone = ((value: unknown, options?: Parameters<typeof globalThis.structuredClone>[1]) => {
-  if (options?.transfer) return __origStructuredClone(value);
-  return __origStructuredClone(value, options);
-}) as typeof globalThis.structuredClone;
-(globalThis as Record<string, unknown>).pdfjsWorker = pdfjsWorker;
-import { PDFParse } from "pdf-parse";
 import { extractImageText } from "./ocr";
 import { mergeWordBoxes, type TextChunk, type WordBox } from "./index";
 
@@ -547,6 +534,21 @@ function isAcceptableNativeText(text: string): boolean {
 const PDF_MAGIC = /^%PDF/;
 
 export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
+  // Dynamic imports: pdfjs-dist requires DOMMatrix (browser API) which
+  // isn't available in Node.js. Load lazily so this module can be imported
+  // without crashing in production builds.
+  const pdfjsMod = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const pdfjsWorkerMod = await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
+  // Node.js 24 structuredClone({ transfer }) is broken — pdfjs-dist's LoopbackPort
+  // depends on it. Monkeypatch: copy instead of transfer (safe for in-process worker).
+  // MUST run before any pdfjs getDocument() call.
+  const __origStructuredClone = globalThis.structuredClone;
+  globalThis.structuredClone = ((value: unknown, options?: Parameters<typeof globalThis.structuredClone>[1]) => {
+    if (options?.transfer) return __origStructuredClone(value);
+    return __origStructuredClone(value, options);
+  }) as typeof globalThis.structuredClone;
+  (globalThis as Record<string, unknown>).pdfjsWorker = pdfjsWorkerMod;
+  const { PDFParse } = await import("pdf-parse");
   const base64 = dataUrl.split(",")[1] ?? dataUrl;
   const buffer = Buffer.from(base64, "base64");
 
@@ -563,9 +565,9 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
   const data = new Uint8Array(buffer);
 
   // Path A: Positioned text extraction via pdfjs-dist
-  let pdfjsDoc: pdfjs.PDFDocumentProxy | null = null;
+  let pdfjsDoc: any | null = null;
   try {
-    const loadingTask = pdfjs.getDocument({ data });
+    const loadingTask = pdfjsMod.getDocument({ data });
     pdfjsDoc = await loadingTask.promise;
     const pageCount = pdfjsDoc.numPages;
 
@@ -615,7 +617,7 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
 
       if (isAcceptableNativeText(fullText)) {
         let pageImages: string[] | undefined;
-        let screenshots: Awaited<ReturnType<PDFParse["getScreenshot"]>> | undefined;
+        let screenshots: any | undefined;
         try {
           const parser = new PDFParse({ data });
           screenshots = await parser.getScreenshot({ imageDataUrl: true, imageBuffer: false });
