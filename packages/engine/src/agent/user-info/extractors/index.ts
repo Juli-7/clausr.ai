@@ -1,5 +1,5 @@
 import { extractImageText } from "./ocr";
-import { extractPdfText } from "./pdf-extract";
+import type { PdfResult } from "./pdf-extract";
 import { extractDocxText } from "./docx-extract";
 
 export interface WordBox {
@@ -83,10 +83,11 @@ export async function extractFileContent(file: {
     }
   }
 
-  // PDF
+  // PDF — lazy import to avoid pulling pdfjs-dist eagerly (DOMMatrix not available in Node.js)
   if (type === "application/pdf" || ext === "pdf") {
     try {
-      const result = await extractPdfText(file.dataUrl);
+      const { extractPdfText } = await import("./pdf-extract");
+      const result: PdfResult = await extractPdfText(file.dataUrl);
       return {
         text: result.text,
         chunks: result.chunks,
