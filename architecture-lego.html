@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>clausr.ai — Lego Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0f0f13;
+    font-family: 'Inter', -apple-system, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 1rem;
+  }
+
+  .container {
+    max-width: 900px;
+    width: 100%;
+  }
+
+  .header {
+    text-align: center;
+    margin-bottom: 3rem;
+  }
+
+  .header h1 {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.03em;
+  }
+
+  .header h1 span {
+    background: linear-gradient(135deg, #f97316, #f59e0b);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .header p {
+    color: #888;
+    font-size: 1rem;
+    margin-top: 0.5rem;
+    font-weight: 500;
+  }
+
+  .header .sub {
+    color: #555;
+    font-size: 0.85rem;
+    margin-top: 0.25rem;
+    font-weight: 400;
+  }
+
+  .brick-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    position: relative;
+  }
+
+  .brick {
+    position: relative;
+    width: 100%;
+    border-radius: 12px;
+    padding: 1.5rem 2rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: default;
+    border: 2px solid transparent;
+  }
+
+  .brick:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.15);
+  }
+
+  .brick .pegs {
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+  }
+
+  .brick .peg {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.15);
+    background: inherit;
+    filter: brightness(0.7);
+  }
+
+  .brick .brick-inner {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  .brick .layer-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+    background: rgba(255,255,255,0.08);
+  }
+
+  .brick .layer-info { flex: 1; min-width: 0; }
+
+  .brick .layer-name {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.01em;
+  }
+
+  .brick .layer-desc {
+    font-size: 0.85rem;
+    color: rgba(255,255,255,0.7);
+    margin-top: 0.2rem;
+  }
+
+  .brick .swap-zone {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-shrink: 0;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.06);
+    border: 1px dashed rgba(255,255,255,0.12);
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: rgba(255,255,255,0.5);
+    white-space: nowrap;
+  }
+
+  .brick .swap-zone .swap-icon { font-size: 0.9rem; }
+
+  .brick .current {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.08);
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: -0.01em;
+  }
+
+  /* Brick colors – warm amber/orange palette */
+  .brick-1 {
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    border-color: #2a2a4e;
+    z-index: 6;
+  }
+  .brick-1.current-highlight .current { background: rgba(99,102,241,0.25); color: #a5b4fc; }
+
+  .brick-2 {
+    background: linear-gradient(135deg, #1c1c2e, #1a2a1e);
+    border-color: #2a4a2e;
+    z-index: 5;
+    margin-top: 0;
+  }
+  .brick-2.current-highlight .current { background: rgba(52,211,153,0.2); color: #6ee7b7; }
+
+  .brick-3 {
+    background: linear-gradient(135deg, #1e1e2e, #2e1a1a);
+    border-color: #4a2a2a;
+    z-index: 4;
+    margin-top: 0;
+  }
+  .brick-3.current-highlight .current { background: rgba(251,146,60,0.2); color: #fdba74; }
+
+  .brick-4 {
+    background: linear-gradient(135deg, #1a1e2e, #1e2e1a);
+    border-color: #2a4a2a;
+    z-index: 3;
+    margin-top: 0;
+  }
+  .brick-4.current-highlight .current { background: rgba(56,189,248,0.2); color: #7dd3fc; }
+
+  .brick-5 {
+    background: linear-gradient(135deg, #2e1a2e, #1e1e2e);
+    border-color: #4a2a4a;
+    z-index: 2;
+    margin-top: 0;
+  }
+  .brick-5.current-highlight .current { background: rgba(232,121,249,0.2); color: #e879f9; }
+
+  .brick-6 {
+    background: linear-gradient(135deg, #2e2a1a, #1e2e2e);
+    border-color: #4a4a2a;
+    z-index: 1;
+    margin-top: 0;
+  }
+  .brick-6.current-highlight .current { background: rgba(251,191,36,0.2); color: #fcd34d; }
+
+  /* Pipe lines between bricks */
+  .connector {
+    width: 3px;
+    height: 18px;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+    position: relative;
+    z-index: 0;
+  }
+
+  .connector .dot {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+  }
+
+  .data-flow-arrow {
+    position: absolute;
+    right: -40px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(255,255,255,0.08);
+    font-size: 1.5rem;
+    display: none;
+  }
+
+  @media (min-width: 768px) {
+    .data-flow-arrow { display: block; }
+  }
+
+  .label-doc { color: #60a5fa; }
+  .label-vec { color: #34d399; }
+  .label-llm { color: #fb923c; }
+  .label-reg { color: #38bdf8; }
+  .label-report { color: #e879f9; }
+  .label-pipe { color: #fcd34d; }
+
+  .footer-note {
+    margin-top: 3rem;
+    text-align: center;
+    color: #444;
+    font-size: 0.8rem;
+    line-height: 1.6;
+  }
+
+  .footer-note code {
+    color: #666;
+    background: rgba(255,255,255,0.04);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+  }
+
+  /* Input / Output labels */
+  .io-label {
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #555;
+    margin-bottom: 0.75rem;
+  }
+
+  .io-label.in { color: #60a5fa; }
+  .io-label.out { color: #e879f9; margin-top: 0.75rem; margin-bottom: 0; }
+
+  .bottom-arrow {
+    text-align: center;
+    color: rgba(255,255,255,0.06);
+    font-size: 1.5rem;
+    line-height: 1;
+    margin: -0.2rem 0;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1><span>clausr.ai</span> architecture</h1>
+    <p>🧱 Every brick snaps off. Swap it, swap the whole system.</p>
+    <div class="sub">LEGO-like modular layers — customize without touching the pipeline</div>
+  </div>
+
+  <div class="brick-stack">
+
+    <!-- IO: Input -->
+    <div class="io-label in">▼ Input</div>
+
+    <!-- Brick 1: Session Input Layer -->
+    <div class="brick brick-1 current-highlight">
+      <div class="pegs">
+        <div class="peg"></div><div class="peg"></div><div class="peg"></div><div class="peg"></div><div class="peg"></div>
+      </div>
+      <div class="brick-inner">
+        <div class="layer-icon">📄</div>
+        <div class="layer-info">
+          <div class="layer-name">Session Input Layer</div>
+          <div class="layer-desc">File ingestion, OCR, chunking with spatial bounding boxes, SQLite FTS5</div>
+        </div>
+        <div class="swap-zone">
+          <span class="swap-icon">🔄</span>
+          <span>swap</span>
+          <span class="current label-doc">PDF / DOCX / Image</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector"><div class="dot"></div></div>
+
+    <!-- Brick 2: Loading Layer -->
+    <div class="brick brick-2 current-highlight">
+      <div class="pegs">
+        <div class="peg"></div><div class="peg"></div><div class="peg"></div><div class="peg"></div>
+      </div>
+      <div class="brick-inner">
+        <div class="layer-icon">⚙️</div>
+        <div class="layer-info">
+          <div class="layer-name">Loading Layer</div>
+          <div class="layer-desc">Skill loading, check parsing, step generation, context slice setup, session persistence</div>
+        </div>
+        <div class="swap-zone">
+          <span class="swap-icon">🔄</span>
+          <span>swap</span>
+          <span class="current label-vec">SQLite FTS5</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector"><div class="dot"></div></div>
+
+    <!-- Brick 3: Pipeline Layer (Core) -->
+    <div class="brick brick-3">
+      <div class="pegs">
+        <div class="peg"></div><div class="peg"></div><div class="peg"></div><div class="peg"></div><div class="peg"></div><div class="peg"></div>
+      </div>
+      <div class="brick-inner">
+        <div class="layer-icon" style="background: rgba(251,146,60,0.2);">🔧</div>
+        <div class="layer-info">
+          <div class="layer-name" style="color: #fb923c;">Pipeline Layer · clausr.ai core</div>
+          <div class="layer-desc">Per-turn orchestration: restore context → load citations → search chunks → execute LLM steps → stream</div>
+        </div>
+        <div class="swap-zone" style="border-style: solid; border-color: rgba(251,146,60,0.3); background: rgba(251,146,60,0.08);">
+          <span class="swap-icon">🔄</span>
+          <span>swap</span>
+          <span class="current label-llm">DeepSeek V4</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector"><div class="dot"></div></div>
+
+    <!-- Brick 4: Knowledge Layer -->
+    <div class="brick brick-4 current-highlight">
+      <div class="pegs">
+        <div class="peg"></div><div class="peg"></div><div class="peg"></div><div class="peg"></div><div class="peg"></div>
+      </div>
+      <div class="brick-inner">
+        <div class="layer-icon">📚</div>
+        <div class="layer-info">
+          <div class="layer-name">Knowledge Layer</div>
+          <div class="layer-desc">Regulation API interface, clause-level caching, Zod validation, reference data</div>
+        </div>
+        <div class="swap-zone">
+          <span class="swap-icon">🔄</span>
+          <span>swap</span>
+          <span class="current label-reg">GDPR (built-in)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector"><div class="dot"></div></div>
+
+    <!-- Brick 5: Evaluation Layer -->
+    <div class="brick brick-5 current-highlight">
+      <div class="pegs">
+        <div class="peg"></div><div class="peg"></div><div class="peg"></div><div class="peg"></div>
+      </div>
+      <div class="brick-inner">
+        <div class="layer-icon">✅</div>
+        <div class="layer-info">
+          <div class="layer-name">Evaluation Layer</div>
+          <div class="layer-desc">Confidence scoring, finding summarization, post-validation, citation safety nets</div>
+        </div>
+        <div class="swap-zone">
+          <span class="swap-icon">🔄</span>
+          <span>swap</span>
+          <span class="current label-report">confidence algo</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector"><div class="dot"></div></div>
+
+    <!-- Brick 6: Present Layer -->
+    <div class="brick brick-6 current-highlight">
+      <div class="pegs">
+        <div class="peg"></div><div class="peg"></div><div class="peg"></div><div class="peg"></div><div class="peg"></div>
+      </div>
+      <div class="brick-inner">
+        <div class="layer-icon">📊</div>
+        <div class="layer-info">
+          <div class="layer-name">Present Layer</div>
+          <div class="layer-desc">Response assembly, citation badges, verdict computation, DOCX template export</div>
+        </div>
+        <div class="swap-zone">
+          <span class="swap-icon">🔄</span>
+          <span>swap</span>
+          <span class="current label-report">DOCX / HTML</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- IO: Output -->
+    <div class="io-label out">▼ Output</div>
+
+  </div>
+
+  <!-- Pipeline highlight note -->
+  <div style="margin-top: 2.5rem; display: flex; justify-content: center; gap: 2rem; flex-wrap: wrap;">
+    <div style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; color: #555;">
+      <span style="width: 10px; height: 10px; border-radius: 50%; background: #fb923c; display: inline-block;"></span>
+      Core pipeline — stays intact
+    </div>
+    <div style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; color: #555;">
+      <span style="width: 10px; height: 10px; border-radius: 2px; background: rgba(255,255,255,0.06); border: 1px dashed rgba(255,255,255,0.12); display: inline-block;"></span>
+      Swappable Lego brick
+    </div>
+    <div style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; color: #555;">
+      <span style="font-size: 0.8rem;">🧱</span>
+      Bricks designed to snap on/off independently
+    </div>
+  </div>
+
+  <div class="footer-note">
+    <p>File format &nbsp;<code>PDF / DOCX / Image</code> &nbsp;·&nbsp; Vector DB &nbsp;<code>SQLite FTS5</code> &nbsp;·&nbsp; LLM &nbsp;<code>DeepSeek V4</code> &nbsp;·&nbsp; Regulation &nbsp;<code>GDPR · EU VWTA · UN R13</code> &nbsp;·&nbsp; Export &nbsp;<code>DOCX / HTML</code></p>
+    <p style="margin-top: 0.5rem;">Each brick has a clean interface — swap the implementation without touching the pipeline.</p>
+  </div>
+</div>
+</body>
+</html>

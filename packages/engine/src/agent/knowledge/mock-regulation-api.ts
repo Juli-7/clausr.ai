@@ -15,8 +15,20 @@ import type {
 import type { IRegulationApi } from "./regulation-api";
 
 let _db: Database.Database | null = null;
+let _seedData: RegulationSeed[] | null = null;
 
 const REG_DB_PATH = process.env.KB_DB_PATH ?? path.join(process.cwd(), "data", "kb.sqlite");
+
+export function setRegulationSeedData(data: RegulationSeed[]): void {
+  _seedData = data;
+  // If DB is already open and empty, seed it immediately
+  if (_db) {
+    const count = _db.prepare("SELECT COUNT(*) as c FROM regulations").get() as { c: number };
+    if (count.c === 0) {
+      seedRegulations(_db, data);
+    }
+  }
+}
 
 export function getRegulationDb(): Database.Database {
   return getDb();
@@ -64,6 +76,14 @@ function getDb(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_clauses_regulation ON clauses(regulation_code);
     CREATE INDEX IF NOT EXISTS idx_versions_regulation ON regulation_versions(regulation_code);
   `);
+
+  // Auto-seed if data has been registered
+  if (_seedData) {
+    const count = _db.prepare("SELECT COUNT(*) as c FROM regulations").get() as { c: number };
+    if (count.c === 0) {
+      seedRegulations(_db, _seedData);
+    }
+  }
 
   return _db;
 }
