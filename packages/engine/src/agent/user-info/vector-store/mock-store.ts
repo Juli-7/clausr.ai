@@ -11,7 +11,8 @@ import { logPipeline } from "../../pipeline/logger";
 import fs from "fs";
 import path from "path";
 
-const UPLOADS_DIR = path.join(process.cwd(), "data", "uploads");
+const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
+const UPLOADS_DIR = path.join(DATA_DIR, "uploads");
 
 function isWordBox(value: unknown): value is WordBox {
   if (!value || typeof value !== "object") return false;

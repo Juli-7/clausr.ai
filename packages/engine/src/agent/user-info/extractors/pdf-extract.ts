@@ -537,6 +537,57 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
   // Dynamic imports: pdfjs-dist requires DOMMatrix (browser API) which
   // isn't available in Node.js. Load lazily so this module can be imported
   // without crashing in production builds.
+  //
+  // In Next.js standalone builds, the dynamic import hits an externalized chunk
+  // that evaluates pdfjs-dist module-level code (e.g. SCALE_MATRIX = new DOMMatrix())
+  // before its own polyfill runs. The built-in polyfill only works if
+  // @napi-rs/canvas is installed, so define DOMMatrix ourselves.
+  if (typeof globalThis.DOMMatrix === "undefined") {
+    (globalThis as any).DOMMatrix = class DOMMatrix2D {
+      a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
+      constructor(init?: string | number[]) {
+        if (Array.isArray(init) && init.length >= 6) {
+          [this.a, this.b, this.c, this.d, this.e, this.f] = init.map(Number);
+        }
+      }
+      multiplySelf(other: DOMMatrix2D) {
+        const a = this.a * other.a + this.c * other.b;
+        const b = this.b * other.a + this.d * other.b;
+        const c = this.a * other.c + this.c * other.d;
+        const d = this.b * other.c + this.d * other.d;
+        const e = this.a * other.e + this.c * other.f + this.e;
+        const f = this.b * other.e + this.d * other.f + this.f;
+        this.a = a; this.b = b; this.c = c; this.d = d; this.e = e; this.f = f;
+        return this;
+      }
+      preMultiplySelf(other: DOMMatrix2D) { return this.multiplySelf(other); }
+      invertSelf() {
+        const det = this.a * this.d - this.b * this.c;
+        if (det === 0) return this;
+        const a = this.d / det, b = -this.b / det, c = -this.c / det, d = this.a / det;
+        const e = (this.b * this.f - this.d * this.e) / det;
+        const f = (this.c * this.e - this.a * this.f) / det;
+        this.a = a; this.b = b; this.c = c; this.d = d; this.e = e; this.f = f;
+        return this;
+      }
+      translate(x: number, y: number) {
+        const m = new DOMMatrix2D([1, 0, 0, 1, x, y]);
+        return this.multiplySelf(m);
+      }
+      scale(sx: number, sy: number) {
+        const m = new DOMMatrix2D([sx, 0, 0, sy, 0, 0]);
+        return this.multiplySelf(m);
+      }
+      translateSelf(x: number, y: number) {
+        this.e += x; this.f += y; return this;
+      }
+      scaleSelf(sx: number, sy: number) {
+        this.a *= sx; this.c *= sx; this.e *= sx;
+        this.b *= sy; this.d *= sy; this.f *= sy;
+        return this;
+      }
+    };
+  }
   const pdfjsMod = await import("pdfjs-dist/legacy/build/pdf.mjs");
   // @ts-expect-error — pdf.worker.mjs has no type declarations
   const pdfjsWorkerMod = await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
