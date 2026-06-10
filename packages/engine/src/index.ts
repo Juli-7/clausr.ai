@@ -109,6 +109,8 @@ export { pruneOldSessions } from "./agent/loading/cleanup";
 
 // ── Knowledge ──
 export { getRegulationApi, setRegulationApi } from "./agent/knowledge/regulation-api";
+export { seedRegulations, getRegulationDb } from "./agent/knowledge/mock-regulation-api";
+export type { RegulationSeed } from "./agent/knowledge/mock-regulation-api";
 export type { IRegulationApi } from "./agent/knowledge/regulation-api";
 export type {
   Regulation,
