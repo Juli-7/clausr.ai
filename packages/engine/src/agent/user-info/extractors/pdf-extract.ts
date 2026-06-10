@@ -1,3 +1,4 @@
+import path from "path";
 import { extractImageText } from "./ocr";
 import { mergeWordBoxes, type TextChunk, type WordBox } from "./index";
 
@@ -621,7 +622,22 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
   // Path A: Positioned text extraction via pdfjs-dist
   let pdfjsDoc: any | null = null;
   try {
-    const loadingTask = pdfjsMod.getDocument({ data });
+    // Resolve cmaps path for CJK text support (e.g. Chinese PDFs)
+    let cMapUrl: string | undefined;
+    let cMapPacked: boolean | undefined;
+    try {
+      const { createRequire } = await import("module");
+      const _req = createRequire(import.meta.url);
+      const pdfjsRoot = path.dirname(_req.resolve("pdfjs-dist/package.json"));
+      const cmapDir = path.join(pdfjsRoot, "cmaps");
+      await import("fs").then((fs) => fs.promises.access(cmapDir));
+      cMapUrl = cmapDir + "/";
+      cMapPacked = true;
+    } catch {
+      // cmaps not available in this build; pdfjs will extract what it can
+    }
+
+    const loadingTask = pdfjsMod.getDocument({ data, cMapUrl, cMapPacked });
     pdfjsDoc = await loadingTask.promise;
     const pageCount = pdfjsDoc.numPages;
 
