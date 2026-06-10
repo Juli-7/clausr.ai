@@ -547,7 +547,9 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
       a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
       constructor(init?: string | number[]) {
         if (Array.isArray(init) && init.length >= 6) {
-          [this.a, this.b, this.c, this.d, this.e, this.f] = init.slice(0, 6).map(v => Number(v));
+          const vals = init.slice(0, 6).map(v => Number(v));
+          this.a = vals[0]!; this.b = vals[1]!; this.c = vals[2]!;
+          this.d = vals[3]!; this.e = vals[4]!; this.f = vals[5]!;
         }
       }
       multiplySelf(other: DOMMatrix2D) {
