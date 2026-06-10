@@ -622,19 +622,41 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
   // Path A: Positioned text extraction via pdfjs-dist
   let pdfjsDoc: any | null = null;
   try {
-    // Resolve cmaps path for CJK text support (e.g. Chinese PDFs)
+    // Resolve cmaps path for CJK text support.
+    // Use filesystem scanning (not require.resolve) because Turbopack replaces
+    // require.resolve("pdfjs-dist/...") with a module reference ID (number).
     let cMapUrl: string | undefined;
     let cMapPacked: boolean | undefined;
     try {
-      const { createRequire } = await import("module");
-      const _req = createRequire(import.meta.url);
-      const pdfjsRoot = path.dirname(_req.resolve("pdfjs-dist/package.json"));
-      const cmapDir = path.join(pdfjsRoot, "cmaps");
-      await import("fs").then((fs) => fs.promises.access(cmapDir));
-      cMapUrl = cmapDir + "/";
-      cMapPacked = true;
+      const { readdirSync, existsSync } = await import("fs");
+      // Search upward from cwd through common node_modules locations
+      const searchRoots: string[] = [];
+      for (let dir = process.cwd(); ; ) {
+        searchRoots.push(path.join(dir, "node_modules", ".pnpm"));
+        const parent = path.dirname(dir);
+        if (parent === dir) break;
+        dir = parent;
+      }
+      for (const pnpmDir of searchRoots) {
+        let entries: string[];
+        try {
+          entries = readdirSync(pnpmDir);
+        } catch {
+          continue;
+        }
+        for (const entry of entries) {
+          if (!entry.startsWith("pdfjs-dist@")) continue;
+          const cmaps = path.join(pnpmDir, entry, "node_modules/pdfjs-dist/cmaps");
+          if (existsSync(cmaps)) {
+            cMapUrl = cmaps + "/";
+            cMapPacked = true;
+            break;
+          }
+        }
+        if (cMapUrl) break;
+      }
     } catch {
-      // cmaps not available in this build; pdfjs will extract what it can
+      // cmaps not available; pdfjs will extract what it can
     }
 
     const loadingTask = pdfjsMod.getDocument({ data, cMapUrl, cMapPacked });
