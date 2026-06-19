@@ -198,6 +198,7 @@ function runMigrations(db: Database.Database): void {
   try { db.exec("ALTER TABLE user_skills ADD COLUMN redline TEXT NOT NULL DEFAULT ''"); } catch { }
   try { db.exec("ALTER TABLE user_skills ADD COLUMN lessons TEXT NOT NULL DEFAULT ''"); } catch { }
   try { db.exec("ALTER TABLE compliance_session ADD COLUMN agent_responses TEXT NOT NULL DEFAULT '{}'"); } catch { }
+  try { db.exec("ALTER TABLE compliance_session ADD COLUMN comments TEXT NOT NULL DEFAULT '[]'"); } catch { }
 
   // Compliance v2: session state for the step-based workflow
   try {

@@ -750,6 +750,15 @@ export function setCompliancePrecheckDone(sessionId: string, done: boolean): voi
   getDb().prepare("UPDATE compliance_session SET precheck_done = ?, updated_at = ? WHERE session_id = ?").run(done ? 1 : 0, Date.now(), sessionId);
 }
 
+export function setComplianceComments(sessionId: string, commentsJson: string): void {
+  getDb().prepare("UPDATE compliance_session SET comments = ?, updated_at = ? WHERE session_id = ?").run(commentsJson, Date.now(), sessionId);
+}
+
+export function getComplianceComments(sessionId: string): string {
+  const row = getDb().prepare("SELECT comments FROM compliance_session WHERE session_id = ?").get(sessionId) as { comments: string } | undefined;
+  return row?.comments ?? "[]";
+}
+
 export function setComplianceAgentResponse(sessionId: string, packId: string, responseJson: string): void {
   const db = getDb();
   const session = getComplianceSession(sessionId);

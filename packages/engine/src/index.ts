@@ -56,6 +56,8 @@ export {
   setCompliancePackAuditResult,
   setCompliancePrecheckDone,
   setComplianceAgentResponse,
+  setComplianceComments,
+  getComplianceComments,
   getAllComplianceSessions,
 } from "./agent/shared/memory/repository";
 export type { ComplianceSessionData, ComplianceFile } from "./agent/shared/memory/repository";
