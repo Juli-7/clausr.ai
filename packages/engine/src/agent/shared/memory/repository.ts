@@ -632,6 +632,150 @@ export function listUserSkillNamesByTenant(tenantId: string): string[] {
   return rows.map((r) => r.name);
 }
 
+// ── Compliance Session (v2 workflow state) ──
+
+export interface ComplianceSessionData {
+  id: string;
+  step: 1 | 2 | 3;
+  selectedPackIds: string[];
+  docData: Record<string, Record<string, string>>;
+  auditResults: { packId: string; items: { name: string; desc: string; status: string; statusLabel: string; checks: { name: string; pass: boolean }[] }[] }[];
+  auditRunning: boolean;
+  auditDone: boolean;
+  precheckDone: boolean;
+  agentResponses: Record<string, string>;
+}
+
+export function getComplianceSession(sessionId: string): ComplianceSessionData | null {
+  const db = getDb();
+  const row = db.prepare("SELECT * FROM compliance_session WHERE session_id = ?").get(sessionId) as {
+    session_id: string;
+    step: number;
+    selected_pack_ids: string;
+    doc_data: string;
+    audit_results: string;
+    audit_running: number;
+    audit_done: number;
+    precheck_done: number;
+    agent_responses: string;
+  } | undefined;
+  if (!row) return null;
+  return {
+    id: row.session_id,
+    step: (row.step as 1 | 2 | 3),
+    selectedPackIds: safeJsonParse(row.selected_pack_ids, []),
+    docData: safeJsonParse(row.doc_data, {}),
+    auditResults: safeJsonParse(row.audit_results, []),
+    auditRunning: row.audit_running === 1,
+    auditDone: row.audit_done === 1,
+    precheckDone: row.precheck_done === 1,
+    agentResponses: safeJsonParse(row.agent_responses, {}),
+  };
+}
+
+export function ensureComplianceSession(sessionId: string): void {
+  const db = getDb();
+  db.prepare(
+    `INSERT OR IGNORE INTO compliance_session (session_id, step, selected_pack_ids, doc_data, audit_results, audit_running, audit_done, precheck_done, updated_at)
+     VALUES (?, 1, '[]', '{}', '[]', 0, 0, 0, ?)`
+  ).run(sessionId, Date.now());
+}
+
+export function setComplianceStep(sessionId: string, step: 1 | 2 | 3): void {
+  getDb().prepare("UPDATE compliance_session SET step = ?, updated_at = ? WHERE session_id = ?").run(step, Date.now(), sessionId);
+}
+
+export function setComplianceScope(sessionId: string, packIds: string[]): void {
+  getDb().prepare("UPDATE compliance_session SET selected_pack_ids = ?, updated_at = ? WHERE session_id = ?").run(JSON.stringify(packIds), Date.now(), sessionId);
+}
+
+export function setComplianceDocData(sessionId: string, docData: Record<string, Record<string, string>>): void {
+  getDb().prepare("UPDATE compliance_session SET doc_data = ?, updated_at = ? WHERE session_id = ?").run(JSON.stringify(docData), Date.now(), sessionId);
+}
+
+export function addComplianceDocField(sessionId: string, docType: string, field: string, value: string): void {
+  const db = getDb();
+  const session = getComplianceSession(sessionId);
+  if (!session) return;
+  const docData = { ...session.docData };
+  if (!docData[docType]) docData[docType] = {};
+  docData[docType] = { ...docData[docType], [field]: value };
+  setComplianceDocData(sessionId, docData);
+}
+
+export type ComplianceFile = { name: string; size: string; time: string; dataUrl?: string };
+
+export function addComplianceFile(sessionId: string, file: ComplianceFile): void {
+  const db = getDb();
+  const session = getComplianceSession(sessionId);
+  if (!session) return;
+  const existing = safeJsonParse(getSessionFiles(sessionId), []) as ComplianceFile[];
+  existing.push(file);
+  saveSessionFiles(sessionId, JSON.stringify(existing));
+}
+
+export function getComplianceFiles(sessionId: string): ComplianceFile[] {
+  return safeJsonParse(getSessionFiles(sessionId), []);
+}
+
+export function setComplianceAuditRunning(sessionId: string, running: boolean): void {
+  const db = getDb();
+  db.prepare("UPDATE compliance_session SET audit_running = ?, updated_at = ? WHERE session_id = ?").run(running ? 1 : 0, Date.now(), sessionId);
+}
+
+export function setComplianceAuditDone(sessionId: string, done: boolean): void {
+  const db = getDb();
+  db.prepare("UPDATE compliance_session SET audit_done = ?, updated_at = ? WHERE session_id = ?").run(done ? 1 : 0, Date.now(), sessionId);
+}
+
+export function clearComplianceAuditResults(sessionId: string): void {
+  const db = getDb();
+  db.prepare("UPDATE compliance_session SET audit_results = '[]', audit_done = 0, updated_at = ? WHERE session_id = ?").run(Date.now(), sessionId);
+}
+
+export function setCompliancePackAuditResult(
+  sessionId: string,
+  packId: string,
+  items: { name: string; desc: string; status: string; statusLabel: string; checks: { name: string; pass: boolean }[] }[]
+): void {
+  const db = getDb();
+  const session = getComplianceSession(sessionId);
+  if (!session) return;
+  const results = session.auditResults.filter((r) => r.packId !== packId);
+  results.push({ packId, items });
+  db.prepare("UPDATE compliance_session SET audit_results = ?, updated_at = ? WHERE session_id = ?").run(JSON.stringify(results), Date.now(), sessionId);
+}
+
+export function setCompliancePrecheckDone(sessionId: string, done: boolean): void {
+  getDb().prepare("UPDATE compliance_session SET precheck_done = ?, updated_at = ? WHERE session_id = ?").run(done ? 1 : 0, Date.now(), sessionId);
+}
+
+export function setComplianceAgentResponse(sessionId: string, packId: string, responseJson: string): void {
+  const db = getDb();
+  const session = getComplianceSession(sessionId);
+  if (!session) return;
+  const responses = { ...session.agentResponses, [packId]: responseJson };
+  db.prepare("UPDATE compliance_session SET agent_responses = ?, updated_at = ? WHERE session_id = ?").run(JSON.stringify(responses), Date.now(), sessionId);
+}
+
+export function getAllComplianceSessions(): { id: string; step: number; selectedPackIds: string[]; auditDone: boolean; createdAt: number }[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT cs.session_id, cs.step, cs.selected_pack_ids, cs.audit_done, s.created_at
+       FROM compliance_session cs JOIN sessions s ON cs.session_id = s.id
+       ORDER BY s.created_at DESC`
+    )
+    .all() as { session_id: string; step: number; selected_pack_ids: string; audit_done: number; created_at: number }[];
+  return rows.map((r) => ({
+    id: r.session_id,
+    step: r.step,
+    selectedPackIds: safeJsonParse(r.selected_pack_ids, []),
+    auditDone: r.audit_done === 1,
+    createdAt: r.created_at,
+  }));
+}
+
 export function loadUserSkill(name: string): UserSkillRow | null {
   const row = getDb()
     .prepare("SELECT * FROM user_skills WHERE name = ?")

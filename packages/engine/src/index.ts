@@ -40,6 +40,26 @@ export {
 
 export type { SessionSetupData, StoredChunk, Fts5Result, UserSkillRow } from "./agent/shared/memory/repository";
 
+// ── Compliance Session ──
+export {
+  getComplianceSession,
+  ensureComplianceSession,
+  setComplianceStep,
+  setComplianceScope,
+  setComplianceDocData,
+  addComplianceDocField,
+  addComplianceFile,
+  getComplianceFiles,
+  setComplianceAuditRunning,
+  setComplianceAuditDone,
+  clearComplianceAuditResults,
+  setCompliancePackAuditResult,
+  setCompliancePrecheckDone,
+  setComplianceAgentResponse,
+  getAllComplianceSessions,
+} from "./agent/shared/memory/repository";
+export type { ComplianceSessionData, ComplianceFile } from "./agent/shared/memory/repository";
+
 // ── Schemas & Types ──
 export {
   CitationSchema,
@@ -98,8 +118,10 @@ export type {
 } from "./agent/pipeline/pipeline-context";
 
 // ── Loading / Setup ──
-export { setupSession } from "./agent/loading/loading-orchestrator";
-export type { SetupSessionParams } from "./agent/loading/loading-orchestrator";
+export { setupSession, setupSkill, processSessionFiles } from "./agent/loading/loading-orchestrator";
+export { getPackFromSkill } from "./agent/loading/pack-from-skill";
+export type { SkillPack, PackCheck, DocumentTemplate, DocumentField } from "./agent/loading/pack-from-skill";
+export type { SetupSessionParams, ProcessFilesParams } from "./agent/loading/loading-orchestrator";
 export { loadSkill, listSkills, saveSkillToFs, deleteSkillFromFs } from "./agent/loading/skill/loader";
 export type { SkillLoader } from "./agent/loading/skill/loader";
 export { parseChecks, extractRedline, extractLessons } from "./agent/loading/skill/check-parser";
