@@ -60,6 +60,18 @@ function deepseekFetch(originalFetch: typeof fetch): typeof fetch {
     const url = typeof input === "string" ? input : input instanceof Request ? input.url : "";
     const isChatCompletion = url.includes("/chat/completions");
 
+    // Log request (truncated)
+    if (isChatCompletion && init && typeof init.body === "string") {
+      try {
+        const body = JSON.parse(init.body);
+        const toolCall = body.messages?.filter((m: any) => m.role === "assistant").some((m: any) => m.tool_calls);
+        if (toolCall || body.messages?.some((m: any) => m.role === "tool")) {
+          console.log(`DeepSeek request: ${body.messages?.length} msgs, tool_calls=${toolCall}, stream=${body.stream}`);
+          console.log("  messages:", JSON.stringify(body.messages?.map((m: any) => ({ role: m.role, tool_calls: !!m.tool_calls, content_len: (m.content || "").length, tool_result: m.role === "tool" ? (m.content || "").substring(0, 100) : undefined }))));
+        }
+      } catch (e) {}
+    }
+
     // Add reasoning_content placeholder to assistant messages with tool_calls
     if (isChatCompletion && init && typeof init.body === "string") {
       try {
