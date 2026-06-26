@@ -167,3 +167,7 @@ export { ReportAssembler } from "./agent/pipeline/slices/report-assembler";
 // ── LLM ──
 export { createModel } from "./agent/llm/factory";
 export type { ProviderName } from "./agent/llm/factory";
+
+// ── Compliance Chat (multi-step tool loop) ──
+export { complianceChat } from "./compliance-chat";
+export type { ComplianceChatEvent, ComplianceChatParams } from "./compliance-chat";
