@@ -1,11 +1,8 @@
 import fs from "fs";
 import path from "path";
 import matter from "gray-matter";
-import { loadSkill } from "./skill/loader";
-import { SkillLoadError } from "../pipeline/errors";
+import { parseChecks } from "./skill/check-parser";
 import type { ParsedCheck } from "./skill/check-parser";
-
-const SKILLS_DIR = path.join(process.cwd(), "skills");
 
 export interface PackCheck {
   id: string;
@@ -45,46 +42,45 @@ function humanize(field: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+export interface LoadPackOptions {
+  packsDir?: string;
+}
+
 const DEFAULT_INDUSTRIES = ["General"];
 const DEFAULT_ICON = "📋";
 const DEFAULT_VERSION = "1.0.0";
 
-/**
- * Load a SKILL.md and build a SkillPack for the marketplace.
- * Frontmatter fields supported:
- *   name, title, description, industries, icon, version, methodology,
- *   triggers, regulation_ids, documents
- */
-export function getPackFromSkill(skillName: string): SkillPack | null {
-  let skill;
-  try {
-    skill = loadSkill(skillName);
-  } catch (err) {
-    if (err instanceof SkillLoadError && err.code === "SKILL_NOT_FOUND") {
-      return null;
-    }
-    throw err;
+export function loadPack(packName: string, options?: LoadPackOptions): SkillPack | null {
+  const packsDir = options?.packsDir ?? path.join(process.cwd(), "packs");
+  const packDir = path.join(packsDir, packName);
+  const metaPath = path.join(packDir, "meta.json");
+  const skillPath = path.join(packDir, "SKILL.md");
+
+  if (!fs.existsSync(skillPath)) return null;
+
+  let title = packName;
+  let description = "";
+  let industries = DEFAULT_INDUSTRIES;
+  let icon = DEFAULT_ICON;
+  let version = DEFAULT_VERSION;
+  let methodology = "";
+
+  if (fs.existsSync(metaPath)) {
+    const meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"));
+    title = meta.title ?? title;
+    description = meta.description ?? "";
+    industries = meta.industries ?? industries;
+    icon = meta.icon ?? icon;
+    version = meta.version ?? version;
+    methodology = meta.methodology ?? "";
   }
 
-  const raw = fs.readFileSync(path.join(SKILLS_DIR, skillName, "SKILL.md"), "utf-8");
+  const raw = fs.readFileSync(skillPath, "utf-8");
   const parsed = matter(raw);
   const data = parsed.data ?? {};
 
-  const title: string = data.title ?? data.name ?? skillName;
-  const description: string = data.description ?? "";
-  const industries: string[] = data.industries ?? DEFAULT_INDUSTRIES;
-  const icon: string = data.icon ?? DEFAULT_ICON;
-  const version: string = data.version ?? DEFAULT_VERSION;
-  const methodology: string = data.methodology ?? "";
   const regs: string[] = data.regulation_ids ?? [];
   const rawDocs: unknown[] = data.documents ?? [];
-
-  const checks: PackCheck[] = skill.checks.map((c: ParsedCheck, i: number) => ({
-    id: `C${i + 1}`,
-    title: humanize(c.field),
-    desc: c.description ?? "",
-  }));
-
   const documents: DocumentTemplate[] = (rawDocs as Record<string, unknown>[]).map((d) => {
     const docFields = ((d.fields as Record<string, unknown>[]) ?? []).map((f) => ({
       field: f.field as string,
@@ -99,8 +95,15 @@ export function getPackFromSkill(skillName: string): SkillPack | null {
     };
   });
 
+  const checks = parseChecks(parsed.content);
+  const packChecks: PackCheck[] = checks.map((c, i) => ({
+    id: `C${i + 1}`,
+    title: humanize(c.field),
+    desc: c.description ?? "",
+  }));
+
   if (documents.length === 0) {
-    const inferredFields = skill.checks.map((c: ParsedCheck) => ({
+    const inferredFields = checks.map((c) => ({
       field: c.field,
       label: humanize(c.field),
       type: "text" as const,
@@ -114,7 +117,7 @@ export function getPackFromSkill(skillName: string): SkillPack | null {
   }
 
   return {
-    id: skillName,
+    id: packName,
     title,
     desc: description,
     regs,
@@ -122,7 +125,21 @@ export function getPackFromSkill(skillName: string): SkillPack | null {
     icon,
     version,
     methodology,
-    checks,
+    checks: packChecks,
     documents,
   };
+}
+
+export function listPacks(packsDir?: string): string[] {
+  const dir = packsDir ?? path.join(process.cwd(), "packs");
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir, { withFileTypes: true })
+    .filter((d) => d.isDirectory() &&
+      fs.existsSync(path.join(dir, d.name, "meta.json")) &&
+      fs.existsSync(path.join(dir, d.name, "SKILL.md")))
+    .map((d) => d.name);
+}
+
+export function getPackFromSkill(skillName: string): SkillPack | null {
+  return loadPack(skillName, { packsDir: path.join(process.cwd(), "skills") });
 }

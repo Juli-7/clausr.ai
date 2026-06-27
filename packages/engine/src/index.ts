@@ -121,8 +121,8 @@ export type {
 
 // ── Loading / Setup ──
 export { setupSession, setupSkill, processSessionFiles } from "./agent/loading/loading-orchestrator";
-export { getPackFromSkill } from "./agent/loading/pack-from-skill";
-export type { SkillPack, PackCheck, DocumentTemplate, DocumentField } from "./agent/loading/pack-from-skill";
+export { getPackFromSkill, loadPack, listPacks } from "./agent/loading/pack-from-skill";
+export type { SkillPack, PackCheck, DocumentTemplate, DocumentField, LoadPackOptions } from "./agent/loading/pack-from-skill";
 export type { SetupSessionParams, ProcessFilesParams } from "./agent/loading/loading-orchestrator";
 export { loadSkill, listSkills, saveSkillToFs, deleteSkillFromFs } from "./agent/loading/skill/loader";
 export type { SkillLoader } from "./agent/loading/skill/loader";
