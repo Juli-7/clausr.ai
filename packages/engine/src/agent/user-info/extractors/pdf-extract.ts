@@ -543,7 +543,7 @@ export async function extractPdfText(dataUrl: string): Promise<PdfResult> {
   // that evaluates pdfjs-dist module-level code (e.g. SCALE_MATRIX = new DOMMatrix())
   // before its own polyfill runs. The built-in polyfill only works if
   // @napi-rs/canvas is installed, so define DOMMatrix ourselves.
-  if (typeof globalThis.DOMMatrix === "undefined") {
+  if (typeof (globalThis as any).DOMMatrix === "undefined") {
     (globalThis as any).DOMMatrix = class DOMMatrix2D {
       a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
       constructor(init?: string | number[]) {

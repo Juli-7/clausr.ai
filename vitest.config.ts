@@ -1,5 +1,4 @@
 import { defineConfig } from "vitest/config";
-import path from "path";
 
 export default defineConfig({
   test: {
@@ -8,7 +7,7 @@ export default defineConfig({
     testTimeout: 30000,
     hookTimeout: 30000,
     reporters: ["verbose"],
-    include: ["src/**/*.test.ts", "packages/engine/src/**/*.test.ts"],
+    include: ["packages/engine/src/**/*.test.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
@@ -17,13 +16,7 @@ export default defineConfig({
         "**/__tests__/**",
         "**/*.test.ts",
         "**/*.config.*",
-        "src/app/**",
       ],
-    },
-  },
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
     },
   },
 });

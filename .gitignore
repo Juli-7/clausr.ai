@@ -1,58 +1,12 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
-
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
+node_modules/
+coverage/
+build
 .DS_Store
 *.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files (can opt-in for committing if needed)
+*.log
 .env*
 !.env.example
-
-# local data (SQLite)
-/data/
-
-# Tesseract traineddata (downloaded at runtime, ~5MB)
-eng.traineddata
-
-# Demo / mockup artifacts
-public/mockup.html
-
-# Design/architecture docs (not part of source)
-ARCHITECTURE.md
-ARCHITECTURE-MAP.md
-frontend-mock.html
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
 data/
-node_modules/
+eng.traineddata
+*.tsbuildinfo
+.vercel
