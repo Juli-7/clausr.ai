@@ -28,7 +28,6 @@ export function getDb(): Database.Database {
 
   initSchema(db);
   runMigrations(db);
-  initSettings(db);
 
   return db;
 }
@@ -68,11 +67,6 @@ function initSchema(db: Database.Database): void {
       claims_json TEXT,
       confidence_json TEXT,
       created_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS context_snapshots (
@@ -216,25 +210,4 @@ function runMigrations(db: Database.Database): void {
   } catch { /* already exists */ }
 }
 
-function initSettings(db: Database.Database): void {
-  const insertSetting = db.prepare(
-    "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)"
-  );
-  insertSetting.run("llm_provider", process.env.LLM_PROVIDER?.toLowerCase() ?? "deepseek");
-  insertSetting.run("llm_model", process.env.LLM_MODEL ?? "deepseek-v4-flash");
-  insertSetting.run("retention_days", process.env.RETENTION_DAYS ?? "90");
-  insertSetting.run("retention_max_sessions", process.env.RETENTION_MAX_SESSIONS ?? "0");
-}
 
-export function getSetting(key: string): string | null {
-  const row = getDb().prepare("SELECT value FROM settings WHERE key = ?").get(key) as
-    | { value: string }
-    | undefined;
-  return row?.value ?? null;
-}
-
-export function setSetting(key: string, value: string): void {
-  getDb()
-    .prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)")
-    .run(key, value);
-}

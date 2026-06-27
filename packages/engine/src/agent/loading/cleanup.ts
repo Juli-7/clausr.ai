@@ -1,4 +1,5 @@
-import { getDb, getSetting } from "../shared/memory/database";
+import { getDb } from "../shared/memory/database";
+import { getConfig } from "../llm/config";
 import fs from "fs";
 import path from "path";
 
@@ -43,8 +44,8 @@ function removeUploadDir(sessionId: string): void {
  */
 export function pruneOldSessions(): void {
   const db = getDb();
-  const retentionDays = parseInt(getSetting("retention_days") ?? "90", 10);
-  const maxSessions = parseInt(getSetting("retention_max_sessions") ?? "0", 10);
+  const retentionDays = parseInt(getConfig("retention_days", "90"), 10);
+  const maxSessions = parseInt(getConfig("max_sessions", "0"), 10);
 
   const pruneByAge = db.transaction(() => {
     const idsToRemove: string[] = [];

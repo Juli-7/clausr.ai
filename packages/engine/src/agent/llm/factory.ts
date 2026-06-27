@@ -1,7 +1,7 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import type { LanguageModel } from "ai";
-import { getSetting } from "../shared/memory/database";
+import { getConfig } from "./config";
 
 export type ProviderName = "openai" | "anthropic" | "deepseek";
 
@@ -19,12 +19,10 @@ const DEFAULT_CONFIGS: Record<ProviderName, { baseURL: string }> = {
 };
 
 function getProvider(): ProviderName {
-  // Check DB override first, then fall back to env var
-  const dbProvider = getSetting("llm_provider");
-  const raw = (dbProvider ?? process.env.LLM_PROVIDER ?? "openai").toLowerCase();
+  const raw = getConfig("provider", "deepseek").toLowerCase();
   if (raw !== "openai" && raw !== "anthropic" && raw !== "deepseek") {
     throw new Error(
-      `Unknown LLM_PROVIDER "${raw}". Set LLM_PROVIDER=openai, anthropic, or deepseek.`
+      `Unknown provider "${raw}". Valid providers: openai, anthropic, deepseek.`
     );
   }
   return raw;
@@ -32,17 +30,16 @@ function getProvider(): ProviderName {
 
 function getProviderConfig(): ProviderConfig {
   const provider = getProvider();
-  const apiKey = process.env.LLM_API_KEY;
+  const envKeyName = `${provider.toUpperCase()}_API_KEY`;
+  const apiKey = process.env[envKeyName] || process.env.LLM_API_KEY;
   if (!apiKey) {
     throw new Error(
-      "LLM_API_KEY is not set. Add it to .env.local or your environment."
+      `No API key found for provider "${provider}". Set ${envKeyName}=sk-... or LLM_API_KEY=sk-... in your environment.`
     );
   }
   const defaults = DEFAULT_CONFIGS[provider];
   const baseURL = process.env.LLM_BASE_URL || defaults.baseURL;
-  // Check DB override for model first, then env var, then default
-  const dbModel = getSetting("llm_model");
-  const model = dbModel ?? process.env.LLM_MODEL ?? "deepseek-v4-flash";
+  const model = getConfig("model", "deepseek-v4-flash");
   return { provider, apiKey, baseURL, model };
 }
 

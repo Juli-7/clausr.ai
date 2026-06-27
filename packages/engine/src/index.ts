@@ -1,5 +1,5 @@
 // ── Database ──
-export { getDb, setDb, getSetting, setSetting } from "./agent/shared/memory/database";
+export { getDb, setDb } from "./agent/shared/memory/database";
 
 // ── Repository ──
 export {
@@ -166,6 +166,7 @@ export { ReportAssembler } from "./agent/pipeline/slices/report-assembler";
 
 // ── LLM ──
 export { createModel } from "./agent/llm/factory";
+export { setLLMConfig, setRetentionConfig, clearConfig, getConfig } from "./agent/llm/config";
 export type { ProviderName } from "./agent/llm/factory";
 
 // ── Compliance Chat (multi-step tool loop) ──
