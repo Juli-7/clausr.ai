@@ -140,6 +140,4 @@ export function listPacks(packsDir?: string): string[] {
     .map((d) => d.name);
 }
 
-export function getPackFromSkill(skillName: string): SkillPack | null {
-  return loadPack(skillName, { packsDir: path.join(process.cwd(), "skills") });
-}
+

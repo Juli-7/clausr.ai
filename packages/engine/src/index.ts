@@ -121,10 +121,10 @@ export type {
 
 // ── Loading / Setup ──
 export { setupSession, setupSkill, processSessionFiles } from "./agent/loading/loading-orchestrator";
-export { getPackFromSkill, loadPack, listPacks } from "./agent/loading/pack-from-skill";
+export { loadPack, listPacks } from "./agent/loading/pack-from-skill";
 export type { SkillPack, PackCheck, DocumentTemplate, DocumentField, LoadPackOptions } from "./agent/loading/pack-from-skill";
 export type { SetupSessionParams, ProcessFilesParams } from "./agent/loading/loading-orchestrator";
-export { loadSkill, listSkills, saveSkillToFs, deleteSkillFromFs } from "./agent/loading/skill/loader";
+export { loadSkill, saveSkillToFs, deleteSkillFromFs } from "./agent/loading/skill/loader";
 export type { SkillLoader } from "./agent/loading/skill/loader";
 export { parseChecks, extractRedline, extractLessons } from "./agent/loading/skill/check-parser";
 export type { ParsedCheck, CheckFieldType } from "./agent/loading/skill/check-parser";
@@ -172,3 +172,11 @@ export type { ProviderName } from "./agent/llm/factory";
 // ── Compliance Chat (multi-step tool loop) ──
 export { complianceChat } from "./compliance-chat";
 export type { ComplianceChatEvent, ComplianceChatParams } from "./compliance-chat";
+
+// ── Skill Generator ──
+export { generateSkill } from "./skill-generator";
+export type { GenerateSkillParams, GenerateSkillResult } from "./skill-generator";
+
+// ── Pack Audit ──
+export { runPackAudit } from "./pack-audit";
+export type { PackAuditEvent } from "./pack-audit";

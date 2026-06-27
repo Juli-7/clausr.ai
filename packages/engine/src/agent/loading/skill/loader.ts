@@ -5,7 +5,7 @@ import { SkillLoadError } from "../../pipeline/errors";
 import { parseChecks } from "../../loading/skill/check-parser";
 import type { ParsedCheck } from "../../loading/skill/check-parser";
 
-const SKILLS_DIR = path.join(process.cwd(), "skills");
+const SKILLS_DIR = path.join(process.cwd(), "packs");
 
 export interface SkillLoader {
   /** L1: metadata */
@@ -75,17 +75,6 @@ export function loadSkill(skillId: string): SkillLoader {
     regulationIds,
     hasTemplate,
   };
-}
-
-/**
- * Discover all skill folders under skills/.
- */
-export function listSkills(): string[] {
-  if (!fs.existsSync(SKILLS_DIR)) return [];
-  return fs
-    .readdirSync(SKILLS_DIR, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && fs.existsSync(path.join(SKILLS_DIR, d.name, "SKILL.md")))
-    .map((d) => d.name);
 }
 
 /**
