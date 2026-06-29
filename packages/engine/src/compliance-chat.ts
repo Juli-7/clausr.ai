@@ -1,6 +1,7 @@
 import { streamText, stepCountIs } from "ai";
 import { createModel } from "./agent/llm/factory";
 import { addUserMessage } from "./agent/shared/memory/repository";
+import { logInfo } from "./agent/pipeline/logger";
 
 export type ComplianceChatEvent =
   | { type: "text-delta"; text: string }
@@ -27,7 +28,7 @@ export async function* complianceChat(
 
   let llmModel;
   try {
-    llmModel = createModel();
+    llmModel = createModel({ cache: true });
   } catch (err) {
     yield { type: "error", error: err instanceof Error ? err.message : "LLM config error" };
     return;
@@ -38,20 +39,10 @@ export async function* complianceChat(
     system: systemPrompt,
     stopWhen: stepCountIs(20),
     onStepFinish: ({ text, finishReason, toolCalls, toolResults, stepNumber }) => {
-      console.log(`[complianceChat] step ${stepNumber}:`, {
-        finishReason,
-        textLen: text?.length,
-        toolCalls: toolCalls?.length,
-        toolResults: toolResults?.length,
-      });
+      logInfo(`step=${stepNumber} finish=${finishReason} textLen=${text?.length} toolCalls=${toolCalls?.length} toolResults=${toolResults?.length}`);
     },
     onFinish: ({ finishReason, text, usage, steps }) => {
-      console.log(`[complianceChat] onFinish:`, {
-        finishReason,
-        textLen: text?.length,
-        stepCount: steps?.length,
-        usage,
-      });
+      logInfo(`finish=${finishReason} textLen=${text?.length} steps=${steps?.length} prompt=${usage?.promptTokens} completion=${usage?.completionTokens}`);
     },
     messages,
     tools: Object.keys(tools).length > 0 ? tools : undefined,

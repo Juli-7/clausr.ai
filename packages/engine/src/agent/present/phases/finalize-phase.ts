@@ -1,4 +1,4 @@
-import { getResponseCount, addAssistantResponse } from "../../shared/memory/repository";
+import { getResponseCount, addAssistantResponse, setCompliancePackAuditResult } from "../../shared/memory/repository";
 import { AgentResponseSchema } from "../../shared/schemas";
 import type { AgentResponse } from "../../shared/types";
 import type { ExecutableStep } from "../../pipeline/types";
@@ -99,6 +99,25 @@ export async function finalizePhase(
 
   const agentResponse = AgentResponseSchema.parse(responseData);
   addAssistantResponse(sessionId, agentResponse);
+
+  // Persist structured check results for compliance sessions
+  const sections = responseData.sections as Record<string, unknown> | undefined;
+  const checkResultsRaw = sections?._checkResults;
+  if (typeof checkResultsRaw === "string") {
+    try {
+      const raw = JSON.parse(checkResultsRaw) as { name: string; type: string; finding?: string; verdict?: string }[];
+      const items = raw.map((cr) => ({
+        name: cr.name,
+        desc: cr.type,
+        status: "done" as const,
+        statusLabel: cr.verdict || (cr.finding && cr.finding !== "missing" ? "PASS" : "FAIL"),
+        checks: [] as { name: string; pass: boolean }[],
+      }));
+      if (items.length > 0 && ctx.skill?.name) {
+        setCompliancePackAuditResult(sessionId, ctx.skill.name, items);
+      }
+    } catch { /* non-critical */ }
+  }
 
   logPipeline(`=== PIPELINE DONE === round=${round}`);
 

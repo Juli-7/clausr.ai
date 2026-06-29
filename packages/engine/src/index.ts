@@ -53,8 +53,8 @@ export {
   setComplianceAuditRunning,
   setComplianceAuditDone,
   clearComplianceAuditResults,
-  setCompliancePackAuditResult,
   setCompliancePrecheckDone,
+  setCompliancePackAuditResult,
   setComplianceAgentResponse,
   setComplianceComments,
   getComplianceComments,
@@ -169,6 +169,9 @@ export { createModel } from "./agent/llm/factory";
 export { setLLMConfig, setRetentionConfig, clearConfig, getConfig } from "./agent/llm/config";
 export type { ProviderName } from "./agent/llm/factory";
 
+// ── Prompts ──
+export { COMPLIANCE_SYSTEM_PROMPTS } from "./agent/pipeline/prompts";
+
 // ── Compliance Chat (multi-step tool loop) ──
 export { complianceChat } from "./compliance-chat";
 export type { ComplianceChatEvent, ComplianceChatParams } from "./compliance-chat";
@@ -177,6 +180,4 @@ export type { ComplianceChatEvent, ComplianceChatParams } from "./compliance-cha
 export { generateSkill } from "./skill-generator";
 export type { GenerateSkillParams, GenerateSkillResult } from "./skill-generator";
 
-// ── Pack Audit ──
-export { runPackAudit } from "./pack-audit";
-export type { PackAuditEvent } from "./pack-audit";
+
