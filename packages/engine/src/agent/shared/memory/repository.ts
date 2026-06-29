@@ -181,6 +181,13 @@ export function addUserMessage(sessionId: string, content: string): void {
   ).run(sessionId, content, Date.now());
 }
 
+export function addAssistantMessage(sessionId: string, content: string): void {
+  const db = getDb();
+  db.prepare(
+    "INSERT INTO messages (session_id, role, content, created_at) VALUES (?, 'assistant', ?, ?)"
+  ).run(sessionId, content, Date.now());
+}
+
 export function addAssistantResponse(sessionId: string, response: AgentResponse): void {
   const db = getDb();
   db.prepare(
@@ -654,6 +661,8 @@ export interface ComplianceSessionData {
   auditDone: boolean;
   precheckDone: boolean;
   agentResponses: Record<string, string>;
+  validationChecks: { id: string; title: string; status: string; note: string }[];
+  validationScore: number;
 }
 
 export function getComplianceSession(sessionId: string): ComplianceSessionData | null {
@@ -668,6 +677,8 @@ export function getComplianceSession(sessionId: string): ComplianceSessionData |
     audit_done: number;
     precheck_done: number;
     agent_responses: string;
+    validation_checks: string;
+    validation_score: number;
   } | undefined;
   if (!row) return null;
   return {
@@ -680,6 +691,8 @@ export function getComplianceSession(sessionId: string): ComplianceSessionData |
     auditDone: row.audit_done === 1,
     precheckDone: row.precheck_done === 1,
     agentResponses: safeJsonParse(row.agent_responses, {}),
+    validationChecks: safeJsonParse(row.validation_checks, []),
+    validationScore: row.validation_score ?? 0,
   };
 }
 
@@ -763,6 +776,10 @@ export function setCompliancePackAuditResult(
 
 export function setCompliancePrecheckDone(sessionId: string, done: boolean): void {
   getDb().prepare("UPDATE compliance_session SET precheck_done = ?, updated_at = ? WHERE session_id = ?").run(done ? 1 : 0, Date.now(), sessionId);
+}
+
+export function setComplianceValidation(sessionId: string, checks: { id: string; title: string; status: string; note: string }[], score: number): void {
+  getDb().prepare("UPDATE compliance_session SET validation_checks = ?, validation_score = ?, updated_at = ? WHERE session_id = ?").run(JSON.stringify(checks), score, Date.now(), sessionId);
 }
 
 export function setComplianceComments(sessionId: string, commentsJson: string): void {

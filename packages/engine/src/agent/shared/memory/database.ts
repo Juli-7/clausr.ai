@@ -191,9 +191,6 @@ function runMigrations(db: Database.Database): void {
   } catch { }
   try { db.exec("ALTER TABLE user_skills ADD COLUMN redline TEXT NOT NULL DEFAULT ''"); } catch { }
   try { db.exec("ALTER TABLE user_skills ADD COLUMN lessons TEXT NOT NULL DEFAULT ''"); } catch { }
-  try { db.exec("ALTER TABLE compliance_session ADD COLUMN agent_responses TEXT NOT NULL DEFAULT '{}'"); } catch { }
-  try { db.exec("ALTER TABLE compliance_session ADD COLUMN comments TEXT NOT NULL DEFAULT '[]'"); } catch { }
-
   // Compliance v2: session state for the step-based workflow
   try {
     db.exec(`CREATE TABLE IF NOT EXISTS compliance_session (
@@ -205,9 +202,15 @@ function runMigrations(db: Database.Database): void {
       audit_running INTEGER NOT NULL DEFAULT 0,
       audit_done INTEGER NOT NULL DEFAULT 0,
       precheck_done INTEGER NOT NULL DEFAULT 0,
+      agent_responses TEXT NOT NULL DEFAULT '{}',
+      comments TEXT NOT NULL DEFAULT '[]',
       updated_at INTEGER NOT NULL
     )`);
   } catch { /* already exists */ }
+  try { db.exec("ALTER TABLE compliance_session ADD COLUMN agent_responses TEXT NOT NULL DEFAULT '{}'"); } catch { }
+  try { db.exec("ALTER TABLE compliance_session ADD COLUMN comments TEXT NOT NULL DEFAULT '[]'"); } catch { }
+  try { db.exec("ALTER TABLE compliance_session ADD COLUMN validation_checks TEXT NOT NULL DEFAULT '[]'"); } catch { }
+  try { db.exec("ALTER TABLE compliance_session ADD COLUMN validation_score INTEGER NOT NULL DEFAULT 0"); } catch { }
 }
 
 
