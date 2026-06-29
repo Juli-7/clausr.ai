@@ -330,22 +330,28 @@ interface MockToolResult {
 
 interface MockStreamConfig {
   onStepFinish?: (event: { toolResults?: MockToolResult[]; text?: string }) => void;
+  abortSignal?: AbortSignal;
+}
+
+interface MockToolResult {
+  input: Record<string, unknown>;
+  output: Record<string, unknown>;
 }
 
 describe("executeLlmToolStep with mocked LLM", () => {
-  function mockLlmResponse(jsonOutput: string, toolResults?: MockToolResult[]) {
+  function mockLlmTextResponse(jsonText: string, toolResults?: MockToolResult[]) {
     (streamText as unknown as ReturnType<typeof vi.fn>).mockImplementation((config: MockStreamConfig) => {
       if (config.onStepFinish && toolResults) {
         config.onStepFinish({
           toolResults,
-          text: jsonOutput,
+          text: jsonText,
         });
       }
       return {
         textStream: (async function* () {
-          yield jsonOutput;
+          yield jsonText;
         })(),
-        usage: Promise.resolve({ inputTokens: 0, outputTokens: 0 }),
+        usage: Promise.resolve({ promptTokens: 0, outputTokens: 0 }),
       };
     });
   }
@@ -373,8 +379,9 @@ describe("executeLlmToolStep with mocked LLM", () => {
       instructions: "Retrieve relevant chunks. Search the context for 'light source type'.",
     };
 
-    const llmJson = `{"light_source": {"value": "LED headlamps [S1.c1]", "sourceCitation": ["S1.c1"], "citationRef": ["R48.6.1"], "verdict": "PASS"}}`;
-    mockLlmResponse("```json\n" + llmJson + "\n```");
+    mockLlmTextResponse(
+      `{"value":"LED headlamps [S1.c1]","sourceCitation":["S1.c1"],"citationRef":["R48.6.1"],"verdict":"PASS"}`
+    );
 
     const result = await executeLlmToolStep(step, ctx);
     expect(result.success).toBe(true);
@@ -404,13 +411,15 @@ describe("executeLlmToolStep with mocked LLM", () => {
       instructions: "Retrieve relevant chunks. Search the context for 'headlamp mounting height'. Type: number. Constraint: range(500-1200).",
     };
 
-    const llmJson = `{"mounting_height": {"value": "Mounting height is 650 mm from ground [S1.c3]", "sourceCitation": ["S1.c3"], "citationRef": ["R48.6.2"], "verdict": "PASS"}}`;
-    mockLlmResponse(llmJson, [
-      {
-        input: { value: 650, limit: "500-1200", operator: "range" },
-        output: { status: "pass", comparison: "650 in [500, 1200]" },
-      },
-    ]);
+    mockLlmTextResponse(
+      `{"value":"Mounting height is 650 mm from ground [S1.c3]","sourceCitation":["S1.c3"],"citationRef":["R48.6.2"],"verdict":"PASS"}`,
+      [
+        {
+          input: { value: 650, limit: "500-1200", operator: "range" },
+          output: { status: "pass", comparison: "650 in [500, 1200]" },
+        },
+      ],
+    );
 
     const result = await executeLlmToolStep(step, ctx);
     expect(result.success).toBe(true);
@@ -478,9 +487,10 @@ describe("generateStepsFromChecks", () => {
   });
 
   it("includes field instructions", () => {
-    expect(TEST_STEPS[0]!.instructions).toContain("mounting_height");
+    expect(TEST_STEPS[0]!.instructions).toContain("headlamp mounting height");
     expect(TEST_STEPS[0]!.instructions).toContain("range(500-1200)");
     expect(TEST_STEPS[0]!.instructions).toContain("R48.6.2");
+    expect(TEST_STEPS[0]!.instructions).toContain("mounting height");
   });
 
   it("all steps are llm+tool type", () => {
@@ -565,9 +575,9 @@ describe("Prompt building", () => {
     expect(prompt).toContain("Context: test data");
     expect(prompt).toContain("PREVIOUS ATTEMPT FAILED");
     expect(prompt).toContain("Previous attempt failed");
-    expect(prompt).toContain("Output Format");
     expect(prompt).toContain("sourceCitation");
     expect(prompt).toContain("citationRef");
+    expect(prompt).toContain("verdict");
   });
 
   it("buildSystemPrompt omits retry context when no error", () => {

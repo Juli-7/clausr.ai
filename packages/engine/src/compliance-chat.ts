@@ -1,22 +1,24 @@
 import { streamText, stepCountIs } from "ai";
 import { createModel } from "./agent/llm/factory";
-import { addUserMessage } from "./agent/shared/memory/repository";
+import { addUserMessage, addAssistantMessage } from "./agent/shared/memory/repository";
 import { logInfo } from "./agent/pipeline/logger";
+import { COMPLIANCE_SYSTEM_PROMPTS } from "./agent/pipeline/prompts";
 
 export type ComplianceChatEvent =
   | { type: "text-delta"; text: string }
   | { type: "tool-call"; toolName: string; args: unknown }
-  | { type: "tool-result"; toolName: string }
+  | { type: "tool-result"; toolName: string; result: unknown }
   | { type: "finish"; finishReason: string }
   | { type: "error"; error: string }
-  | { type: "done"; response: string };
+  | { type: "done"; response: string; usage: { promptTokens: number; completionTokens: number } };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ToolRecord = Record<string, any>;
 
 export interface ComplianceChatParams {
   messages: { role: "user" | "assistant"; content: string }[];
-  systemPrompt: string;
+  step?: number;
+  systemPrompt?: string;
   tools: ToolRecord;
 }
 
@@ -24,7 +26,12 @@ export async function* complianceChat(
   sessionId: string,
   params: ComplianceChatParams
 ): AsyncGenerator<ComplianceChatEvent> {
-  const { messages, systemPrompt, tools } = params;
+  const { messages, step, systemPrompt: customPrompt, tools } = params;
+  const systemPrompt = step ? COMPLIANCE_SYSTEM_PROMPTS[step] : customPrompt;
+  if (!systemPrompt) {
+    yield { type: "error", error: step ? `No system prompt for step ${step}` : "systemPrompt is required when step is not provided" };
+    return;
+  }
 
   let llmModel;
   try {
@@ -49,6 +56,7 @@ export async function* complianceChat(
   });
 
   let fullText = "";
+  let finalUsage: { promptTokens: number; completionTokens: number } = { promptTokens: 0, completionTokens: 0 };
   try {
     for await (const event of result.fullStream) {
       if (event.type === "text-delta") {
@@ -58,7 +66,7 @@ export async function* complianceChat(
       } else if (event.type === "tool-call") {
         yield { type: "tool-call", toolName: event.toolName, args: event.input };
       } else if (event.type === "tool-result") {
-        yield { type: "tool-result", toolName: event.toolName };
+        yield { type: "tool-result", toolName: event.toolName, result: event.result };
       } else if (event.type === "finish") {
         yield { type: "finish", finishReason: event.finishReason };
       } else if (event.type === "error") {
@@ -67,10 +75,11 @@ export async function* complianceChat(
       }
     }
 
+    finalUsage = await result.usage;
     if (fullText) {
-      addUserMessage(sessionId, fullText);
+      addAssistantMessage(sessionId, fullText);
     }
-    yield { type: "done", response: fullText };
+    yield { type: "done", response: fullText, usage: finalUsage };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown";
     yield { type: "error", error: msg };

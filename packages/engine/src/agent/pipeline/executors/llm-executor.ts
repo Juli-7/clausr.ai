@@ -1,12 +1,10 @@
 import { streamText, tool } from "ai";
-import { z } from "zod";
 import { createModel } from "../../llm/factory";
 import { runScript } from "./script-runner";
 import { ComplianceCheckSchema } from "../../shared/schemas";
 import { executeComplianceCheck } from "../../pipeline/builtins";
 import { buildSystemPrompt, buildUserMessage } from "../../pipeline/prompts";
 import type { ExecutableStep } from "../types";
-import type { ParsedCheck } from "../../loading/skill/check-parser";
 import type { PipelineContext, CheckResult, CitationPaletteEntry } from "../pipeline-context";
 import type { StepResult } from "../types";
 import type { ToolCallRecord } from "../../shared/types";
@@ -19,21 +17,32 @@ export async function executeLlmToolStep(
   revisionContext?: { userFeedback: string }
 ): Promise<StepResult> {
   try {
-    const scripts = ctx.skill.scripts;
-
     const regulationSection = formatRegulationSection(ctx);
     const systemPrompt = buildSystemPrompt(regulationSection, previousError);
 
-    logPipeline(`  [LLM+TOOL] step=${step.number} promptLen=${systemPrompt.length}chars scripts=${scripts.length}`);
+    logPipeline(`  [LLM+TOOL] step=${step.number} promptLen=${systemPrompt.length}chars`);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tools: Record<string, any> = {};
+    const abortController = new AbortController();
+    const llmTimeout = setTimeout(() => abortController.abort("LLM request timed out"), 120_000);
+
+    const scripts = ctx.skill.scripts;
+    const tools: Record<string, unknown> = {};
+    let toolCalled = false;
+
+    const perCheckResults: {
+      name: string;
+      value: number;
+      limit: number | string;
+      comparison: string;
+      status: "pass" | "fail";
+      note?: string;
+    }[] = [];
 
     const currentCheck = ctx.skill.checks[step.number - 1];
     const stepNeedsTool = currentCheck?.type.kind === "number";
     if (stepNeedsTool) {
       tools.checkCompliance = tool({
-        description: "Run a numerical compliance check. Provide the extracted value, the constraint limit, and the comparison operator. Optionally pass rounding (number of decimal places) to round the value before comparing.",
+        description: "Run a numerical compliance check. Provide the extracted value, the constraint limit, and the comparison operator. Optionally pass rounding to round the value before comparing.",
         inputSchema: ComplianceCheckSchema,
         execute: async (input) => {
           const { value, limit, operator, rounding } = input as {
@@ -70,22 +79,9 @@ export async function executeLlmToolStep(
       });
     }
 
-    logPipeline(`  [LLM+TOOL] step=${step.number} calling streamText with ${Object.keys(tools).length} tool(s)`);
-
-    let toolCalled = false;
-
-    const perCheckResults: {
-      name: string;
-      value: number;
-      limit: number | string;
-      comparison: string;
-      status: "pass" | "fail";
-      note?: string;
-    }[] = [];
-
     const attentionQuery = revisionContext?.userFeedback ?? step.attention ?? step.title.replace(/^Evaluate: /, "");
     const fileChunks = ctx.files.searchRelevantChunks(ctx.sessionId, attentionQuery);
-    logPipeline(`  [LLM+TOOL] step=${step.number} attentionQuery="${attentionQuery}" fileChunks=${fileChunks.length}chars containsAvailableChunks=${fileChunks.includes("Uploaded Files")} startsWith=${JSON.stringify(fileChunks.slice(0, 100))}`);
+    logPipeline(`  [LLM+TOOL] step=${step.number} attentionQuery="${attentionQuery}" fileChunks=${fileChunks.length}chars`);
 
     const dependencyContext = buildDependencyContext(ctx, step.number);
     const userMessage = buildUserMessage(
@@ -106,16 +102,25 @@ export async function executeLlmToolStep(
         : undefined
     );
 
-    logPipeline(`  [LLM+TOOL] step=${step.number} FINAL PROMPT: systemPrompt=${systemPrompt.length}chars userMessage=${userMessage.length}chars includesFileChunks=${userMessage.includes("Available Chunks") || userMessage.includes("Uploaded Files")} userMessagePreview=${JSON.stringify(userMessage.slice(0, 200))}`);
+    logPipeline(`  [LLM+TOOL] step=${step.number} FINAL PROMPT: systemPrompt=${systemPrompt.length}chars userMessage=${userMessage.length}chars`);
+
+    let accumulatedPromptTokens = 0;
+    let accumulatedCompletionTokens = 0;
 
     const result = streamText({
       model: createModel({ cache: true }),
       system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],
       tools: Object.keys(tools).length > 0 ? tools : undefined,
+      maxSteps: 15,
+      abortSignal: abortController.signal,
       ...(step.temperature !== undefined ? { temperature: step.temperature } : {}),
       onStepFinish: (event) => {
-        logPipeline(`  [LLM+TOOL] step=${step.number} onStepFinish: toolResults=${event.toolResults?.length ?? 0} textLen=${(event.text ?? "").length}`);
+        if (event.usage) {
+          accumulatedPromptTokens += event.usage.promptTokens;
+          accumulatedCompletionTokens += event.usage.completionTokens;
+        }
+        logPipeline(`  [LLM+TOOL] step=${step.number} onStepFinish: toolResults=${event.toolResults?.length ?? 0}`);
         if (!event.toolResults?.length) return;
         for (const tr of event.toolResults) {
           const input = tr.input as { value: number; limit: number | string; operator: string };
@@ -149,84 +154,41 @@ export async function executeLlmToolStep(
     });
 
     const tokens: string[] = [];
-    for await (const token of result.textStream) {
-      tokens.push(token);
+    try {
+      for await (const token of result.textStream) {
+        tokens.push(token);
+      }
+    } finally {
+      clearTimeout(llmTimeout);
     }
+
     const fullText = tokens.join("");
-    const { inputTokens, outputTokens } = await result.usage;
+    const finalUsage = await result.usage;
 
-    logPipeline(`  [LLM+TOOL] step=${step.number} finalText=${fullText.length}chars preview=${truncate(fullText, 150)}`);
+    const inputTokens = accumulatedPromptTokens || finalUsage?.promptTokens || 0;
+    const outputTokens = accumulatedCompletionTokens || finalUsage?.completionTokens || 0;
 
-    const textResults = ctx.skill.checks.length > 0
-      ? extractCheckResultsFromText(fullText, ctx.skill.checks, step.number)
-      : [];
+    logPipeline(`  [LLM+TOOL] step=${step.number} fullText=${fullText.length}chars preview=${truncate(fullText, 150)}`);
 
-    if (toolCalled) {
-      const run = perCheckResults[0];
-      const palette = ctx.palette.getCitationPalette();
-      const narrative = textResults.find(tr => tr.name === currentCheck?.field);
-      const clause = currentCheck?.clause ?? "";
-
-      const citRef = narrative?.citationRef && narrative.citationRef.length > 0
-        ? narrative.citationRef
-        : resolveCitationRef(palette, clause);
-      let srcCit = narrative?.sourceCitation ?? [];
-
-      if (!narrative?.citationRef || narrative.citationRef.length === 0) {
-        logPipeline(`  [LLM+TOOL] ⚠ step ${step.number}: citationRef empty for "${currentCheck?.field}" — fell back to clause "${clause}"`);
-      }
-
-      if (!narrative || srcCit.length === 0) {
-        const extracted = fileChunks ? extractChunkIdsFromFileChunks(fileChunks) : [];
-        if (extracted.length > 0) {
-          srcCit = extracted;
-          logPipeline(`  [LLM+TOOL] ⚠ step ${step.number}: sourceCitation empty for "${currentCheck?.field}" — backfilled from available chunks: ${extracted.join(", ")}`);
-        }
-      }
-
-      if (!narrative?.sourceCitation || narrative.sourceCitation.length === 0) {
-        if (srcCit.length === 0) {
-          logPipeline(`  [LLM+TOOL] ⚠ step ${step.number}: sourceCitation empty for "${currentCheck?.field}" and no chunks available`);
-        }
-      }
-
-      ctx.checks.addResults([{
-        name: currentCheck?.field ?? "check",
-        type: "numerical" as const,
-        finding: narrative?.finding ?? `${currentCheck?.field}: ${run!.value} ${run!.comparison} → ${run!.status}`,
-        verdict: run!.status === "pass" ? ("PASS" as const) : ("FAIL" as const),
-        citationRef: citRef,
-        sourceCitation: srcCit,
-        toolResult: {
-          value: run!.value,
-          limit: run!.limit as number,
-          comparison: run!.comparison,
-          status: run!.status,
-        },
-      }]);
-      logPipeline(`  [LLM+TOOL] merged CheckResult from tool + narrative for "${currentCheck?.field}"`);
-    } else if (textResults.length > 0) {
-      for (const result of textResults) {
-        if (result.citationRef.length === 0) {
-          const clause = currentCheck?.clause;
-          if (clause) {
-            logPipeline(`  [LLM] ⚠ step ${step.number}: citationRef empty for "${result.name}" — filling from check clause "${clause}"`);
-            result.citationRef = [clause];
-          } else {
-            logPipeline(`  [LLM] ⚠ step ${step.number}: citationRef empty for "${result.name}" and no clause available`);
-          }
-        }
-        if (result.sourceCitation.length === 0) {
-          logPipeline(`  [LLM] ⚠ step ${step.number}: sourceCitation empty for "${result.name}"`);
-        }
-      }
-      ctx.checks.addResults(textResults);
-      logPipeline(`  [LLM+TOOL] extracted ${textResults.length} CheckResult(s) from LLM text output`);
-    } else if (fullText) {
-      logPipeline(`  [LLM+TOOL] ⚠ step ${step.number}: LLM produced text but no parseable JSON results`);
-    } else {
-      logPipeline(`  [LLM+TOOL] ⚠ step ${step.number}: no tool calls and no text output — check may be missing`);
+    const finalObject = parseLlmOutput(fullText);
+    if (!finalObject) {
+      logPipeline(`  [LLM+TOOL] ⚠ step ${step.number}: no parseable JSON`);
+      return {
+        success: false,
+        error: `Step ${step.number}: LLM output not parseable. Full text: ${truncate(fullText, 300)}`,
+        errorCode: "JSON_PARSE_FAILED",
+      };
     }
+
+    const checkResult = buildCheckResult({
+      finalObject,
+      toolCalled,
+      perCheckResults,
+      ctx,
+      step,
+      fileChunks,
+    });
+    ctx.checks.addResults([checkResult]);
 
     storeOutput(ctx, step.number, fullText);
     return {
@@ -250,79 +212,7 @@ export async function executeLlmToolStep(
 
 // ── Helpers ──
 
-function storeOutput(ctx: PipelineContext, stepNumber: number, text: string): void {
-  let trimmed = text.trim();
-  const fenceMatch = trimmed.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/);
-  if (fenceMatch) trimmed = fenceMatch[1]!.trim();
-  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-    try {
-      ctx.steps.write(stepNumber, JSON.parse(trimmed));
-    } catch {
-      ctx.steps.write(stepNumber, trimmed);
-    }
-  } else {
-    ctx.steps.write(stepNumber, trimmed);
-  }
-}
-
-function resolveCitationRef(_palette: readonly CitationPaletteEntry[], clause: string): string[] {
-  if (!clause) return [];
-  return [clause];
-}
-
-/**
- * Format regulation summaries into a stable section for the system prompt.
- * Identical across all steps — enables DeepSeek context caching.
- */
-function formatRegulationSection(ctx: PipelineContext): string {
-  const parts: string[] = [];
-  const summaries = ctx.palette.getSummaries();
-  if (summaries.length > 0) {
-    parts.push("# Available Regulations");
-    for (const s of summaries) {
-      const clauses = s.clauseIndex
-        .map((c) => (c.title ? `\xA7${c.number} — ${c.title}` : `\xA7${c.number}`))
-        .join(", ");
-      parts.push(`${s.code} — ${s.title}\n  Clauses: ${clauses}`);
-    }
-  }
-  return parts.join("\n\n");
-}
-
-/**
- * Build dependency context for a step — only includes previous check results
- * that the current step explicitly depends on (via depends_on).
- * Steps with no dependencies get an empty string (no context overhead).
- */
-function buildDependencyContext(ctx: PipelineContext, stepNumber: number): string {
-  const currentCheck = ctx.skill.checks[stepNumber - 1];
-  if (!currentCheck?.dependsOn) return "";
-
-  const allResults = ctx.checks.getResults();
-  const depField = currentCheck.dependsOn;
-
-  // Find results whose field name starts with the dependency
-  const relevant = allResults.filter((r) => r.name.startsWith(depField));
-  if (relevant.length === 0) return "";
-
-  const lines = relevant.map(
-    (c) => `${c.name}: ${c.verdict} — ${c.finding} [${c.citationRef.join(", ")}]`
-  );
-  return `Dependent Check Results:\n${lines.join("\n")}`;
-}
-
-const CheckFieldEntrySchema = z.object({
-  value: z.string().min(1),
-  sourceCitation: z.array(z.string()),
-  citationRef: z.array(z.string()),
-  verdict: z.string(),
-});
-
-function extractCheckResultsFromText(
-  text: string,
-  checks: ParsedCheck[],
-  stepNumber: number
-): CheckResult[] {
+function parseLlmOutput(text: string): { value: string; sourceCitation: string[]; citationRef: string[]; verdict: string } | null {
   let cleaned = text.trim();
   const startFence = cleaned.indexOf("```");
   if (startFence !== -1) {
@@ -338,38 +228,82 @@ function extractCheckResultsFromText(
   try {
     parsed = JSON.parse(cleaned);
   } catch {
-    return [];
+    return null;
   }
 
-  if (typeof parsed !== "object" || Array.isArray(parsed)) return [];
+  if (typeof parsed !== "object" || Array.isArray(parsed)) return null;
 
-  const checkDef = checks[stepNumber - 1];
-  if (!checkDef) return [];
-
-  const field = checkDef.field;
-  const entry = (parsed as Record<string, unknown>)[field];
-  if (!entry || typeof entry !== "object") return [];
-
-  const e = entry as Record<string, unknown>;
-  const validation = CheckFieldEntrySchema.safeParse(e);
-  if (!validation.success) {
-    logPipeline(`  [LLM] invalid check field entry for "${field}": ${validation.error.message}`);
-    return [];
+  // Try flat format: { value, sourceCitation, citationRef, verdict }
+  if (typeof parsed.value === "string" && typeof parsed.verdict === "string") {
+    return {
+      value: parsed.value,
+      sourceCitation: Array.isArray(parsed.sourceCitation) ? parsed.sourceCitation.filter(s => typeof s === "string") as string[] : [],
+      citationRef: Array.isArray(parsed.citationRef) ? parsed.citationRef.filter(s => typeof s === "string") as string[] : [],
+      verdict: parsed.verdict,
+    };
   }
 
-    const data = validation.data;
-  const verdict = data.verdict.toUpperCase().startsWith("FAIL") ? "FAIL" as const : "PASS" as const;
+  // Fallback: nested format { "field_name": { value, sourceCitation, citationRef, verdict } }
+  const nested = Object.values(parsed).find(
+    (v): v is Record<string, unknown> =>
+      typeof v === "object" && v !== null && typeof (v as Record<string, unknown>).value === "string" && typeof (v as Record<string, unknown>).verdict === "string"
+  );
+  if (nested) {
+    return {
+      value: nested.value as string,
+      sourceCitation: Array.isArray(nested.sourceCitation) ? nested.sourceCitation.filter(s => typeof s === "string") as string[] : [],
+      citationRef: Array.isArray(nested.citationRef) ? nested.citationRef.filter(s => typeof s === "string") as string[] : [],
+      verdict: nested.verdict as string,
+    };
+  }
 
-  if (!data.value) return [];
+  return null;
+}
 
-  return [{
-    name: field,
-    type: checkDef.type.kind === "number" ? "numerical" as const : "qualitative" as const,
-    finding: data.value,
-    verdict,
-    citationRef: data.citationRef,
-    sourceCitation: data.sourceCitation,
-  }];
+function storeOutput(ctx: PipelineContext, stepNumber: number, text: string): void {
+  let trimmed = text.trim();
+  const fenceMatch = trimmed.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/);
+  if (fenceMatch) trimmed = fenceMatch[1]!.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      ctx.steps.write(stepNumber, JSON.parse(trimmed));
+    } catch {
+      ctx.steps.write(stepNumber, trimmed);
+    }
+  } else {
+    ctx.steps.write(stepNumber, trimmed);
+  }
+}
+
+function formatRegulationSection(ctx: PipelineContext): string {
+  const parts: string[] = [];
+  const summaries = ctx.palette.getSummaries();
+  if (summaries.length > 0) {
+    parts.push("# Available Regulations");
+    for (const s of summaries) {
+      const clauses = s.clauseIndex
+        .map((c) => (c.title ? `\xA7${c.number} — ${c.title}` : `\xA7${c.number}`))
+        .join(", ");
+      parts.push(`${s.code} — ${s.title}\n  Clauses: ${clauses}`);
+    }
+  }
+  return parts.join("\n\n");
+}
+
+function buildDependencyContext(ctx: PipelineContext, stepNumber: number): string {
+  const currentCheck = ctx.skill.checks[stepNumber - 1];
+  if (!currentCheck?.dependsOn) return "";
+
+  const allResults = ctx.checks.getResults();
+  const depField = currentCheck.dependsOn;
+
+  const relevant = allResults.filter((r) => r.name.startsWith(depField));
+  if (relevant.length === 0) return "";
+
+  const lines = relevant.map(
+    (c) => `${c.name}: ${c.verdict} — ${c.finding} [${c.citationRef.join(", ")}]`
+  );
+  return `Dependent Check Results:\n${lines.join("\n")}`;
 }
 
 function extractChunkIdsFromFileChunks(fileChunks: string): string[] {
@@ -380,4 +314,86 @@ function extractChunkIdsFromFileChunks(fileChunks: string): string[] {
     ids.add(match[1]!);
   }
   return [...ids];
+}
+
+interface BuildCheckResultParams {
+  finalObject: { value: string; sourceCitation: string[]; citationRef: string[]; verdict: string };
+  toolCalled: boolean;
+  perCheckResults: { name: string; value: number; limit: number | string; comparison: string; status: "pass" | "fail"; note?: string }[];
+  ctx: PipelineContext;
+  step: ExecutableStep;
+  fileChunks: string;
+}
+
+function buildCheckResult(params: BuildCheckResultParams): CheckResult {
+  const { finalObject, toolCalled, perCheckResults, ctx, step, fileChunks } = params;
+  const currentCheck = ctx.skill.checks[step.number - 1];
+  const checkDef = ctx.skill.checks[step.number - 1];
+  const checkName = currentCheck?.field ?? "check";
+  const checkType = checkDef?.type.kind === "number" ? "numerical" as const : "qualitative" as const;
+  const clause = currentCheck?.clause ?? "";
+  const palette = ctx.palette.getCitationPalette();
+
+  const citRef = resolveCitations(finalObject.citationRef, palette, clause);
+  const srcCit = resolveSourceCitations(finalObject.sourceCitation, fileChunks);
+
+  if (toolCalled && perCheckResults.length > 0) {
+    const run = perCheckResults[0];
+    logPipeline(`  [LLM+TOOL] merged CheckResult from tool "${checkName}"`);
+    return {
+      name: checkName,
+      type: "numerical" as const,
+      finding: finalObject.value,
+      verdict: run.status === "pass" ? "PASS" as const : "FAIL" as const,
+      citationRef: citRef,
+      sourceCitation: srcCit,
+      toolResult: {
+        value: run.value,
+        limit: run.limit as number,
+        comparison: run.comparison,
+        status: run.status,
+      },
+    };
+  }
+
+  logPipeline(`  [LLM+TOOL] extracted CheckResult from structured output "${checkName}"`);
+  return {
+    name: checkName,
+    type: checkType,
+    finding: finalObject.value,
+    verdict: finalObject.verdict.toUpperCase().startsWith("FAIL") ? "FAIL" as const : "PASS" as const,
+    citationRef: citRef,
+    sourceCitation: srcCit,
+  };
+}
+
+function resolveCitations(
+  llmRefs: string[],
+  palette: readonly CitationPaletteEntry[],
+  clause: string,
+): string[] {
+  if (llmRefs.length > 0) return llmRefs;
+  const match = palette.find(e => e.clause === clause || e.id === clause);
+  if (match) {
+    logPipeline(`  [LLM+TOOL] ⚠ citationRef empty — fell back to "${match.regulation}"`);
+    return [match.regulation];
+  }
+  if (clause) {
+    logPipeline(`  [LLM+TOOL] ⚠ citationRef empty — using clause "${clause}"`);
+    return [clause];
+  }
+  return [];
+}
+
+function resolveSourceCitations(
+  llmSources: string[],
+  fileChunks: string,
+): string[] {
+  if (llmSources.length > 0) return llmSources;
+  const extracted = fileChunks ? extractChunkIdsFromFileChunks(fileChunks) : [];
+  if (extracted.length > 0) {
+    logPipeline(`  [LLM+TOOL] ⚠ sourceCitation empty — backfilled from chunks: ${extracted.join(", ")}`);
+    return extracted;
+  }
+  return [];
 }

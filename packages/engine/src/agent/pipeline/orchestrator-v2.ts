@@ -304,16 +304,29 @@ async function executeStepWithRetry(
 ): Promise<StepResult> {
   let lastError = "";
   let lastCode = "";
+  let totalPromptTokens = 0;
+  let totalCompletionTokens = 0;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const revisionContext = revisionUserMessage ? { userFeedback: revisionUserMessage } : undefined;
     const result = await executeLlmToolStep(step, ctx, lastError, revisionContext);
-    if (result.success) return result;
+
+    if (result.usage) {
+      totalPromptTokens += result.usage.promptTokens;
+      totalCompletionTokens += result.usage.completionTokens;
+    }
+
+    if (result.success) {
+      return {
+        ...result,
+        usage: { promptTokens: totalPromptTokens, completionTokens: totalCompletionTokens },
+      };
+    }
 
     lastError = result.error ?? "";
     lastCode = result.errorCode ?? "";
     if (attempt < maxRetries) {
-      logPipeline(`  RETRY step=${step.number} attempt=${attempt + 1}/${maxRetries + 1} error="${lastError}"`);
+      logPipeline(`  RETRY step=${step.number} attempt=${attempt + 1}/${maxRetries + 1} tokens=${totalPromptTokens + totalCompletionTokens} error="${lastError}"`);
     }
   }
 
@@ -321,5 +334,6 @@ async function executeStepWithRetry(
     success: false,
     error: `Step ${step.number} failed after ${maxRetries + 1} attempts. Last error: ${lastError}`,
     errorCode: lastCode || "STEP_FAILED",
+    usage: { promptTokens: totalPromptTokens, completionTokens: totalCompletionTokens },
   };
 }

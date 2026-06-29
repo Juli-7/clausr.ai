@@ -29,6 +29,6 @@ function buildFieldInstructions(c: ParsedCheck, regulationIds?: string[]): strin
   }
   if (c.dependsOn) parts.push(`Conditional on: ${c.dependsOn} — check this field's value first`);
   if (c.description) parts.push(`Description: ${c.description}`);
-  if (c.sample) parts.push(`Example output:\n\`\`\`json\n{"${c.field}": {"value": "${c.sample.replace(/"/g, "'")}", "sourceCitation": ["S1.c1", "S1.c2"], "citationRef": ["${c.clause || regulationIds?.[0] || ""}"], "verdict": "PASS"}}\n\`\`\``);
+  if (c.sample) parts.push(`Example output:\n\`\`\`json\n{"value": "${c.sample.replace(/"/g, "'")}", "sourceCitation": ["S1.c1"], "citationRef": ["${c.clause || regulationIds?.[0] || ""}"], "verdict": "PASS"}\n\`\`\``);
   return parts.join("\n");
 }
