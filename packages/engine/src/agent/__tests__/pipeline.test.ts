@@ -31,8 +31,7 @@ import { generateStepsFromChecks } from "../loading/generate-steps";
 import { identifyRevisionTargets } from "../pipeline/revision-phase";
 import { executeLlmToolStep } from "../pipeline/executors/llm-executor";
 import { executeComplianceCheck } from "../pipeline/builtins";
-import { buildSystemPrompt } from "../pipeline/prompts/system";
-import { buildUserMessage } from "../pipeline/prompts/user";
+import { buildSystemPrompt, buildUserMessage } from "../pipeline/prompts";
 import type { ExecutableStep } from "../pipeline/types";
 
 const TEST_DB_DIR = path.join(os.tmpdir(), "clausr-pipeline-test");

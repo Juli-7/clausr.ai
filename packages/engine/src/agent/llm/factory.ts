@@ -1,7 +1,9 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { wrapLanguageModel } from "ai";
 import type { LanguageModel } from "ai";
 import { getConfig } from "./config";
+import { createDeepSeekFetch } from "./deepseek";
 
 export type ProviderName = "openai" | "anthropic" | "deepseek";
 
@@ -10,6 +12,10 @@ interface ProviderConfig {
   apiKey: string;
   baseURL: string;
   model: string;
+}
+
+export interface CreateModelOptions {
+  cache?: boolean;
 }
 
 const DEFAULT_CONFIGS: Record<ProviderName, { baseURL: string }> = {
@@ -43,63 +49,12 @@ function getProviderConfig(): ProviderConfig {
   return { provider, apiKey, baseURL, model };
 }
 
-/**
- * Custom fetch wrapper for DeepSeek's `reasoning_content` requirement.
- *
- * DeepSeek `deepseek-v4-flash` returns `reasoning_content` on assistant messages with
- * tool_calls, and requires it present on subsequent requests. The @ai-sdk/openai SDK
- * doesn't include `reasoning_content` in its message format, so we add it to outgoing
- * requests to keep DeepSeek's validation happy. The actual content is discarded since
- * we don't display it — this just satisfies the transport requirement.
- */
-function deepseekFetch(originalFetch: typeof fetch): typeof fetch {
-  return async (input, init) => {
-    const url = typeof input === "string" ? input : input instanceof Request ? input.url : "";
-    const isChatCompletion = url.includes("/chat/completions");
-
-    // Log request (truncated)
-    if (isChatCompletion && init && typeof init.body === "string") {
-      try {
-        const body = JSON.parse(init.body);
-        const toolCall = body.messages?.filter((m: any) => m.role === "assistant").some((m: any) => m.tool_calls);
-        if (toolCall || body.messages?.some((m: any) => m.role === "tool")) {
-          console.log(`DeepSeek request: ${body.messages?.length} msgs, tool_calls=${toolCall}, stream=${body.stream}`);
-          console.log("  messages:", JSON.stringify(body.messages?.map((m: any) => ({ role: m.role, tool_calls: !!m.tool_calls, content_len: (m.content || "").length, tool_result: m.role === "tool" ? (m.content || "").substring(0, 100) : undefined }))));
-        }
-      } catch (e) {}
-    }
-
-    // Add reasoning_content placeholder to assistant messages with tool_calls
-    if (isChatCompletion && init && typeof init.body === "string") {
-      try {
-        const body = JSON.parse(init.body);
-        let modified = false;
-        for (const msg of body.messages) {
-          if (msg.role === "assistant" && msg.tool_calls && !("reasoning_content" in msg)) {
-            msg.reasoning_content = "";
-            modified = true;
-          }
-        }
-        if (modified) {
-          init = { ...init, body: JSON.stringify(body) };
-        }
-      } catch (e) {
-        console.warn("Failed to inject reasoning_content into DeepSeek request", e);
-      }
-    }
-
-    return originalFetch(input, init);
-  };
-}
-
-export function createModel(): LanguageModel {
-  const config = getProviderConfig();
-
+function buildBaseModel(config: ProviderConfig): LanguageModel {
   if (config.provider === "deepseek") {
     const client = createOpenAI({
       apiKey: config.apiKey,
       baseURL: config.baseURL,
-      fetch: deepseekFetch(fetch),
+      fetch: createDeepSeekFetch(fetch),
     });
     return client.chat(config.model);
   }
@@ -114,4 +69,31 @@ export function createModel(): LanguageModel {
     baseURL: config.baseURL,
   });
   return client.chat(config.model);
+}
+
+function applyCaching(model: LanguageModel, provider: ProviderName): LanguageModel {
+  if (provider !== "anthropic") return model;
+
+  return wrapLanguageModel({
+    model,
+    middleware: {
+      transformInput: async ({ input }) => ({
+        ...input,
+        providerMetadata: {
+          anthropic: { cacheControl: { type: "ephemeral" } },
+        },
+      }),
+    },
+  });
+}
+
+export function createModel(options?: CreateModelOptions): LanguageModel {
+  const config = getProviderConfig();
+  const model = buildBaseModel(config);
+
+  if (options?.cache) {
+    return applyCaching(model, config.provider);
+  }
+
+  return model;
 }

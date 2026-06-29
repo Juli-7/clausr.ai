@@ -121,6 +121,12 @@ export function deleteChunksBySession(sessionId: string): void {
   try { db.prepare("DELETE FROM chunk_fts WHERE session_id = ?").run(sessionId); } catch { /* no FTS5 */ }
 }
 
+export function deleteChunksByFile(sessionId: string, fileId: string): void {
+  const db = getDb();
+  db.prepare("DELETE FROM chunk_store WHERE session_id = ? AND file_id = ?").run(sessionId, fileId);
+  try { db.prepare("DELETE FROM chunk_fts WHERE session_id = ? AND file_id = ?").run(sessionId, fileId); } catch { /* no FTS5 */ }
+}
+
 export interface Fts5Result {
   fileId: string;
   chunkIdx: number;
@@ -221,7 +227,11 @@ export function getResponseCount(sessionId: string): number {
 
 export function saveFileChunks(sessionId: string, chunksJson: string): void {
   const db = getDb();
-  db.prepare("UPDATE sessions SET file_chunks = ? WHERE id = ?").run(chunksJson, sessionId);
+  const incoming: { fileId: string; filename: string }[] = JSON.parse(chunksJson);
+  const existing: { fileId: string; filename: string }[] = JSON.parse(getFileChunks(sessionId));
+  const incomingIds = new Set(incoming.map((f) => f.fileId));
+  const merged = [...existing.filter((f) => !incomingIds.has(f.fileId)), ...incoming];
+  db.prepare("UPDATE sessions SET file_chunks = ? WHERE id = ?").run(JSON.stringify(merged), sessionId);
 }
 
 export function getFileChunks(sessionId: string): string {

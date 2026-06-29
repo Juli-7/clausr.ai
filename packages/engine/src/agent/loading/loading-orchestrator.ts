@@ -1,6 +1,5 @@
 import { initSession } from "../loading/phases/init-phase";
 import { inputPhase } from "../loading/phases/input-phase";
-import { skillGenPhase } from "../loading/phases/skill-gen-phase";
 import { generateStepsFromChecks } from "../loading/generate-steps";
 import { createPipelineContext, restoreContext } from "../pipeline/pipeline-context";
 import { generateCorrelationId } from "../pipeline/errors";
@@ -101,28 +100,20 @@ export async function processSessionFiles(params: ProcessFilesParams): Promise<v
 
 // ── Original atomic setupSession (unchanged, uses same internal phases) ──
 
-export async function setupSession(params: SetupSessionParams): Promise<{ correlationId: string; autoSkillUsage?: { promptTokens: number; completionTokens: number } }> {
+export async function setupSession(params: SetupSessionParams): Promise<{ correlationId: string }> {
   const correlationId = generateCorrelationId();
   logPipeline(`=== SETUP START === skill="${params.skillName ?? "(auto)"}" session="${params.sessionId}"`);
 
-  const { skill, isAutoSkill } = await initSession(params.skillName, params.sessionId, params.tenantId, params.userId, params.userEmail);
+  const { skill } = await initSession(params.skillName, params.sessionId, params.tenantId, params.userId, params.userEmail);
 
   const ctx = createPipelineContext(
     skill.name, skill.skillmd, params.sessionId, correlationId,
     skill.checks, skill.scripts, skill.regulationIds,
   );
 
-  let fileTexts: string[] = [];
   if (params.files && params.files.length > 0) {
     logPipeline(`[SETUP] processing ${params.files.length} file(s)`);
-    fileTexts = await inputPhase(ctx, { files: params.files, sessionId: params.sessionId });
-  }
-
-  let autoSkillUsage: { promptTokens: number; completionTokens: number } | undefined;
-  if (isAutoSkill) {
-    if (!params.message) throw new Error("Auto-skill requires a 'message' describing what to assess");
-    logPipeline("[SETUP] generating auto-skill from user message + file texts");
-    autoSkillUsage = await skillGenPhase(ctx, params.message, fileTexts);
+    await inputPhase(ctx, { files: params.files, sessionId: params.sessionId });
   }
 
   if (params.lessonOverrides && params.lessonOverrides.length > 0) {
@@ -145,5 +136,5 @@ export async function setupSession(params: SetupSessionParams): Promise<{ correl
   });
 
   logPipeline(`=== SETUP DONE === session="${params.sessionId}" cid=${correlationId}`);
-  return { correlationId, autoSkillUsage };
+  return { correlationId };
 }

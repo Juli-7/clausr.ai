@@ -8,6 +8,7 @@ export {
   getChunksByIds,
   getChunksBySession,
   deleteChunksBySession,
+  deleteChunksByFile,
   saveFileChunks,
   getFileChunks,
   addUserMessage,

@@ -109,7 +109,7 @@ export async function executeLlmToolStep(
     logPipeline(`  [LLM+TOOL] step=${step.number} FINAL PROMPT: systemPrompt=${systemPrompt.length}chars userMessage=${userMessage.length}chars includesFileChunks=${userMessage.includes("Available Chunks") || userMessage.includes("Uploaded Files")} userMessagePreview=${JSON.stringify(userMessage.slice(0, 200))}`);
 
     const result = streamText({
-      model: createModel(),
+      model: createModel({ cache: true }),
       system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],
       tools: Object.keys(tools).length > 0 ? tools : undefined,

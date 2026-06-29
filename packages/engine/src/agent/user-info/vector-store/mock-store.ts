@@ -2,7 +2,7 @@ import type { ChunkInfo, IDocStore, ProcessedFile, ProcessFileResult, WordBox } 
 import { extractFileContent } from "../../user-info/extractors";
 import {
   saveChunks,
-  deleteChunksBySession,
+  deleteChunksByFile,
   getChunksByIds,
   getFileChunks,
   saveFileChunks,
@@ -56,7 +56,7 @@ export class MockDocStore implements IDocStore {
     file: { name: string; size: number; type: string; dataUrl?: string },
     sessionId: string
   ): Promise<ProcessFileResult> {
-    deleteChunksBySession(sessionId);
+    deleteChunksByFile(sessionId, file.name);
     const extracted = await extractFileContent(file);
     const chunkIds = saveChunks(sessionId, file.name, extracted.chunks);
     if (file.dataUrl) {
