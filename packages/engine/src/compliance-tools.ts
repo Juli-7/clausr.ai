@@ -1,9 +1,9 @@
 import { z } from "zod";
 import {
   getComplianceSession, setComplianceScope, setComplianceStep,
-  addComplianceDocField, addComplianceFile, clearComplianceAuditResults,
-  setComplianceAuditRunning, setComplianceValidation,
-  hasSessionSetup,
+  addComplianceDocField, addComplianceFile, getComplianceFiles,
+  clearComplianceAuditResults, setComplianceAuditRunning,
+  setComplianceValidation, hasSessionSetup, loadSessionSetup,
 } from "./agent/shared/memory/repository";
 import type { ComplianceFile } from "./agent/shared/memory/repository";
 import { setupSkill, processSessionFiles } from "./agent/loading/loading-orchestrator";
@@ -20,9 +20,9 @@ export type ToolName =
   | "search_packs"
   | "get_pack_details"
   | "recommend_packs"
-  | "get_document_status"
-  | "run_validation"
-  | "get_audit_status";
+  | "get_session_state"
+  | "get_file_content"
+  | "run_validation";
 
 export const ToolSchemas = {
   set_scope: z.object({
@@ -57,9 +57,11 @@ export const ToolSchemas = {
   recommend_packs: z.object({
     productDescription: z.string().describe("Product description"),
   }),
-  get_document_status: z.object({}),
+  get_session_state: z.object({}),
+  get_file_content: z.object({
+    fileName: z.string().describe("Name of the uploaded file to read"),
+  }),
   run_validation: z.object({}),
-  get_audit_status: z.object({}),
 } as const;
 
 export type ToolInput<T extends ToolName> = z.infer<typeof ToolSchemas[T]>;
@@ -226,77 +228,113 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     },
   },
 
-  get_document_status: {
-    name: "get_document_status",
-    description: "Check completeness status for all required documents.",
-    inputSchema: ToolSchemas.get_document_status,
-    logLabel: "Get document status",
+  get_session_state: {
+    name: "get_session_state",
+    description: "Get the full current session state — selected packs, filled fields, uploaded files, audit results, validation.",
+    inputSchema: ToolSchemas.get_session_state,
+    logLabel: "Get session state",
     mutates: false,
     execute: async (sessionId) => {
-      const s = getComplianceSession(sessionId);
-      if (!s) return { error: "Session not found" };
-      const docData = s.docData;
-      const documents = Object.entries(docData).map(([docType, fields]) => {
-        const filled = Object.entries(fields).filter(([, v]) => v?.trim?.()).length;
-        return { docType, totalFields: Object.keys(fields).length, filledFields: filled };
-      });
-      return { documents };
+      const session = buildSession(sessionId);
+      if (!session) return { error: "Session not found" };
+      return session as Record<string, unknown>;
+    },
+  },
+
+  get_file_content: {
+    name: "get_file_content",
+    description: "Read extracted text content from an uploaded file.",
+    inputSchema: ToolSchemas.get_file_content,
+    logLabel: "Get file content",
+    mutates: false,
+    execute: async (sessionId, input) => {
+      const { fileName } = input as { fileName: string };
+
+      // Try processed file registry first
+      const setup = loadSessionSetup(sessionId);
+      if (setup) {
+        const entry = setup.fileRegistry.find((f) => f.filename === fileName);
+        if (entry?.extractedText) {
+          return { fileName, extractedText: entry.extractedText, source: "processed" };
+        }
+      }
+
+      // Fall back to raw base64 from file list
+      const files = getComplianceFiles(sessionId);
+      const file = files.find((f) => f.name === fileName);
+      if (file?.dataUrl) {
+        const b64 = file.dataUrl.split(",")[1] ?? "";
+        const raw = typeof Buffer !== "undefined" ? Buffer.from(b64, "base64").toString("utf-8") : "";
+        const truncated = raw.length > 5000 ? raw.slice(0, 5000) + "\n...(truncated)" : raw;
+        return { fileName, extractedText: truncated, source: "raw-base64" };
+      }
+
+      return { error: `File "${fileName}" not found` };
     },
   },
 
   run_validation: {
     name: "run_validation",
-    description: "Run document readiness validation checks.",
+    description: "Check document completeness — verify all required fields are filled and files uploaded. Not a compliance audit.",
     inputSchema: ToolSchemas.run_validation,
     logLabel: "Run validation",
     mutates: true,
     execute: async (sessionId) => {
-      await ensureSetup(sessionId);
-      const session = buildSession(sessionId);
-      if (!session) return { error: "Session not found" };
+      const s = getComplianceSession(sessionId);
+      if (!s) return { error: "Session not found" };
 
-      if (session.uploadedFiles.length > 0) {
-        const files = session.uploadedFiles
-          .filter((f) => f.dataUrl)
-          .map((f) => ({
-            name: f.name, size: parseInt(f.size) || 0,
-            type: f.dataUrl?.split(";")[0]?.split(":")[1] || "application/octet-stream",
-            dataUrl: f.dataUrl,
-          }));
-        try { await processSessionFiles({ sessionId, files }); }
-        catch { /* processing may fail */ }
+      // Process any uploaded files
+      const uploadedFiles = getComplianceFiles(sessionId);
+      if (uploadedFiles.length > 0) {
+        await ensureSetup(sessionId);
+        const files = uploadedFiles.filter((f) => f.dataUrl).map((f) => ({
+          name: f.name, size: parseInt(f.size) || 0,
+          type: f.dataUrl?.split(";")[0]?.split(":")[1] || "application/octet-stream",
+          dataUrl: f.dataUrl ?? "",
+        }));
+        try { await processSessionFiles({ sessionId, files }); } catch { /* non-critical */ }
       }
 
-      const checks = [
-        { id: "V1", title: "Manufacturer name and address provided", status: session.docData["declaration-of-conformity"]?.["manufacturerName"] ? "pass" as const : "fail" as const, note: "" },
-        { id: "V2", title: "Product identification provided", status: session.docData["declaration-of-conformity"]?.["productId"] ? "pass" as const : "fail" as const, note: "" },
-        { id: "V3", title: "Applicable directives listed", status: session.docData["declaration-of-conformity"]?.["directives"] ? "pass" as const : "fail" as const, note: "" },
-        { id: "V4", title: "Harmonized standards referenced", status: session.docData["declaration-of-conformity"]?.["standards"] ? "pass" as const : "fail" as const, note: "" },
-        { id: "V5", title: "Signed declaration uploaded", status: session.uploadedFiles.length > 0 ? "pass" as const : "warn" as const, note: "" },
-      ];
+      const docData = s.docData;
+      const checks: { id: string; title: string; status: "pass" | "warn" | "fail"; note: string }[] = [];
+
+      // For each selected pack, check its required document fields
+      for (const packId of s.selectedPackIds) {
+        const pack = getPack(packId);
+        if (!pack) continue;
+
+        for (const doc of pack.documents) {
+          for (const field of doc.fields) {
+            if (!field.required) continue;
+            const value = docData[doc.type]?.[field.field]?.trim();
+            const filled = !!value;
+            checks.push({
+              id: `${packId}:${doc.type}:${field.field}`,
+              title: `[${pack.title}] ${field.label}`,
+              status: filled ? "pass" : "fail",
+              note: filled ? "" : "Required field is empty",
+            });
+          }
+        }
+      }
+
+      // File upload check — warn if no files
+      if (checks.length > 0) {
+        checks.push({
+          id: "file-upload",
+          title: "Supporting documents uploaded",
+          status: uploadedFiles.length > 0 ? "pass" : "warn",
+          note: uploadedFiles.length > 0 ? `${uploadedFiles.length} file(s) uploaded` : "No files uploaded — interview data works too",
+        });
+      }
+
       const passed = checks.filter((c) => c.status === "pass").length;
-      const score = Math.round((passed / checks.length) * 100);
+      const score = checks.length > 0 ? Math.round((passed / checks.length) * 100) : 100;
       setComplianceValidation(sessionId, checks, score);
       return { checks, score };
     },
   },
 
-  get_audit_status: {
-    name: "get_audit_status",
-    description: "Check current audit progress and results.",
-    inputSchema: ToolSchemas.get_audit_status,
-    logLabel: "Get audit status",
-    mutates: false,
-    execute: async (sessionId) => {
-      const s = getComplianceSession(sessionId);
-      if (!s) return { error: "Session not found" };
-      return {
-        running: s.auditRunning, done: s.auditDone,
-        resultsCount: s.auditResults.length,
-        totalChecks: s.auditResults.reduce((acc, r) => acc + r.items.length, 0),
-      };
-    },
-  },
 };
 
 export function getTool(name: string) {
@@ -305,6 +343,6 @@ export function getTool(name: string) {
 
 export function getStepTools(step: 1 | 2 | 3): ToolName[] {
   if (step === 1) return ["search_packs", "get_pack_details", "recommend_packs", "set_scope", "change_step"];
-  if (step === 2) return ["update_doc_field", "get_document_status", "run_validation", "attach_file", "change_step"];
-  return ["get_audit_status", "start_audit", "export_document", "change_step"];
+  if (step === 2) return ["update_doc_field", "get_session_state", "get_file_content", "run_validation", "attach_file", "change_step"];
+  return ["get_session_state", "start_audit", "export_document", "change_step"];
 }
