@@ -29,7 +29,7 @@ export function saveChunks(
 ): string[] {
   const db = getDb();
   const stmt = db.prepare(
-    "INSERT INTO chunk_store (id, session_id, file_id, text, chunk_html, page_number, bbox_json, word_boxes_json, page_width, page_height, ocr_confidence, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    "INSERT OR REPLACE INTO chunk_store (id, session_id, file_id, text, chunk_html, page_number, bbox_json, word_boxes_json, page_width, page_height, ocr_confidence, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
   );
   const ids: string[] = [];
   const insert = db.transaction(() => {
@@ -710,7 +710,12 @@ export function addComplianceFile(sessionId: string, file: ComplianceFile): void
   const session = getComplianceSession(sessionId);
   if (!session) return;
   const existing = safeJsonParse(getSessionFiles(sessionId), []) as ComplianceFile[];
-  existing.push(file);
+  const idx = existing.findIndex((f) => f.name === file.name);
+  if (idx >= 0) {
+    existing[idx] = file;
+  } else {
+    existing.push(file);
+  }
   saveSessionFiles(sessionId, JSON.stringify(existing));
 }
 
