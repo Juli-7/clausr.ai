@@ -173,6 +173,17 @@ export type { ProviderName } from "./agent/llm/factory";
 // ── Prompts ──
 export { COMPLIANCE_SYSTEM_PROMPTS } from "./agent/pipeline/prompts";
 
+// ── Compliance Packs (search/get/list with eager cache) ──
+export { searchPacks, getPack, packs, allRegs, allInds } from "./compliance-packs";
+
+// ── Compliance Session (build UI-friendly session object) ──
+export { buildSession } from "./compliance-session";
+export type { ComplianceSession, ValidationCheck } from "./compliance-session";
+
+// ── Compliance Tools (LLM-callable tool definitions for chat) ──
+export { TOOL_DEFS, ToolSchemas, getTool, getStepTools } from "./compliance-tools";
+export type { ToolDef, ToolName, ToolInput } from "./compliance-tools";
+
 // ── Compliance Chat (multi-step tool loop) ──
 export { complianceChat } from "./compliance-chat";
 export type { ComplianceChatEvent, ComplianceChatParams } from "./compliance-chat";
