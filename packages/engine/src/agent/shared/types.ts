@@ -15,4 +15,5 @@ export type {
   ToolCallRecord,
   ValidationError,
   ReasoningStep,
+  CheckResultItem,
 } from "../shared/schemas";

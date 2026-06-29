@@ -23,29 +23,14 @@ You are an expert in executing information handling jobs in general.
 
 # Instructions
 - Retrieve relevant chunks according to the step description provided in the user's message.
-- You MUST output the JSON format specified in # Output Format below — this is always required.
-- For numerical steps: output the JSON FIRST with your narrative assessment, source chunk references, and regulation citation. Put "PASS" as a preliminary verdict — the final verdict is determined by the compliance-check tool result. The JSON output is always required regardless of tool calls.
-- Output ONLY the JSON format — do not write any prose outside the JSON block.
+- Your output must include: value (narrative assessment with citation markers), sourceCitation (chunk IDs), citationRef (regulation references), verdict (PASS or FAIL).
+- For qualitative steps: assess the evidence and output your finding and final verdict.
+- For numerical steps: assess the extracted value against any provided constraints and determine the verdict directly.
+- \`citationRef\`: use EXACT regulation IDs from Available Citations (e.g., "R48.5.11")
+- \`sourceCitation\`: use EXACT chunk IDs from Available Chunks (e.g., ["S1.c3"])
 
 ${regulationSection}
-${retryContext}
-
-# Output Format
-\`\`\`json
-{"{step_name}": {"value": "narrative assessment with citation markers like [S1.c1] and [R48.5.11]", "sourceCitation": ["S1.c1", "S1.c2"], "citationRef": ["R48.5.11"], "verdict": "PASS"}}
-\`\`\`
-
-The JSON MUST include all fields:
-- value: string — your narrative assessment with citation markers like [S1.c1] and [R48.5.11]
-- sourceCitation: string[] — at least one source chunk reference (e.g., ["S1.c3"])
-- citationRef: string[] — at least one exact regulation reference (e.g., ["R48.5.11"])
-- verdict: string — "PASS" or "FAIL"
-
-# Citation Format
-Every field entry MUST include citations — NEVER leave citationRef or sourceCitation empty:
-- \`citationRef\`: regulation references — use the EXACT IDs from Available Citations (e.g., "R48.5.11")
-- \`sourceCitation\`: source chunk IDs — use the EXACT chunk IDs from Available Chunks (e.g., ["S1.c3"])
-If the check does not specify a particular clause, cite the most relevant regulation clause from the Available Regulations section above.`;
+${retryContext}`;
 }
 
 export function buildUserMessage(
@@ -156,7 +141,7 @@ For each inferred check, you must determine all of the following fields. Here is
 
 Critically: the report may not explicitly state fields. You must look at what the report evaluates (e.g. "The controller was identified as required" → this is a boolean check on controller_identified). Be thorough — capture every compliance requirement the report touches.
 
-Output a structured list of inferred checks with all 8 points above for each.`;
+Output a structured list of inferred checks with all 9 points above for each.`;
 
 export const GENERATION_PROMPT = `You are a compliance assessment skill designer. Given sample documents, regulation reference documents, a reference compliance report, and an analysis of the checks inferred from that report, build a complete SKILL.md file.
 

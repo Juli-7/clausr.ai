@@ -51,6 +51,19 @@ export async function finalizePhase(
     if (!clauseTexts[key]) clauseTexts[key] = entry.text;
   }
 
+  const checkResults = [...ctx.checks.getResults()].sort((a, b) => {
+    const ai = ctx.skill.checks.findIndex((c) => c.field === a.name);
+    const bi = ctx.skill.checks.findIndex((c) => c.field === b.name);
+    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+  }).map((r) => ({
+    name: r.name,
+    type: r.type,
+    finding: r.finding,
+    verdict: r.verdict,
+    citationRef: r.citationRef,
+    sourceCitation: r.sourceCitation,
+  }));
+
   const responseData: Record<string, unknown> = {
     content: formatContent(ctx.steps.entries(), ctx.skill.checks, ctx.checks.getResults(), ctx.palette.getCitationPalette()),
     reasoning: result.reason,
@@ -58,22 +71,10 @@ export async function finalizePhase(
     sourceCitations: result.sourceCitations.length > 0 ? result.sourceCitations : undefined,
     round,
     sessionId,
+    checkResults,
     sections: {
       findings: result.findings,
-      _checkResults: JSON.stringify(
-        [...ctx.checks.getResults()].sort((a, b) => {
-          const ai = ctx.skill.checks.findIndex((c) => c.field === a.name);
-          const bi = ctx.skill.checks.findIndex((c) => c.field === b.name);
-          return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-        }).map((r) => ({
-          name: r.name,
-          type: r.type,
-          finding: r.finding,
-          verdict: r.verdict,
-          citationRef: r.citationRef,
-          sourceCitation: r.sourceCitation,
-        }))
-      ),
+      _checkResults: JSON.stringify(checkResults),
     },
     clauseTexts: Object.keys(clauseTexts).length > 0 ? clauseTexts : undefined,
   };
@@ -101,22 +102,15 @@ export async function finalizePhase(
   addAssistantResponse(sessionId, agentResponse);
 
   // Persist structured check results for compliance sessions
-  const sections = responseData.sections as Record<string, unknown> | undefined;
-  const checkResultsRaw = sections?._checkResults;
-  if (typeof checkResultsRaw === "string") {
-    try {
-      const raw = JSON.parse(checkResultsRaw) as { name: string; type: string; finding?: string; verdict?: string }[];
-      const items = raw.map((cr) => ({
-        name: cr.name,
-        desc: cr.type,
-        status: "done" as const,
-        statusLabel: cr.verdict || (cr.finding && cr.finding !== "missing" ? "PASS" : "FAIL"),
-        checks: [] as { name: string; pass: boolean }[],
-      }));
-      if (items.length > 0 && ctx.skill?.name) {
-        setCompliancePackAuditResult(sessionId, ctx.skill.name, items);
-      }
-    } catch { /* non-critical */ }
+  if (checkResults.length > 0 && ctx.skill?.name) {
+    const items = checkResults.map((cr) => ({
+      name: cr.name,
+      desc: cr.type,
+      status: "done" as const,
+      statusLabel: cr.verdict || (cr.finding && cr.finding !== "missing" ? "PASS" : "FAIL"),
+      checks: [] as { name: string; pass: boolean }[],
+    }));
+    setCompliancePackAuditResult(sessionId, ctx.skill.name, items);
   }
 
   logPipeline(`=== PIPELINE DONE === round=${round}`);

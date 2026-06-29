@@ -85,6 +85,17 @@ export const ConfidenceSchema = z.object({
   needsExpert: z.boolean(),
 });
 
+export const CheckResultItemSchema = z.object({
+  name: z.string(),
+  type: z.string(),
+  finding: z.string(),
+  verdict: z.string(),
+  citationRef: z.array(z.string()).optional(),
+  sourceCitation: z.array(z.string()).optional(),
+});
+
+export type CheckResultItem = z.infer<typeof CheckResultItemSchema>;
+
 export const AgentResponseSchema = z.object({
   content: z.string(),
   reasoning: z.string(),
@@ -100,6 +111,7 @@ export const AgentResponseSchema = z.object({
   claims: z.array(ClaimSchema).optional(),
   confidence: ConfidenceSchema.optional(),
   validationErrors: z.array(ValidationErrorSchema).optional(),
+  checkResults: z.array(CheckResultItemSchema).optional(),
   sections: z.record(
     z.string(),
     z.union([z.record(z.string(), z.string()), z.string()])

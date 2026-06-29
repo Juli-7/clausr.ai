@@ -12,6 +12,7 @@ export {
   saveFileChunks,
   getFileChunks,
   addUserMessage,
+  addAssistantMessage,
   addAssistantResponse,
   getConversationHistory,
   getResponseCount,
@@ -56,6 +57,7 @@ export {
   clearComplianceAuditResults,
   setCompliancePrecheckDone,
   setCompliancePackAuditResult,
+  setComplianceValidation,
   setComplianceAgentResponse,
   setComplianceComments,
   getComplianceComments,
@@ -78,6 +80,7 @@ export {
   ToolCallRecordSchema,
   ReasoningStepSchema,
   LessonSchema,
+  CheckResultItemSchema,
   parseChunkRef,
 } from "./agent/shared/schemas";
 
@@ -122,11 +125,8 @@ export type {
 
 // ── Loading / Setup ──
 export { setupSession, setupSkill, processSessionFiles } from "./agent/loading/loading-orchestrator";
-export { loadPack, listPacks } from "./agent/loading/pack-from-skill";
-export type { SkillPack, PackCheck, DocumentTemplate, DocumentField, LoadPackOptions } from "./agent/loading/pack-from-skill";
-export type { SetupSessionParams, ProcessFilesParams } from "./agent/loading/loading-orchestrator";
-export { loadSkill, saveSkillToFs, deleteSkillFromFs } from "./agent/loading/skill/loader";
-export type { SkillLoader } from "./agent/loading/skill/loader";
+export { loadPack, listPacks, loadSkill, saveSkillToFs, deleteSkillFromFs } from "./agent/loading/skill/loader";
+export type { SkillPack, PackCheck, DocumentTemplate, DocumentField, LoadPackOptions, SkillLoader } from "./agent/loading/skill/loader";
 export { parseChecks, extractRedline, extractLessons } from "./agent/loading/skill/check-parser";
 export type { ParsedCheck, CheckFieldType } from "./agent/loading/skill/check-parser";
 export { generateStepsFromChecks } from "./agent/loading/generate-steps";
@@ -176,6 +176,10 @@ export { COMPLIANCE_SYSTEM_PROMPTS } from "./agent/pipeline/prompts";
 // ── Compliance Chat (multi-step tool loop) ──
 export { complianceChat } from "./compliance-chat";
 export type { ComplianceChatEvent, ComplianceChatParams } from "./compliance-chat";
+
+// ── Compliance Audit (async generator for pack-by-pack pipeline) ──
+export { runComplianceAudit } from "./compliance-audit";
+export type { ComplianceAuditEvent } from "./compliance-audit";
 
 // ── Skill Generator ──
 export { generateSkill } from "./skill-generator";
