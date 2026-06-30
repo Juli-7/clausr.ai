@@ -24,7 +24,7 @@ export async function* complianceChat(
   params: ComplianceChatParams
 ): AsyncGenerator<ComplianceChatEvent> {
   const { messages, step, systemPrompt: customPrompt } = params;
-  const systemPrompt = step ? COMPLIANCE_SYSTEM_PROMPTS[step] : customPrompt;
+  const systemPrompt = customPrompt ?? (step ? COMPLIANCE_SYSTEM_PROMPTS[step] : undefined);
   if (!systemPrompt) {
     yield { type: "error", error: step ? `No system prompt for step ${step}` : "systemPrompt is required when step is not provided" };
     return;

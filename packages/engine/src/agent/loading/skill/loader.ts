@@ -39,6 +39,8 @@ export interface SkillPack {
   methodology: string;
   checks: PackCheck[];
   documents: DocumentTemplate[];
+  redlines: string[];
+  lessons: string[];
 }
 
 export interface SkillLoader {
@@ -49,6 +51,8 @@ export interface SkillLoader {
   scripts: { name: string; path: string; desc: string; params: string }[];
   checks: ParsedCheck[];
   regulationIds: string[];
+  redlines: string[];
+  lessons: string[];
   hasTemplate: boolean;
 }
 
@@ -59,13 +63,17 @@ export interface LoadPackOptions {
 interface PackFileData {
   pack?: {
     title?: string;
+    description?: string;
     industries?: string[];
     icon?: string;
     version?: string;
     author?: string;
     methodology?: string;
+    regulation_ids?: string[];
+    triggers?: string[];
   };
-  skillmd?: string;
+  redlines?: string[];
+  lessons?: string[];
   checks?: ParsedCheck[];
   documents?: Record<string, unknown>[];
 }
@@ -102,6 +110,41 @@ function loadDocuments(docList: Record<string, unknown>[] | undefined): Document
   }));
 }
 
+function buildSkillmd(checks: ParsedCheck[], redlines: string[], lessons: string[]): string {
+  const sections: string[] = [];
+
+  if (checks.length > 0) {
+    const checkBlocks = checks.map((c) => {
+      const lines: string[] = [`### ${c.field}`];
+      let idx = 1;
+      if (c.type.kind === "enum") {
+        lines.push(`${idx++}. **type**: enum(${c.type.values?.join(", ") ?? ""})`);
+      } else {
+        lines.push(`${idx++}. **type**: ${c.type.kind}`);
+      }
+      if (c.description) lines.push(`${idx++}. **description**: ${c.description}`);
+      if (c.clause) lines.push(`${idx++}. **clause**: ${c.clause}`);
+      if (c.sample) lines.push(`${idx++}. **sample**: ${c.sample}`);
+      if (c.constraint) lines.push(`${idx++}. **constraint**: ${c.constraint}`);
+      if (c.dependsOn) lines.push(`${idx++}. **depends_on**: ${c.dependsOn}`);
+      if (c.attention) lines.push(`${idx++}. **attention**: ${c.attention}`);
+      if (c.rounding) lines.push(`${idx++}. **rounding**: ${c.rounding}`);
+      return lines.join("\n");
+    });
+    sections.push("## Checks\n\n" + checkBlocks.join("\n\n"));
+  }
+
+  if (redlines.length > 0) {
+    sections.push("## Red Lines\n\n" + redlines.map((r) => `- ❌ ${r}`).join("\n"));
+  }
+
+  if (lessons.length > 0) {
+    sections.push("## Lessons Learnt\n\n" + lessons.map((l) => `- ${l}`).join("\n"));
+  }
+
+  return sections.join("\n\n");
+}
+
 // ── Pack (marketplace) functions ──
 
 export function loadPack(packName: string, options?: LoadPackOptions): SkillPack | null {
@@ -110,29 +153,33 @@ export function loadPack(packName: string, options?: LoadPackOptions): SkillPack
   const skillPath = path.join(packDir, "SKILL.md");
   if (!fs.existsSync(skillPath)) return null;
 
-  const raw = fs.readFileSync(skillPath, "utf-8");
-  const parsed = matter(raw);
-  const frontmatter = parsed.data ?? {};
-
   const packFile = loadPackFile<PackFileData>(packDir);
   const docPack = packFile?.pack ?? {};
 
   const title = (docPack.title as string) ?? packName;
-  const description = (frontmatter.description as string) ?? "";
+  const description = (docPack.description as string) ?? "";
   const industries = (docPack.industries as string[]) ?? DEFAULT_INDUSTRIES;
   const icon = (docPack.icon as string) ?? DEFAULT_ICON;
   const version = (docPack.version as string) ?? DEFAULT_VERSION;
   const methodology = (docPack.methodology as string) ?? "";
-  const regs: string[] = frontmatter.regulation_ids ?? [];
+  const regs: string[] = docPack.regulation_ids ?? [];
 
-  const parsedChecks: ParsedCheck[] = packFile?.checks ?? parseChecks(parsed.content);
+  let parsedChecks: ParsedCheck[];
+  if (packFile?.checks) {
+    parsedChecks = packFile.checks;
+  } else {
+    const raw = fs.readFileSync(skillPath, "utf-8");
+    const parsed = matter(raw);
+    parsedChecks = parseChecks(parsed.content);
+  }
+
   const packChecks: PackCheck[] = parsedChecks.map((c, i) => ({
     id: `C${i + 1}`,
     title: humanize(c.field),
     desc: c.description ?? "",
   }));
 
-  let documents = loadDocuments(packFile?.documents ?? frontmatter.documents as Record<string, unknown>[] | undefined);
+  let documents = loadDocuments(packFile?.documents);
   if (documents.length === 0) {
     const inferredFields = parsedChecks.map((c) => ({
       field: c.field,
@@ -147,6 +194,8 @@ export function loadPack(packName: string, options?: LoadPackOptions): SkillPack
     id: packName, title, desc: description, regs,
     inds: industries, icon, version, methodology,
     checks: packChecks, documents,
+    redlines: packFile?.redlines ?? [],
+    lessons: packFile?.lessons ?? [],
   };
 }
 
@@ -160,6 +209,15 @@ export function listPacks(packsDir?: string): string[] {
 
 // ── Skill (pipeline runtime) functions ──
 
+/**
+ * Load a skill's runtime data.
+ *
+ * Preference order:
+ * 1. If pack.json has `checks` → read everything from pack.json (never touches SKILL.md body)
+ * 2. If pack.json exists but no `checks` → read pack metadata from pack.json,
+ *    parse checks/redlines/lessons from SKILL.md (backward compat)
+ * 3. If no pack.json → full SKILL.md fallback (legacy)
+ */
 export function loadSkill(skillId: string): SkillLoader {
   const skillDir = path.join(SKILLS_DIR, skillId);
   const skillMdPath = path.join(skillDir, "SKILL.md");
@@ -168,6 +226,48 @@ export function loadSkill(skillId: string): SkillLoader {
     throw new SkillLoadError("SKILL_NOT_FOUND", `Skill "${skillId}" not found: no SKILL.md at ${skillMdPath}`, skillId);
   }
 
+  const packFile = loadPackFile<PackFileData>(skillDir);
+
+  // If pack.json has compiled checks, it's the single source of truth
+  if (packFile?.checks) {
+    const docPack = packFile.pack ?? {};
+    const redlines = packFile.redlines ?? [];
+    const lessons = packFile.lessons ?? [];
+
+    // Discover scripts/
+    const scriptsDir = path.join(skillDir, "scripts");
+    const scripts: SkillLoader["scripts"] = [];
+    if (fs.existsSync(scriptsDir)) {
+      for (const f of fs.readdirSync(scriptsDir)) {
+        if (!f.endsWith(".py")) continue;
+        const name = f.replace(/\.py$/, "");
+        scripts.push({
+          name,
+          path: path.join(scriptsDir, f),
+          desc: getScriptDescription(path.join(scriptsDir, f), f),
+          params: "",
+        });
+      }
+    }
+
+    const templatePath = path.join(skillDir, "assets", "template.docx");
+    const hasTemplate = fs.existsSync(templatePath);
+
+    return {
+      name: skillId,
+      description: docPack.description ?? "",
+      triggers: docPack.triggers ?? [],
+      skillmd: buildSkillmd(packFile.checks, redlines, lessons),
+      scripts,
+      checks: packFile.checks,
+      regulationIds: docPack.regulation_ids ?? [],
+      redlines,
+      lessons,
+      hasTemplate,
+    };
+  }
+
+  // Fallback: read from SKILL.md (legacy packs without compiled checks)
   const raw = fs.readFileSync(skillMdPath, "utf-8");
   const parsed = matter(raw);
 
@@ -175,10 +275,20 @@ export function loadSkill(skillId: string): SkillLoader {
   const triggers: string[] = parsed.data?.triggers ?? [];
   const regulationIds: string[] = parsed.data?.regulation_ids ?? [];
 
-  // Try compiled pack.json first for skillmd + checks
-  const packFile = loadPackFile<PackFileData>(skillDir);
-  const skillmd = packFile?.skillmd ?? parsed.content.trim();
-  const checks = packFile?.checks ?? parseChecks(parsed.content);
+  let checks: ParsedCheck[];
+  let redlines: string[];
+  let lessons: string[];
+
+  if (packFile) {
+    // Partially compiled — use pack.json for metadata, SKILL.md for checks
+    checks = parseChecks(parsed.content);
+    redlines = packFile.redlines ?? [];
+    lessons = packFile.lessons ?? [];
+  } else {
+    checks = parseChecks(parsed.content);
+    redlines = extractRedlineList(parsed.content);
+    lessons = extractLessonsList(parsed.content);
+  }
 
   // Discover scripts/
   const scriptsDir = path.join(skillDir, "scripts");
@@ -203,10 +313,12 @@ export function loadSkill(skillId: string): SkillLoader {
     name: skillId,
     description,
     triggers,
-    skillmd,
+    skillmd: buildSkillmd(checks, redlines, lessons),
     scripts,
     checks,
     regulationIds,
+    redlines,
+    lessons,
     hasTemplate,
   };
 }
@@ -248,7 +360,57 @@ function getScriptDescription(filePath: string, filename: string): string {
     const docMatch = content.match(/^"""(.*?)"""/s);
     if (docMatch) return docMatch[1]?.trim() ?? "";
   } catch {
-    // fall through to generic description
   }
   return `Script: ${filename}`;
+}
+
+function extractRedlineList(content: string): string[] {
+  const sectionStart = content.indexOf("## Red Lines");
+  if (sectionStart === -1) return [];
+  let sectionEnd = content.indexOf("\n## ", sectionStart + 1);
+  if (sectionEnd === -1) sectionEnd = content.length;
+  const section = content.substring(sectionStart, sectionEnd);
+  return section.split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith("- ❌") || l.startsWith("-"))
+    .map((l) => l.replace(/^-\s*[❌❌]?\s*/, "").trim())
+    .filter(Boolean);
+}
+
+function extractLessonsList(content: string): string[] {
+  const sectionStart = content.indexOf("## Lessons Learnt");
+  if (sectionStart === -1) return [];
+  let sectionEnd = content.indexOf("\n## ", sectionStart + 1);
+  if (sectionEnd === -1) sectionEnd = content.length;
+  const section = content.substring(sectionStart, sectionEnd);
+  return section.split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith("-"))
+    .map((l) => l.replace(/^-\s*/, "").trim())
+    .filter((l) => l && l !== "(System-maintained area, initially empty.)");
+}
+
+/**
+ * Write compiled checks + redlines + lessons back to pack.json.
+ * Used when saving lessons/redlines at runtime.
+ */
+export function saveCompiledPack(
+  skillName: string,
+  data: { checks?: ParsedCheck[]; redlines?: string[]; lessons?: string[] }
+): void {
+  const skillDir = path.join(SKILLS_DIR, skillName);
+  const packPath = path.join(skillDir, "pack.json");
+  let pack: PackFileData = { pack: {} };
+  if (fs.existsSync(packPath)) {
+    pack = JSON.parse(fs.readFileSync(packPath, "utf-8"));
+  }
+  if (!pack.pack) pack.pack = {};
+  if (data.checks) pack.checks = data.checks;
+  if (data.redlines) pack.redlines = data.redlines;
+  if (data.lessons) {
+    const existing = pack.lessons ?? [];
+    const merged = [...new Set([...existing, ...data.lessons])];
+    pack.lessons = merged;
+  }
+  fs.writeFileSync(packPath, JSON.stringify(pack, null, 2), "utf-8");
 }

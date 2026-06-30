@@ -7,7 +7,7 @@ import {
 } from "./agent/shared/memory/repository";
 import type { ComplianceFile } from "./agent/shared/memory/repository";
 import { setupSkill, processSessionFiles } from "./agent/loading/loading-orchestrator";
-import { loadSkill, saveSkillToFs } from "./agent/loading/skill/loader";
+import { saveCompiledPack } from "./agent/loading/skill/loader";
 import { saveLessonOverride, getLessonOverrides } from "./agent/shared/memory/repository";
 import { searchPacks, getPack, packs } from "./compliance-packs";
 import { buildSession } from "./compliance-session";
@@ -427,16 +427,10 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     execute: async (sessionId, input) => {
       const { skillName, text, sourceCheck, applyToSkill } = input as { skillName: string; text: string; sourceCheck?: string; applyToSkill?: boolean };
 
-      const entry = sourceCheck ? `- **${sourceCheck}**: ${text}` : `- ${text}`;
+      const entry = sourceCheck ? `**${sourceCheck}**: ${text}` : text;
 
       if (applyToSkill) {
-        const skill = loadSkill(skillName);
-        if (!skill) return { error: `Skill "${skillName}" not found` };
-        const existing = skill.skillmd.includes("## Lessons Learnt");
-        const updated = existing
-          ? skill.skillmd.replace(/## Lessons Learnt\n([\s\S]*?)(?=\n##|$)/, `## Lessons Learnt\n$1${entry}\n`)
-          : skill.skillmd + `\n\n## Lessons Learnt\n\n${entry}\n`;
-        saveSkillToFs(skillName, updated);
+        saveCompiledPack(skillName, { lessons: [entry] });
         saveLessonOverride(skillName, entry);
         return { saved: true, lesson: entry, message: "Lesson permanently added to skill." };
       }

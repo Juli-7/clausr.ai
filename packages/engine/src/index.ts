@@ -125,7 +125,7 @@ export type {
 
 // ── Loading / Setup ──
 export { setupSession, setupSkill, processSessionFiles } from "./agent/loading/loading-orchestrator";
-export { loadPack, listPacks, loadSkill, saveSkillToFs, deleteSkillFromFs } from "./agent/loading/skill/loader";
+export { loadPack, listPacks, loadSkill, saveSkillToFs, deleteSkillFromFs, saveCompiledPack } from "./agent/loading/skill/loader";
 export type { SkillPack, PackCheck, DocumentTemplate, DocumentField, LoadPackOptions, SkillLoader } from "./agent/loading/skill/loader";
 export { parseChecks, extractRedline, extractLessons } from "./agent/loading/skill/check-parser";
 export type { ParsedCheck, CheckFieldType } from "./agent/loading/skill/check-parser";
@@ -171,7 +171,7 @@ export { setLLMConfig, setRetentionConfig, clearConfig, getConfig } from "./agen
 export type { ProviderName } from "./agent/llm/factory";
 
 // ── Prompts ──
-export { COMPLIANCE_SYSTEM_PROMPTS } from "./agent/pipeline/prompts";
+export { COMPLIANCE_SYSTEM_PROMPTS, buildComplianceStepPrompt } from "./agent/pipeline/prompts";
 
 // ── Compliance Packs (search/get/list with eager cache) ──
 export { searchPacks, getPack, packs, allRegs, allInds } from "./compliance-packs";

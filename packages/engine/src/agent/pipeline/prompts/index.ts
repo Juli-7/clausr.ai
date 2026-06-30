@@ -101,10 +101,79 @@ Monitor audit progress and help the user review results.
 
 Workflow:
 1. Call start_audit to begin the audit
-2. Use get_audit_status to check progress
+2. Use get_session_state to check progress
 3. Help review results and suggest fixes
-4. Call export_document when they want to download`,
+4. Call suggest_lesson to save lessons from audit findings
+5. Call export_document when they want to download`,
 };
+
+/**
+ * Build an enriched step prompt with pack-specific context.
+ * Injects document fields (step 2) and checks/redlines/lessons (step 3) into the prompt.
+ */
+export function buildComplianceStepPrompt(
+  step: number,
+  packs: Array<{
+    id: string;
+    title: string;
+    checks?: Array<{ field: string; description?: string | null; clause?: string | null }>;
+    redlines?: string[];
+    lessons?: string[];
+    documents?: Array<{
+      type: string;
+      title: string;
+      fields: Array<{
+        field: string;
+        label: string;
+        required: boolean;
+        interview?: { question?: string; hint?: string };
+      }>;
+    }>;
+  }>
+): string {
+  const base = COMPLIANCE_SYSTEM_PROMPTS[step] ?? COMPLIANCE_SYSTEM_PROMPTS[1] ?? "";
+  if (!packs.length) return base;
+
+  const sections: string[] = [base];
+
+  if (step === 2) {
+    const docLines = packs.flatMap((p) =>
+      (p.documents ?? []).flatMap((d) =>
+        d.fields
+          .filter((f) => f.required)
+          .map((f) => {
+            const q = f.interview?.question ? ` — ${f.interview.question}` : "";
+            return `- [${p.title}] ${f.field}: ${f.label}${q}`;
+          })
+      )
+    );
+    if (docLines.length) {
+      sections.push(
+        `\n# Required Documents & Fields\nUse these fields to guide your interview. Ask about each one.\n\n${docLines.join("\n")}`
+      );
+    }
+  }
+
+  if (step === 3) {
+    for (const p of packs) {
+      const checkLines = (p.checks ?? []).map(
+        (c) => `- **${c.field}**: ${c.description ?? ""}${c.clause ? ` (${c.clause})` : ""}`
+      );
+      const redlineLines = (p.redlines ?? []).map((r) => `- ❌ ${r}`);
+      const lessonLines = (p.lessons ?? []).map((l) => `- ${l}`);
+
+      const packSection = [
+        `\n## Pack: ${p.title}`,
+        ...(checkLines.length ? ["\n### Checks", ...checkLines] : []),
+        ...(redlineLines.length ? ["\n### Red Lines (never violate)", ...redlineLines] : []),
+        ...(lessonLines.length ? ["\n### Lessons Learnt", ...lessonLines] : []),
+      ];
+      sections.push(packSection.join("\n"));
+    }
+  }
+
+  return sections.join("\n");
+}
 
 // ═══════════════════════════════════════════════════════════════
 // SKILL GENERATOR PROMPTS
