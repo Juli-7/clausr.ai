@@ -262,7 +262,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     execute: async (sessionId) => {
       const session = buildSession(sessionId);
       if (!session) return { error: "Session not found" };
-      return session as Record<string, unknown>;
+      return session as unknown as Record<string, unknown>;
     },
   },
 

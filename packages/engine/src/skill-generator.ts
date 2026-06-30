@@ -20,12 +20,14 @@ export interface GenerateSkillResult {
   lessons?: string;
 }
 
-async function callLLM(system: string, user: string): Promise<string> {
+async function callLLM(system: string, user: string, signal: AbortSignal): Promise<string> {
   const result = await generateText({
     model: createModel({ cache: true }),
     system,
     messages: [{ role: "user", content: user }],
     temperature: 0.3,
+    maxRetries: 3,
+    abortSignal: signal,
   });
   return result.text;
 }
@@ -44,7 +46,10 @@ export async function generateSkill(params: GenerateSkillParams): Promise<string
   let sampleTexts = "";
   if (files && files.length > 0) {
     const results = await Promise.all(
-      files.map((f) => extractFileContent(f).catch(() => null))
+      files.map((f) => extractFileContent(f).catch((err) => {
+        logInfo(`Warning: failed to extract file "${f.name}": ${err instanceof Error ? err.message : err}`);
+        return null;
+      }))
     );
     sampleTexts = results
       .filter((r): r is NonNullable<typeof r> => r !== null && r.text.length > 0)
@@ -60,7 +65,10 @@ export async function generateSkill(params: GenerateSkillParams): Promise<string
   let regulationTexts = "";
   if (regulations && regulations.length > 0) {
     const results = await Promise.all(
-      regulations.map((f) => extractFileContent(f).catch(() => null))
+      regulations.map((f) => extractFileContent(f).catch((err) => {
+        logInfo(`Warning: failed to extract regulation "${f.name}": ${err instanceof Error ? err.message : err}`);
+        return null;
+      }))
     );
     regulationTexts = results
       .filter((r): r is NonNullable<typeof r> => r !== null && r.text.length > 0)
@@ -74,13 +82,24 @@ export async function generateSkill(params: GenerateSkillParams): Promise<string
   }
 
   const userInput = buildUserInput(sampleTexts, regulationTexts, report);
+  const abortController = new AbortController();
+  const llmTimeout = setTimeout(() => abortController.abort("LLM request timed out"), 180_000);
 
-  logInfo("Step 1: Analyzing reference report...");
-  const analysis = await callLLM(ANALYSIS_PROMPT, userInput);
+  try {
+    logInfo("Step 1: Analyzing reference report...");
+    const analysis = await callLLM(ANALYSIS_PROMPT, userInput, abortController.signal);
 
-  logInfo("Step 2: Generating SKILL.md...");
-  const generationInput = `## Check Analysis\n\n${analysis}\n\n---\n\n${userInput}`;
-  const fullText = await callLLM(GENERATION_PROMPT, generationInput);
+    logInfo("Step 2: Generating SKILL.md...");
+    const generationInput = `## Check Analysis\n\n${analysis}\n\n---\n\n${userInput}`;
+    const fullText = await callLLM(GENERATION_PROMPT, generationInput, abortController.signal);
 
-  return fullText;
+    return fullText;
+  } catch (err) {
+    const isTimeout = err instanceof Error && err.name === "AbortError";
+    const msg = isTimeout ? "skill generation timed out" : err instanceof Error ? err.message : String(err);
+    logInfo(`Skill generation failed: ${msg}`);
+    throw new Error(msg);
+  } finally {
+    clearTimeout(llmTimeout);
+  }
 }

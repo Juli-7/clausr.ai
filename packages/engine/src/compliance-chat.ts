@@ -11,7 +11,7 @@ export type ComplianceChatEvent =
   | { type: "tool-result"; toolName: string; result: unknown }
   | { type: "finish"; finishReason: string }
   | { type: "error"; error: string }
-  | { type: "done"; response: string; usage: { promptTokens: number; completionTokens: number } };
+  | { type: "done"; response: string; usage: { inputTokens?: number; outputTokens?: number } };
 
 export interface ComplianceChatParams {
   messages: { role: "user" | "assistant"; content: string }[];
@@ -38,31 +38,38 @@ export async function* complianceChat(
     return;
   }
 
-  const allTools: Record<string, { description: string; parameters: typeof import("zod").ZodTypeAny; execute: (input: Record<string, unknown>) => Promise<unknown> }> = {};
-  for (const [name, def] of Object.entries(TOOL_DEFS)) {
-    allTools[name] = tool({
-      description: def.description,
-      inputSchema: def.inputSchema,
-      execute: (input) => def.execute(sessionId, input as Record<string, unknown>),
-    });
-  }
+  const allTools = Object.fromEntries(
+    Object.entries(TOOL_DEFS).map(([name, def]) => [
+      name,
+      tool({
+        description: def.description,
+        inputSchema: def.inputSchema!,
+        execute: (input) => def.execute(sessionId, input as Record<string, unknown>),
+      }),
+    ])
+  );
+
+  const abortController = new AbortController();
+  const llmTimeout = setTimeout(() => abortController.abort("LLM request timed out"), 120_000);
 
   const result = streamText({
     model: llmModel,
     system: systemPrompt,
-    stopWhen: stepCountIs(20),
+    stopWhen: stepCountIs(5),
+    maxRetries: 3,
+    abortSignal: abortController.signal,
     onStepFinish: ({ text, finishReason, toolCalls, toolResults, stepNumber }) => {
       logInfo(`step=${stepNumber} finish=${finishReason} textLen=${text?.length} toolCalls=${toolCalls?.length} toolResults=${toolResults?.length}`);
     },
     onFinish: ({ finishReason, text, usage, steps }) => {
-      logInfo(`finish=${finishReason} textLen=${text?.length} steps=${steps?.length} prompt=${usage?.promptTokens} completion=${usage?.completionTokens}`);
+      logInfo(`finish=${finishReason} textLen=${text?.length} steps=${steps?.length} prompt=${usage?.inputTokens} completion=${usage?.outputTokens}`);
     },
     messages,
     tools: allTools,
   });
 
   let fullText = "";
-  let finalUsage: { promptTokens: number; completionTokens: number } = { promptTokens: 0, completionTokens: 0 };
+  let finalUsage: { inputTokens?: number; outputTokens?: number } = {};
   try {
     for await (const event of result.fullStream) {
       if (event.type === "text-delta") {
@@ -72,7 +79,7 @@ export async function* complianceChat(
       } else if (event.type === "tool-call") {
         yield { type: "tool-call", toolName: event.toolName, args: event.input };
       } else if (event.type === "tool-result") {
-        yield { type: "tool-result", toolName: event.toolName, result: event.result };
+        yield { type: "tool-result", toolName: event.toolName, result: event.output };
       } else if (event.type === "finish") {
         yield { type: "finish", finishReason: event.finishReason };
       } else if (event.type === "error") {
@@ -83,11 +90,13 @@ export async function* complianceChat(
 
     finalUsage = await result.usage;
     if (fullText) {
-      addAssistantMessage(sessionId, fullText);
+      await addAssistantMessage(sessionId, fullText);
     }
     yield { type: "done", response: fullText, usage: finalUsage };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown";
+    const msg = err instanceof Error && err.name === "AbortError" ? "request timed out" : err instanceof Error ? err.message : "Unknown";
     yield { type: "error", error: msg };
+  } finally {
+    clearTimeout(llmTimeout);
   }
 }

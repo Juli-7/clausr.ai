@@ -1,7 +1,6 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { wrapLanguageModel } from "ai";
-import type { LanguageModel } from "ai";
+import { wrapLanguageModel, type LanguageModel, type LanguageModelMiddleware } from "ai";
 import { getConfig } from "./config";
 import { createDeepSeekFetch } from "./deepseek";
 
@@ -74,16 +73,19 @@ function buildBaseModel(config: ProviderConfig): LanguageModel {
 function applyCaching(model: LanguageModel, provider: ProviderName): LanguageModel {
   if (provider !== "anthropic") return model;
 
+  const middleware: LanguageModelMiddleware = {
+    specificationVersion: "v3",
+    transformParams: async ({ params }) => ({
+      ...params,
+      providerOptions: {
+        anthropic: { cacheControl: { type: "ephemeral" as const } },
+      },
+    }),
+  };
+
   return wrapLanguageModel({
-    model,
-    middleware: {
-      transformInput: async ({ input }) => ({
-        ...input,
-        providerMetadata: {
-          anthropic: { cacheControl: { type: "ephemeral" } },
-        },
-      }),
-    },
+    model: model as Parameters<typeof wrapLanguageModel>[0]["model"],
+    middleware,
   });
 }
 

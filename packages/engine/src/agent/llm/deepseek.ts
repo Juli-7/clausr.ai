@@ -26,8 +26,8 @@ export function createDeepSeekFetch(originalFetch: typeof fetch): typeof fetch {
   };
 }
 
-function isChatCompletionRequest(input: RequestInfo | URL): boolean {
-  const url = typeof input === "string" ? input : input instanceof Request ? input.url : "";
+function isChatCompletionRequest(input: string | URL | Request): boolean {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.href : (input as unknown as Record<string, unknown>).url as string ?? "";
   return url.includes("/chat/completions");
 }
 

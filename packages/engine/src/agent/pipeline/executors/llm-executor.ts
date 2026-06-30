@@ -1,4 +1,5 @@
-import { streamText, tool } from "ai";
+import { streamText, tool, type ToolSet } from "ai";
+import { z } from "zod";
 import { createModel } from "../../llm/factory";
 import { runScript } from "./script-runner";
 import { ComplianceCheckSchema } from "../../shared/schemas";
@@ -26,7 +27,7 @@ export async function executeLlmToolStep(
     const llmTimeout = setTimeout(() => abortController.abort("LLM request timed out"), 120_000);
 
     const scripts = ctx.skill.scripts;
-    const tools: Record<string, unknown> = {};
+    const tools: ToolSet = {};
     let toolCalled = false;
 
     const perCheckResults: {
@@ -64,7 +65,7 @@ export async function executeLlmToolStep(
       logPipeline(`  [TOOL] registering generic tool "${script.name}"`);
       tools[script.name] = tool({
         description: script.desc || `Run ${script.name} script`,
-        inputSchema: ComplianceCheckSchema,
+        inputSchema: z.any(),
         execute: async (input) => {
           const result = await runScript(script.path, input);
           if (!result.success) {
@@ -112,13 +113,13 @@ export async function executeLlmToolStep(
       system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],
       tools: Object.keys(tools).length > 0 ? tools : undefined,
-      maxSteps: 15,
+      maxRetries: 3,
       abortSignal: abortController.signal,
       ...(step.temperature !== undefined ? { temperature: step.temperature } : {}),
       onStepFinish: (event) => {
         if (event.usage) {
-          accumulatedPromptTokens += event.usage.promptTokens;
-          accumulatedCompletionTokens += event.usage.completionTokens;
+          accumulatedPromptTokens += event.usage.inputTokens ?? 0;
+          accumulatedCompletionTokens += event.usage.outputTokens ?? 0;
         }
         logPipeline(`  [LLM+TOOL] step=${step.number} onStepFinish: toolResults=${event.toolResults?.length ?? 0}`);
         if (!event.toolResults?.length) return;
@@ -165,8 +166,8 @@ export async function executeLlmToolStep(
     const fullText = tokens.join("");
     const finalUsage = await result.usage;
 
-    const inputTokens = accumulatedPromptTokens || finalUsage?.promptTokens || 0;
-    const outputTokens = accumulatedCompletionTokens || finalUsage?.completionTokens || 0;
+    const inputTokens = accumulatedPromptTokens || finalUsage?.inputTokens || 0;
+    const outputTokens = accumulatedCompletionTokens || finalUsage?.outputTokens || 0;
 
     logPipeline(`  [LLM+TOOL] step=${step.number} fullText=${fullText.length}chars preview=${truncate(fullText, 150)}`);
 
@@ -202,10 +203,11 @@ export async function executeLlmToolStep(
       toolResults: perCheckResults.length > 0 ? perCheckResults : undefined,
     };
   } catch (err) {
+    const isTimeout = err instanceof Error && err.name === "AbortError";
     return {
       success: false,
-      error: `Step ${step.number} tool LLM error: ${err instanceof Error ? err.message : String(err)}`,
-      errorCode: "LLM_ERROR",
+      error: `Step ${step.number} tool LLM error: ${isTimeout ? "request timed out" : err instanceof Error ? err.message : String(err)}`,
+      errorCode: isTimeout ? "TIMEOUT" : "LLM_ERROR",
     };
   }
 }
