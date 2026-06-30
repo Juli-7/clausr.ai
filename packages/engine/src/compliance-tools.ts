@@ -7,8 +7,12 @@ import {
 } from "./agent/shared/memory/repository";
 import type { ComplianceFile } from "./agent/shared/memory/repository";
 import { setupSkill, processSessionFiles } from "./agent/loading/loading-orchestrator";
+import { loadSkill, saveSkillToFs } from "./agent/loading/skill/loader";
+import { saveLessonOverride, getLessonOverrides } from "./agent/shared/memory/repository";
 import { searchPacks, getPack, packs } from "./compliance-packs";
 import { buildSession } from "./compliance-session";
+import { getRegulationApi } from "./agent/knowledge/regulation-api";
+import { getDocStore } from "./agent/user-info/vector-store";
 
 export type ToolName =
   | "set_scope"
@@ -22,7 +26,11 @@ export type ToolName =
   | "recommend_packs"
   | "get_session_state"
   | "get_file_content"
-  | "run_validation";
+  | "run_validation"
+  | "search_clauses"
+  | "get_regulation_text"
+  | "search_files"
+  | "suggest_lesson";
 
 export const ToolSchemas = {
   set_scope: z.object({
@@ -62,6 +70,23 @@ export const ToolSchemas = {
     fileName: z.string().describe("Name of the uploaded file to read"),
   }),
   run_validation: z.object({}),
+  search_clauses: z.object({
+    keyword: z.string().describe("Keyword to search for across regulation clauses"),
+    regulationCodes: z.array(z.string()).optional().describe("Filter: only search within these regulation codes"),
+  }),
+  get_regulation_text: z.object({
+    code: z.string().describe("Regulation code, e.g. R48"),
+    clauseNumber: z.string().optional().describe("Optional clause number within the regulation"),
+  }),
+  search_files: z.object({
+    query: z.string().describe("Search query to find relevant file chunks"),
+  }),
+  suggest_lesson: z.object({
+    skillName: z.string().describe("Name of the skill to add the lesson to"),
+    text: z.string().describe("Lesson text describing what was learned"),
+    sourceCheck: z.string().optional().describe("The check field name this lesson relates to"),
+    applyToSkill: z.boolean().optional().default(false).describe("Set true after user confirms — permanently writes the lesson into SKILL.md"),
+  }),
 } as const;
 
 export type ToolInput<T extends ToolName> = z.infer<typeof ToolSchemas[T]>;
@@ -335,6 +360,93 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     },
   },
 
+  search_clauses: {
+    name: "search_clauses",
+    description: "Search regulation clauses by keyword across available regulations.",
+    inputSchema: ToolSchemas.search_clauses,
+    logLabel: "Search clauses",
+    mutates: false,
+    execute: async (_sessionId, input) => {
+      const { keyword, regulationCodes } = input as { keyword: string; regulationCodes?: string[] };
+      const api = await getRegulationApi();
+      const result = await api.searchClauses({ keyword, regulationCodes });
+      if (!result.success || !result.data) return { results: [] };
+      return { results: result.data.map((r) => ({ regulationCode: r.regulationCode, clauseNumber: r.clause.number, title: r.clause.title, text: r.clause.text })) };
+    },
+  },
+
+  get_regulation_text: {
+    name: "get_regulation_text",
+    description: "Get the full text of a regulation or a specific clause within it.",
+    inputSchema: ToolSchemas.get_regulation_text,
+    logLabel: "Get regulation text",
+    mutates: false,
+    execute: async (_sessionId, input) => {
+      const { code, clauseNumber } = input as { code: string; clauseNumber?: string };
+      const api = await getRegulationApi();
+      if (clauseNumber) {
+        const result = await api.getClause({ regulationCode: code, clauseNumber });
+        if (!result.success || !result.data) return { error: "Clause not found" };
+        return { regulationCode: result.regulationCode ?? code, clauseNumber: result.data.number, title: result.data.title, text: result.data.text };
+      }
+      const result = await api.getRegulation({ code });
+      if (!result.success || !result.data) return { error: "Regulation not found" };
+      return { code: result.data.code, title: result.data.title, description: result.data.description, clauses: result.data.clauses.map((c) => ({ number: c.number, title: c.title, text: c.text })) };
+    },
+  },
+
+  search_files: {
+    name: "search_files",
+    description: "Search uploaded file content by keyword to find relevant information.",
+    inputSchema: ToolSchemas.search_files,
+    logLabel: "Search files",
+    mutates: false,
+    execute: async (sessionId, input) => {
+      const { query } = input as { query: string };
+      const store = getDocStore();
+      const files = await store.getFiles(sessionId);
+      const results: { filename: string; excerpt: string }[] = [];
+      for (const file of files) {
+        const idx = file.extractedText.toLowerCase().indexOf(query.toLowerCase());
+        if (idx !== -1) {
+          const start = Math.max(0, idx - 100);
+          const end = Math.min(file.extractedText.length, idx + query.length + 300);
+          results.push({ filename: file.filename, excerpt: file.extractedText.slice(start, end) });
+        }
+      }
+      return { results };
+    },
+  },
+
+  suggest_lesson: {
+    name: "suggest_lesson",
+    description: "Suggest a lesson learned from an audit result. On first call, saves as pending. If the user confirms, call again with applyToSkill=true to write it permanently into the skill.",
+    inputSchema: ToolSchemas.suggest_lesson,
+    logLabel: "Suggest lesson",
+    mutates: true,
+    execute: async (sessionId, input) => {
+      const { skillName, text, sourceCheck, applyToSkill } = input as { skillName: string; text: string; sourceCheck?: string; applyToSkill?: boolean };
+
+      const entry = sourceCheck ? `- **${sourceCheck}**: ${text}` : `- ${text}`;
+
+      if (applyToSkill) {
+        const skill = loadSkill(skillName);
+        if (!skill) return { error: `Skill "${skillName}" not found` };
+        const existing = skill.skillmd.includes("## Lessons Learnt");
+        const updated = existing
+          ? skill.skillmd.replace(/## Lessons Learnt\n([\s\S]*?)(?=\n##|$)/, `## Lessons Learnt\n$1${entry}\n`)
+          : skill.skillmd + `\n\n## Lessons Learnt\n\n${entry}\n`;
+        saveSkillToFs(skillName, updated);
+        saveLessonOverride(skillName, entry);
+        return { saved: true, lesson: entry, message: "Lesson permanently added to skill." };
+      }
+
+      saveLessonOverride(skillName, entry);
+      const all = getLessonOverrides(skillName);
+      return { saved: true, lesson: entry, pendingCount: all.length, message: "Lesson saved as pending. Ask the user to confirm, then call suggest_lesson again with applyToSkill=true to make it permanent." };
+    },
+  },
+
 };
 
 export function getTool(name: string) {
@@ -342,7 +454,7 @@ export function getTool(name: string) {
 }
 
 export function getStepTools(step: 1 | 2 | 3): ToolName[] {
-  if (step === 1) return ["search_packs", "get_pack_details", "recommend_packs", "set_scope", "change_step"];
-  if (step === 2) return ["update_doc_field", "get_session_state", "get_file_content", "run_validation", "attach_file", "change_step"];
-  return ["get_session_state", "start_audit", "export_document", "change_step"];
+  if (step === 1) return ["search_packs", "get_pack_details", "recommend_packs", "search_clauses", "set_scope", "change_step"];
+  if (step === 2) return ["update_doc_field", "get_session_state", "get_file_content", "search_files", "run_validation", "attach_file", "change_step"];
+  return ["get_session_state", "search_clauses", "get_regulation_text", "start_audit", "export_document", "suggest_lesson", "change_step"];
 }

@@ -1,8 +1,9 @@
-import { streamText, stepCountIs } from "ai";
+import { streamText, stepCountIs, tool } from "ai";
 import { createModel } from "./agent/llm/factory";
-import { addUserMessage, addAssistantMessage } from "./agent/shared/memory/repository";
+import { addAssistantMessage } from "./agent/shared/memory/repository";
 import { logInfo } from "./agent/pipeline/logger";
 import { COMPLIANCE_SYSTEM_PROMPTS } from "./agent/pipeline/prompts";
+import { TOOL_DEFS } from "./compliance-tools";
 
 export type ComplianceChatEvent =
   | { type: "text-delta"; text: string }
@@ -12,21 +13,17 @@ export type ComplianceChatEvent =
   | { type: "error"; error: string }
   | { type: "done"; response: string; usage: { promptTokens: number; completionTokens: number } };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ToolRecord = Record<string, any>;
-
 export interface ComplianceChatParams {
   messages: { role: "user" | "assistant"; content: string }[];
   step?: number;
   systemPrompt?: string;
-  tools: ToolRecord;
 }
 
 export async function* complianceChat(
   sessionId: string,
   params: ComplianceChatParams
 ): AsyncGenerator<ComplianceChatEvent> {
-  const { messages, step, systemPrompt: customPrompt, tools } = params;
+  const { messages, step, systemPrompt: customPrompt } = params;
   const systemPrompt = step ? COMPLIANCE_SYSTEM_PROMPTS[step] : customPrompt;
   if (!systemPrompt) {
     yield { type: "error", error: step ? `No system prompt for step ${step}` : "systemPrompt is required when step is not provided" };
@@ -41,6 +38,15 @@ export async function* complianceChat(
     return;
   }
 
+  const allTools: Record<string, { description: string; parameters: typeof import("zod").ZodTypeAny; execute: (input: Record<string, unknown>) => Promise<unknown> }> = {};
+  for (const [name, def] of Object.entries(TOOL_DEFS)) {
+    allTools[name] = tool({
+      description: def.description,
+      inputSchema: def.inputSchema,
+      execute: (input) => def.execute(sessionId, input as Record<string, unknown>),
+    });
+  }
+
   const result = streamText({
     model: llmModel,
     system: systemPrompt,
@@ -52,7 +58,7 @@ export async function* complianceChat(
       logInfo(`finish=${finishReason} textLen=${text?.length} steps=${steps?.length} prompt=${usage?.promptTokens} completion=${usage?.completionTokens}`);
     },
     messages,
-    tools: Object.keys(tools).length > 0 ? tools : undefined,
+    tools: allTools,
   });
 
   let fullText = "";
