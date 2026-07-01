@@ -17,6 +17,7 @@ import { getDocStore } from "./agent/user-info/vector-store";
 export type ToolName =
   | "set_scope"
   | "update_doc_field"
+  | "batch_update_doc_fields"
   | "attach_file"
   | "start_audit"
   | "export_document"
@@ -40,6 +41,10 @@ export const ToolSchemas = {
     docType: z.string().describe("Document type, e.g. declaration-of-conformity"),
     field: z.string().describe("Field name"),
     value: z.string().describe("Field value"),
+  }),
+  batch_update_doc_fields: z.object({
+    docType: z.string().describe("Document type, e.g. declaration-of-conformity"),
+    fields: z.record(z.string()).describe("Record of field name → value pairs to update"),
   }),
   attach_file: z.object({
     name: z.string().describe("Original file name"),
@@ -127,13 +132,29 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   update_doc_field: {
     name: "update_doc_field",
-    description: "Save a value for a document field (e.g. manufacturer name on Declaration of Conformity).",
+    description: "Save a value for a document field (e.g. manufacturer name on Declaration of Conformity). Use for single field updates.",
     inputSchema: ToolSchemas.update_doc_field,
     logLabel: "Update document field",
     mutates: true,
     execute: async (sessionId, input) => {
       const { docType, field, value } = input as { docType: string; field: string; value: string };
       addComplianceDocField(sessionId, docType, field, value);
+      const s = getComplianceSession(sessionId);
+      return { docData: s?.docData ?? {} };
+    },
+  },
+
+  batch_update_doc_fields: {
+    name: "batch_update_doc_fields",
+    description: "Save multiple document field values at once for a document type (e.g. fill company name, address, phone on Declaration of Conformity). PREFER this over calling update_doc_field repeatedly.",
+    inputSchema: ToolSchemas.batch_update_doc_fields,
+    logLabel: "Batch update document fields",
+    mutates: true,
+    execute: async (sessionId, input) => {
+      const { docType, fields } = input as { docType: string; fields: Record<string, string> };
+      for (const [field, value] of Object.entries(fields)) {
+        addComplianceDocField(sessionId, docType, field, value);
+      }
       const s = getComplianceSession(sessionId);
       return { docData: s?.docData ?? {} };
     },
@@ -450,6 +471,6 @@ export function getTool(name: string) {
 
 export function getStepTools(step: 1 | 2 | 3): ToolName[] {
   if (step === 1) return ["search_packs", "get_pack_details", "recommend_packs", "search_clauses", "set_scope", "change_step"];
-  if (step === 2) return ["update_doc_field", "get_session_state", "get_file_content", "search_files", "run_validation", "attach_file", "change_step"];
+  if (step === 2) return ["batch_update_doc_fields", "update_doc_field", "get_session_state", "get_file_content", "search_files", "run_validation", "attach_file", "change_step"];
   return ["get_session_state", "search_clauses", "get_regulation_text", "start_audit", "export_document", "suggest_lesson", "change_step"];
 }
