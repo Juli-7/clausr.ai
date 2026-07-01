@@ -8,7 +8,7 @@ An engine for pattern-matching jobs. Upload a document, pick a pattern definitio
 
 1. **Upload** a document (PDF, DOCX, or images)
 2. **Select** a skill (a pattern definition; e.g., GDPR compliance)
-3. **Chat** with the agent — it extracts values and checks them against the skill's rules
+3. **Chat** with the agent (or use the **compliance assistant** wizard — scope → documents → audit)
 4. **Review** the report with PASS/FAIL verdicts, confidence scores, and clickable citations
 
 ## Architecture
@@ -66,27 +66,18 @@ Color stops: dark green ≥99%, green ≥80%, amber ≥50%, red <50%.
 
 Skills are file-based pattern definitions under `skills/<skill-id>/`:
 
-- `SKILL.md` — Agent role, `## Checks` block with per-field constraints, optional template definition
+- `SKILL.md` — Agent role, `## Checks` block with per-field constraints, regulation IDs, red lines, and lessons
 - `references.json` — Reference text (regulations, specs, manuals) indexed by ID
-- `assets/template.docx` — Optional Word template for export
-- `scripts/` — Optional Python scripts for custom checks
+- `scripts/` — Optional scripts for custom checks
 
-**Built-in skills**: GDPR (compliance — the reference skill).
+Skills can also be **generated automatically** from reference compliance reports via `packages/engine/src/skill-generator.ts` — a two-step LLM pipeline that reverse-engineers check fields from a report and builds a complete `SKILL.md`.
 
-`SKILL.md` format:
-- **Frontmatter** — `title`, `description`, `domain`
-- **## Checks** — Numbered checks with `type`, `description`, `clause`, `constraint`, `attention`
-- **Template sections** — `fields`, `table`, `markdown`, `verdict`
+### Prompt Registry
 
-See `SKILL-SPEC.md` for the full specification and `skills/gdpr/` for a complete example.
-
-### Prompt Versioning
-
-LLM prompts are extracted from inline code into dedicated files under `src/lib/agent/pipeline/prompts/`:
-- `system.ts` — System prompt builder with retry context
-- `user.ts` — User message builder with file chunks and revision support
-
-This makes prompts versionable, reviewable, and testable independently.
+All LLM prompts live in a single file `packages/engine/src/agent/pipeline/prompts/index.ts`:
+- **Pipeline prompts** — `buildSystemPrompt` and `buildUserMessage` for step execution
+- **Compliance chat prompts** — Step-indexed system prompts for the compliance workflow
+- **Skill generator prompts** — `ANALYSIS_PROMPT` and `GENERATION_PROMPT` for building skills from reports
 
 ## Tech Stack
 
@@ -135,18 +126,23 @@ src/
   lib/               # App-wide utilities, React context
 packages/engine/src/
   agent/
-    loading/         # Skill parser, phase loaders
-    pipeline/        # Orchestrator, executors, prompts
+    loading/         # Skill parser, phase loaders, file processing
+    pipeline/        # Orchestrator, executors, prompts, logger
     evaluation/      # Confidence scoring, validation
     present/         # Response formatting, export (DOCX)
     shared/          # Schemas, types, SQLite repository
-    knowledge/       # Mock regulation API, reference data
-    llm/             # LLM client abstraction
+    knowledge/       # Regulation API, reference data
+    llm/             # Model factory, config, DeepSeek adapter
     evolution/       # Skill evolution / learning
-    user-info/       # User profile extraction
-    __tests__/       # Integration tests (139 tests)
-skills/              # Pattern definitions (skills; 1 built-in: GDPR)
-data/                # SQLite database + uploads (runtime, not committed)
+    user-info/       # User profile extraction, file chunking
+    __tests__/       # Integration tests
+  compliance-chat.ts  # Interactive compliance wizard (scope→docs→audit)
+  compliance-tools.ts # Tool definitions for the compliance wizard
+  compliance-packs.ts # Compliance pack registry
+  compliance-session.ts # Session model for compliance workflow
+  compliance-audit.ts   # Audit execution logic
+  skill-generator.ts    # Auto-generate SKILL.md from reference reports
+  index.ts              # Public API exports
 ```
 
 ## License
