@@ -340,7 +340,7 @@ function buildCheckResult(params: BuildCheckResultParams): CheckResult {
   const srcCit = resolveSourceCitations(finalObject.sourceCitation, fileChunks);
 
   if (toolCalled && perCheckResults.length > 0) {
-    const run = perCheckResults[0];
+    const run = perCheckResults[0]!;
     logPipeline(`  [LLM+TOOL] merged CheckResult from tool "${checkName}"`);
     return {
       name: checkName,

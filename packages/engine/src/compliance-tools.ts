@@ -174,6 +174,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     execute: async (sessionId) => {
       const session = getComplianceSession(sessionId);
       if (!session) return { error: "Session not found" };
+      if (session.auditRunning) return { error: "Audit already in progress" };
       await ensureSetup(sessionId);
       clearComplianceAuditResults(sessionId);
       setComplianceAuditRunning(sessionId, true);

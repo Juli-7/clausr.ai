@@ -18,7 +18,7 @@ export interface ComplianceSession {
   selectedPackIds: string[];
   docData: Record<string, Record<string, string>>;
   uploadedFiles: { name: string; size: string; time: string; dataUrl?: string }[];
-  auditResults: { packId: string; items: { name: string; desc: string; status: string; statusLabel: string; checks: { name: string; pass: boolean }[] }[] }[];
+  auditResults: { packId: string; items: { name: string; desc: string; status: "wait" | "run" | "done" | "err"; statusLabel: string; checks: { name: string; pass: boolean }[] }[] }[];
   messages: { role: string; content: string }[];
   precheckDone: boolean;
   auditDone: boolean;
