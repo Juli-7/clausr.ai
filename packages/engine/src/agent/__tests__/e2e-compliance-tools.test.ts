@@ -80,18 +80,18 @@ describe("Compliance tools end-to-end with real DB", () => {
     await TOOL_DEFS.update_doc_field.execute(sid, {
       docType: "declaration-of-conformity",
       field: "manufacturer",
-      value: "Acme Corp",
+      value: { value: "Acme Corp", sourceCitation: ["S1.c3"] },
     });
 
     await TOOL_DEFS.update_doc_field.execute(sid, {
       docType: "declaration-of-conformity",
       field: "model",
-      value: "XL-2000",
+      value: { value: "XL-2000" },
     });
 
     const session = getComplianceSession(sid);
-    expect(session!.docData["declaration-of-conformity"]!.manufacturer).toBe("Acme Corp");
-    expect(session!.docData["declaration-of-conformity"]!.model).toBe("XL-2000");
+    expect(session!.docData["declaration-of-conformity"]!.manufacturer).toEqual({ value: "Acme Corp", sourceCitation: ["S1.c3"] });
+    expect(session!.docData["declaration-of-conformity"]!.model).toEqual({ value: "XL-2000" });
   });
 
   it("batch_update_doc_fields tool writes multiple fields at once", async () => {
@@ -101,14 +101,18 @@ describe("Compliance tools end-to-end with real DB", () => {
 
     const result = await TOOL_DEFS.batch_update_doc_fields.execute(sid, {
       docType: "test-report",
-      fields: { temperature: "25C", humidity: "60%", voltage: "230V" },
+      fields: {
+        temperature: { value: "25C" },
+        humidity: { value: "60%" },
+        voltage: { value: "230V" },
+      },
     });
 
     expect(result.docData).toBeDefined();
-    const docData = (result as { docData: Record<string, Record<string, string>> }).docData;
-    expect(docData["test-report"]!.temperature).toBe("25C");
-    expect(docData["test-report"]!.humidity).toBe("60%");
-    expect(docData["test-report"]!.voltage).toBe("230V");
+    const docData = (result as { docData: Record<string, Record<string, { value: string }>> }).docData;
+    expect(docData["test-report"]!.temperature).toEqual({ value: "25C" });
+    expect(docData["test-report"]!.humidity).toEqual({ value: "60%" });
+    expect(docData["test-report"]!.voltage).toEqual({ value: "230V" });
   });
 
   it("attach_file tool stores file metadata", async () => {
@@ -145,7 +149,7 @@ describe("Compliance tools end-to-end with real DB", () => {
     ensureComplianceSession(sid);
     setComplianceScope(sid, ["pack-x"]);
     setComplianceStep(sid, 2);
-    addComplianceDocField(sid, "doc", "field1", "val1");
+    addComplianceDocField(sid, "doc", "field1", { value: "val1" });
 
     const result = await TOOL_DEFS.get_session_state.execute(sid, {});
     expect(result.step).toBe(2);
@@ -188,9 +192,9 @@ describe("Compliance tools end-to-end with real DB", () => {
     await TOOL_DEFS.batch_update_doc_fields.execute(sid, {
       docType: "declaration-of-conformity",
       fields: {
-        manufacturer: "Acme Corp",
-        model: "XL-2000",
-        voltage: "12V",
+        manufacturer: { value: "Acme Corp" },
+        model: { value: "XL-2000" },
+        voltage: { value: "12V" },
       },
     });
 

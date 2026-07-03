@@ -94,6 +94,22 @@ export class MockDocStore implements IDocStore {
     };
   }
 
+  async addEvidenceFile(sessionId: string, entry: ProcessedFile): Promise<void> {
+    const entryFileId = entry.fileId;
+    deleteChunksByFile(sessionId, entryFileId);
+    const chunkIds = saveChunks(sessionId, entryFileId, entry.chunks);
+    const meta = {
+      fileId: entryFileId,
+      filename: entry.filename,
+      pageCount: entry.pageCount,
+      ocrConfidence: entry.ocrConfidence,
+      extractorUsed: entry.extractorUsed,
+      chunkIds,
+      chunks: entry.chunks,
+    };
+    saveFileChunks(sessionId, JSON.stringify([meta]));
+  }
+
   async getFiles(sessionId: string): Promise<ProcessedFile[]> {
     const fileMetaJson = getFileChunks(sessionId);
     if (!fileMetaJson || fileMetaJson === "[]") return [];

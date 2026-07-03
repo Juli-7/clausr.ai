@@ -5,7 +5,10 @@ import {
   setComplianceAuditDone,
   setComplianceAgentResponse,
   addUserMessage,
+  getComplianceSession,
 } from "./agent/shared/memory/repository";
+import { getDocStore } from "./agent/user-info/vector-store";
+import type { ProcessedFile } from "./agent/user-info/vector-store/types";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -19,10 +22,40 @@ export type ComplianceAuditEvent =
   | { type: "error"; error: string }
   | { type: "done"; total: number };
 
+function buildEvidenceEntries(sessionId: string): ProcessedFile[] {
+  const session = getComplianceSession(sessionId);
+  if (!session) return [];
+  const entries: ProcessedFile[] = [];
+  let evidenceIndex = 0;
+  for (const [docType, fields] of Object.entries(session.docData)) {
+    for (const [field, entry] of Object.entries(fields)) {
+      evidenceIndex++;
+      const evidenceId = `evidence-${docType}-${field}`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+      entries.push({
+        fileId: evidenceId,
+        filename: `Evidence: ${docType} — ${field}`,
+        extractedText: entry.value,
+        chunks: [{
+          id: `${sessionId}_${evidenceId}_0`,
+          text: entry.value,
+        }],
+        extractorUsed: "evidence-interview",
+      });
+    }
+  }
+  return entries;
+}
+
 export async function* runComplianceAudit(
   sessionId: string,
   packs: { id: string; title: string }[]
 ): AsyncGenerator<ComplianceAuditEvent> {
+  const store = getDocStore();
+  const evidenceEntries = buildEvidenceEntries(sessionId);
+  for (const entry of evidenceEntries) {
+    await store.addEvidenceFile(sessionId, entry);
+  }
+
   let totalCompleted = 0;
 
   for (const pack of packs) {

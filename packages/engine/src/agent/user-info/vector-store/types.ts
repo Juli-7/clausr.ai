@@ -42,4 +42,6 @@ export interface IDocStore {
   ): Promise<ProcessFileResult>;
 
   getFiles(sessionId: string): Promise<ProcessedFile[]>;
+
+  addEvidenceFile(sessionId: string, entry: ProcessedFile): Promise<void>;
 }

@@ -4,7 +4,7 @@ import {
   addComplianceDocField, addComplianceFile, getComplianceFiles,
   setComplianceValidation, hasSessionSetup, loadSessionSetup,
 } from "./agent/shared/memory/repository";
-import type { ComplianceFile } from "./agent/shared/memory/repository";
+import type { ComplianceFile, DocFieldValue } from "./agent/shared/memory/repository";
 import { setupSkill, processSessionFiles } from "./agent/loading/loading-orchestrator";
 import { saveCompiledPack } from "./agent/loading/skill/loader";
 import { saveLessonOverride, getLessonOverrides } from "./agent/shared/memory/repository";
@@ -38,11 +38,19 @@ export const ToolSchemas = {
   update_doc_field: z.object({
     docType: z.string().describe("Document type, e.g. declaration-of-conformity"),
     field: z.string().describe("Field name"),
-    value: z.string().describe("Field value"),
+    value: z.object({
+      value: z.string().describe("Field value"),
+      sourceCitation: z.array(z.string()).optional().describe("Source chunk IDs this value was derived from, e.g. ['S1.c3']"),
+      citationRef: z.array(z.string()).optional().describe("Regulation clause IDs this value relates to, e.g. ['R48.6.2']"),
+    }).describe("Field value with optional evidence provenance"),
   }),
   batch_update_doc_fields: z.object({
     docType: z.string().describe("Document type, e.g. declaration-of-conformity"),
-    fields: z.record(z.string(), z.string()).describe("Record of field name → value pairs to update"),
+    fields: z.record(z.string(), z.object({
+      value: z.string().describe("Field value"),
+      sourceCitation: z.array(z.string()).optional().describe("Source chunk IDs this value was derived from, e.g. ['S1.c3']"),
+      citationRef: z.array(z.string()).optional().describe("Regulation clause IDs this value relates to, e.g. ['R48.6.2']"),
+    })).describe("Record of field name → structured value with provenance"),
   }),
   attach_file: z.object({
     name: z.string().describe("Original file name"),
@@ -134,7 +142,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     logLabel: "Update document field",
     mutates: true,
     execute: async (sessionId, input) => {
-      const { docType, field, value } = input as { docType: string; field: string; value: string };
+      const { docType, field, value } = input as { docType: string; field: string; value: DocFieldValue };
       addComplianceDocField(sessionId, docType, field, value);
       const s = getComplianceSession(sessionId);
       return { docData: s?.docData ?? {} };
@@ -148,7 +156,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     logLabel: "Batch update document fields",
     mutates: true,
     execute: async (sessionId, input) => {
-      const { docType, fields } = input as { docType: string; fields: Record<string, string> };
+      const { docType, fields } = input as { docType: string; fields: Record<string, DocFieldValue> };
       for (const [field, value] of Object.entries(fields)) {
         addComplianceDocField(sessionId, docType, field, value);
       }
@@ -333,7 +341,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
         for (const doc of pack.documents) {
           for (const field of doc.fields) {
             if (!field.required) continue;
-            const value = docData[doc.type]?.[field.field]?.trim();
+            const value = docData[doc.type]?.[field.field]?.value?.trim();
             const filled = !!value;
             checks.push({
               id: `${packId}:${doc.type}:${field.field}`,

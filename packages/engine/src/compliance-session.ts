@@ -3,6 +3,7 @@ import {
   getConversationHistory,
   getComplianceFiles,
   getComplianceComments,
+  type DocFieldValue,
 } from "./agent/shared/memory/repository";
 
 export interface ValidationCheck {
@@ -16,7 +17,7 @@ export interface ComplianceSession {
   id: string;
   step: 1 | 2 | 3;
   selectedPackIds: string[];
-  docData: Record<string, Record<string, string>>;
+  docData: Record<string, Record<string, DocFieldValue>>;
   uploadedFiles: { name: string; size: string; time: string; dataUrl?: string }[];
   auditResults: { packId: string; items: { name: string; desc: string; status: "wait" | "run" | "done" | "err"; statusLabel: string; checks: { name: string; pass: boolean }[] }[] }[];
   messages: { role: string; content: string }[];
