@@ -663,45 +663,35 @@ export interface ComplianceSessionData {
   agentResponses: Record<string, string>;
   validationChecks: { id: string; title: string; status: string; note: string }[];
   validationScore: number;
+  tenantId: string;
 }
 
 export function getComplianceSession(sessionId: string): ComplianceSessionData | null {
   const db = getDb();
-  const row = db.prepare("SELECT * FROM compliance_session WHERE session_id = ?").get(sessionId) as {
-    session_id: string;
-    step: number;
-    selected_pack_ids: string;
-    doc_data: string;
-    audit_results: string;
-    audit_running: number;
-    audit_done: number;
-    precheck_done: number;
-    agent_responses: string;
-    validation_checks: string;
-    validation_score: number;
-  } | undefined;
+  const row = db.prepare("SELECT * FROM compliance_session WHERE session_id = ?").get(sessionId) as Record<string, unknown> | undefined;
   if (!row) return null;
   return {
-    id: row.session_id,
+    id: row.session_id as string,
     step: (row.step as 1 | 2 | 3),
-    selectedPackIds: safeJsonParse(row.selected_pack_ids, []),
-    docData: safeJsonParse(row.doc_data, {}),
-    auditResults: safeJsonParse(row.audit_results, []),
-    auditRunning: row.audit_running === 1,
-    auditDone: row.audit_done === 1,
-    precheckDone: row.precheck_done === 1,
-    agentResponses: safeJsonParse(row.agent_responses, {}),
-    validationChecks: safeJsonParse(row.validation_checks, []),
-    validationScore: row.validation_score ?? 0,
+    selectedPackIds: safeJsonParse(row.selected_pack_ids as string, []),
+    docData: safeJsonParse(row.doc_data as string, {}),
+    auditResults: safeJsonParse(row.audit_results as string, []),
+    auditRunning: (row.audit_running as number) === 1,
+    auditDone: (row.audit_done as number) === 1,
+    precheckDone: (row.precheck_done as number) === 1,
+    agentResponses: safeJsonParse(row.agent_responses as string, {}),
+    validationChecks: safeJsonParse(row.validation_checks as string, []),
+    validationScore: (row.validation_score as number) ?? 0,
+    tenantId: (row.tenant_id as string) ?? "",
   };
 }
 
-export function ensureComplianceSession(sessionId: string): void {
+export function ensureComplianceSession(sessionId: string, tenantId?: string): void {
   const db = getDb();
   db.prepare(
-    `INSERT OR IGNORE INTO compliance_session (session_id, step, selected_pack_ids, doc_data, audit_results, audit_running, audit_done, precheck_done, updated_at)
-     VALUES (?, 1, '[]', '{}', '[]', 0, 0, 0, ?)`
-  ).run(sessionId, Date.now());
+    `INSERT OR IGNORE INTO compliance_session (session_id, step, selected_pack_ids, doc_data, audit_results, audit_running, audit_done, precheck_done, tenant_id, updated_at)
+     VALUES (?, 1, '[]', '{}', '[]', 0, 0, 0, ?, ?)`
+  ).run(sessionId, tenantId ?? "", Date.now());
 }
 
 export function setComplianceStep(sessionId: string, step: 1 | 2 | 3): void {
@@ -799,15 +789,16 @@ export function setComplianceAgentResponse(sessionId: string, packId: string, re
   db.prepare("UPDATE compliance_session SET agent_responses = ?, updated_at = ? WHERE session_id = ?").run(JSON.stringify(responses), Date.now(), sessionId);
 }
 
-export function getAllComplianceSessions(): { id: string; step: number; selectedPackIds: string[]; auditDone: boolean; createdAt: number }[] {
+export function getAllComplianceSessions(tenantId?: string): { id: string; step: number; selectedPackIds: string[]; auditDone: boolean; createdAt: number }[] {
   const db = getDb();
   const rows = db
     .prepare(
       `SELECT cs.session_id, cs.step, cs.selected_pack_ids, cs.audit_done, s.created_at
        FROM compliance_session cs JOIN sessions s ON cs.session_id = s.id
+       ${tenantId ? "WHERE cs.tenant_id = ?" : ""}
        ORDER BY s.created_at DESC`
     )
-    .all() as { session_id: string; step: number; selected_pack_ids: string; audit_done: number; created_at: number }[];
+    .all(...(tenantId ? [tenantId] : [])) as { session_id: string; step: number; selected_pack_ids: string; audit_done: number; created_at: number }[];
   return rows.map((r) => ({
     id: r.session_id,
     step: r.step,
