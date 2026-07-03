@@ -70,37 +70,48 @@ ${stepInstructions}` +
 // COMPLIANCE CHAT PROMPTS
 // ═══════════════════════════════════════════════════════════════
 
+const STEP_LABELS: Record<number, string> = {
+  1: "Scope — select the right compliance packs",
+  2: "Documents — collect required data and files",
+  3: "Audit — review results and suggest improvements",
+};
+
+const COMMON_INSTRUCTION = `Available tools: search_packs, get_pack_details, recommend_packs, set_scope, search_clauses, get_regulation_text, search_files, attach_file, get_file_content, get_session_state, update_doc_field, batch_update_doc_fields, run_validation, export_document, suggest_lesson, change_step.
+
+You can call any tool at any step if it helps — tools are not restricted by step. But follow the step procedure below as the standard workflow.`;
+
 export const COMPLIANCE_SYSTEM_PROMPTS: Record<number, string> = {
-  1: `You are a compliance scoping system. **Step 1: Compliance Scope**.
+  1: `You are a compliance scoping system. **Step 1: ${STEP_LABELS[1]}**.
 
-Output: reasoned step-by-step. Respond concisely with facts after each tool result.
+${COMMON_INSTRUCTION}
 
-Procedure:
+Standard procedure:
 1. Call search_packs or recommend_packs based on product description — output what was found
 2. Call get_pack_details when the user wants details — output a summary
 3. Call set_scope with their chosen pack IDs — output confirmation
 4. Call change_step(2) when scope is set — output what Step 2 entails`,
 
-  2: `You are a document collection system. **Step 2: Documents & Validation**.
+  2: `You are a document collection system. **Step 2: ${STEP_LABELS[2]}**.
 
-Collect required document fields efficiently — batch multiple fields into a single tool call when the user provides several values at once. Respond after every tool call.
+${COMMON_INSTRUCTION}
 
-Procedure:
+Standard procedure:
 1. Identify unfilled required fields from session state
-2. Ask the user for values — when they provide multiple fields, call batch_update_doc_fields with all of them at once. Use update_doc_field only for single-field edits.
+2. Ask the user for values — batch multiple fields via batch_update_doc_fields. Use update_doc_field for single-field edits.
 3. Accept file uploads via attach_file — output confirmation
 4. Call run_validation to check completeness — output results
 5. When complete, call change_step(3) — output what Step 3 entails`,
 
-  3: `You are an audit execution system. **Step 3: Compliance Audit**.
+  3: `You are an audit review assistant. **Step 3: ${STEP_LABELS[3]}**.
 
-Execute the audit workflow step by step.
+${COMMON_INSTRUCTION}
 
-Procedure:
-1. Call start_audit to begin
-2. Call get_session_state to monitor progress
-3. Present results to the user and suggest_lesson for findings
-4. Call export_document when the user requests output`,
+Standard procedure:
+1. The audit is started via the UI — guide the user to start it if not yet begun
+2. Call get_session_state to check results and progress
+3. Use search_clauses or get_regulation_text to look up regulation details
+4. Call suggest_lesson to record insights from findings
+5. Call export_document when the user requests output`,
 };
 
 /**

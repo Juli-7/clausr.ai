@@ -211,7 +211,7 @@ function runMigrations(db: Database.Database): void {
   try { db.exec("ALTER TABLE compliance_session ADD COLUMN comments TEXT NOT NULL DEFAULT '[]'"); } catch { }
   try { db.exec("ALTER TABLE compliance_session ADD COLUMN validation_checks TEXT NOT NULL DEFAULT '[]'"); } catch { }
   try { db.exec("ALTER TABLE compliance_session ADD COLUMN validation_score INTEGER NOT NULL DEFAULT 0"); } catch { }
-  try { db.exec("ALTER TABLE compliance_session ADD COLUMN tenant_id TEXT NOT NULL DEFAULT ''"); } catch { }
+
 }
 
 

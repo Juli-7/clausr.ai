@@ -181,7 +181,7 @@ export { buildSession } from "./compliance-session";
 export type { ComplianceSession, ValidationCheck } from "./compliance-session";
 
 // ── Compliance Tools (LLM-callable tool definitions for chat) ──
-export { TOOL_DEFS, ToolSchemas, getTool, getStepTools } from "./compliance-tools";
+export { TOOL_DEFS, ToolSchemas, getTool } from "./compliance-tools";
 export type { ToolDef, ToolName, ToolInput } from "./compliance-tools";
 
 // ── Compliance Chat (multi-step tool loop) ──

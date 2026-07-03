@@ -2,7 +2,6 @@ import { z } from "zod";
 import {
   getComplianceSession, setComplianceScope, setComplianceStep,
   addComplianceDocField, addComplianceFile, getComplianceFiles,
-  clearComplianceAuditResults, setComplianceAuditRunning,
   setComplianceValidation, hasSessionSetup, loadSessionSetup,
 } from "./agent/shared/memory/repository";
 import type { ComplianceFile } from "./agent/shared/memory/repository";
@@ -19,7 +18,6 @@ export type ToolName =
   | "update_doc_field"
   | "batch_update_doc_fields"
   | "attach_file"
-  | "start_audit"
   | "export_document"
   | "change_step"
   | "search_packs"
@@ -44,7 +42,7 @@ export const ToolSchemas = {
   }),
   batch_update_doc_fields: z.object({
     docType: z.string().describe("Document type, e.g. declaration-of-conformity"),
-    fields: z.record(z.string()).describe("Record of field name → value pairs to update"),
+    fields: z.record(z.string(), z.string()).describe("Record of field name → value pairs to update"),
   }),
   attach_file: z.object({
     name: z.string().describe("Original file name"),
@@ -52,7 +50,6 @@ export const ToolSchemas = {
     time: z.string().describe("Upload date"),
     dataUrl: z.string().describe("Base64-encoded data URL"),
   }),
-  start_audit: z.object({}),
   export_document: z.object({
     docType: z.string().describe("Document type to export"),
   }),
@@ -183,23 +180,6 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       } catch { /* file processing may fail silently */ }
       const session = buildSession(sessionId);
       return { files: session?.uploadedFiles ?? [] };
-    },
-  },
-
-  start_audit: {
-    name: "start_audit",
-    description: "Start the compliance audit across all selected packs.",
-    inputSchema: ToolSchemas.start_audit,
-    logLabel: "Start audit",
-    mutates: true,
-    execute: async (sessionId) => {
-      const session = getComplianceSession(sessionId);
-      if (!session) return { error: "Session not found" };
-      if (session.auditRunning) return { error: "Audit already in progress" };
-      await ensureSetup(sessionId);
-      clearComplianceAuditResults(sessionId);
-      setComplianceAuditRunning(sessionId, true);
-      return { jobId: `audit-${sessionId}`, packIds: session.selectedPackIds };
     },
   },
 
@@ -467,10 +447,4 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
 export function getTool(name: string) {
   return TOOL_DEFS[name as ToolName];
-}
-
-export function getStepTools(step: 1 | 2 | 3): ToolName[] {
-  if (step === 1) return ["search_packs", "get_pack_details", "recommend_packs", "search_clauses", "set_scope", "change_step"];
-  if (step === 2) return ["batch_update_doc_fields", "update_doc_field", "get_session_state", "get_file_content", "search_files", "run_validation", "attach_file", "change_step"];
-  return ["get_session_state", "search_clauses", "get_regulation_text", "start_audit", "export_document", "suggest_lesson", "change_step"];
 }
