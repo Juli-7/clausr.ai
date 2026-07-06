@@ -1,8 +1,9 @@
 import { z } from "zod";
 import {
   getComplianceSession, setComplianceScope, setComplianceStep,
-  addComplianceDocField, addComplianceFile, getComplianceFiles,
+  addComplianceDocField, addComplianceFile, getComplianceFiles, removeComplianceFile,
   setComplianceValidation, hasSessionSetup, loadSessionSetup,
+  setComplianceAuditRunning, clearComplianceAuditResults,
 } from "./agent/shared/memory/repository";
 import type { ComplianceFile, DocFieldValue } from "./agent/shared/memory/repository";
 import { setupSkill, processSessionFiles } from "./agent/loading/loading-orchestrator";
@@ -18,9 +19,11 @@ export type ToolName =
   | "update_doc_field"
   | "batch_update_doc_fields"
   | "attach_file"
+  | "detach_file"
   | "export_document"
-  | "change_step"
+  | "go_to_phase"
   | "search_packs"
+  | "start_audit"
   | "get_pack_details"
   | "recommend_packs"
   | "get_session_state"
@@ -58,16 +61,23 @@ export const ToolSchemas = {
     time: z.string().describe("Upload date"),
     dataUrl: z.string().describe("Base64-encoded data URL"),
   }),
+  detach_file: z.object({
+    name: z.string().describe("Name of the file to detach/remove"),
+  }),
   export_document: z.object({
     docType: z.string().describe("Document type to export"),
   }),
-  change_step: z.object({
-    step: z.number().min(1).max(3).describe("Target step: 1, 2, or 3"),
+  go_to_phase: z.object({
+    phase: z.enum(["scope", "documents", "audit"]).describe("Target phase. 'scope' to choose packs, 'documents' to collect data/files, 'audit' to review results."),
   }),
   search_packs: z.object({
     query: z.string().optional().describe("Search term"),
     regulation: z.string().optional().describe("Regulation filter"),
     industry: z.string().optional().describe("Industry filter"),
+  }),
+  start_audit: z.object({
+    packIds: z.array(z.string()).optional().describe("Optional: specific pack IDs to audit. Defaults to all selected packs."),
+    force: z.boolean().optional().describe("Set true to start audit even if documents are incomplete. Default false."),
   }),
   get_pack_details: z.object({
     packId: z.string().describe("Pack ID"),
@@ -124,7 +134,7 @@ export interface ToolDef {
 export const TOOL_DEFS: Record<ToolName, ToolDef> = {
   set_scope: {
     name: "set_scope",
-    description: "Select which compliance packs to include in the assessment scope.",
+    description: "Select compliance packs to include in the assessment. Call after searching or getting recommendations — once the user has chosen which packs apply. Precondition: user has decided on pack(s).",
     inputSchema: ToolSchemas.set_scope,
     logLabel: "Set compliance scope",
     mutates: true,
@@ -137,7 +147,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   update_doc_field: {
     name: "update_doc_field",
-    description: "Save a value for a document field (e.g. manufacturer name on Declaration of Conformity). Use for single field updates.",
+    description: "Save a value for a single document field (e.g. manufacturer name on Declaration of Conformity). Prefer batch_update_doc_fields when filling multiple fields at once. Call during 'documents' phase after identifying unfilled required fields from session state.",
     inputSchema: ToolSchemas.update_doc_field,
     logLabel: "Update document field",
     mutates: true,
@@ -151,7 +161,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   batch_update_doc_fields: {
     name: "batch_update_doc_fields",
-    description: "Save multiple document field values at once for a document type (e.g. fill company name, address, phone on Declaration of Conformity). PREFER this over calling update_doc_field repeatedly.",
+    description: "Fill multiple document fields at once for a document type (e.g. company name, address, phone on Declaration of Conformity). PREFER this over calling update_doc_field repeatedly. Call during 'documents' phase after identifying unfilled required fields. Precondition: user has provided values for the fields.",
     inputSchema: ToolSchemas.batch_update_doc_fields,
     logLabel: "Batch update document fields",
     mutates: true,
@@ -167,7 +177,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   attach_file: {
     name: "attach_file",
-    description: "Attach a file to the session for processing (manual, PDF, DOCX, images, etc.).",
+    description: "Upload a file (manual PDF, DOCX, image, etc.) and attach it to the session. Call during 'documents' phase when the user provides a supporting document. After attaching, use get_session_state to see processed files or get_file_content to read extracted text.",
     inputSchema: ToolSchemas.attach_file,
     logLabel: "Attach file",
     mutates: true,
@@ -191,9 +201,23 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     },
   },
 
+  detach_file: {
+    name: "detach_file",
+    description: "Remove a previously attached file by name. Call when the user explicitly asks to remove or delete a file they uploaded.",
+    inputSchema: ToolSchemas.detach_file,
+    logLabel: "Detach file",
+    mutates: true,
+    execute: async (sessionId, input) => {
+      const { name } = input as { name: string };
+      removeComplianceFile(sessionId, name);
+      const session = buildSession(sessionId);
+      return { files: session?.uploadedFiles ?? [] };
+    },
+  },
+
   export_document: {
     name: "export_document",
-    description: "Export a completed document as a downloadable file.",
+    description: "Generate a downloadable file for a completed document. Call during 'audit' phase when the user asks for output. Precondition: document fields have been filled and validation has passed.",
     inputSchema: ToolSchemas.export_document,
     logLabel: "Export document",
     mutates: false,
@@ -203,24 +227,26 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     },
   },
 
-  change_step: {
-    name: "change_step",
-    description: "Move to a different step in the compliance workflow (1=scope, 2=documents, 3=audit).",
-    inputSchema: ToolSchemas.change_step,
-    logLabel: "Change step",
+  go_to_phase: {
+    name: "go_to_phase",
+    description: "Move to a different phase of the compliance workflow. Phases: 'scope' (choose packs), 'documents' (collect data and upload files), 'audit' (review results). Call this when you and the user agree the current phase's work is done and it's time to move forward. Precondition: 'scope' requires packs selected; 'documents' requires scope set; 'audit' requires validation passed.",
+    inputSchema: ToolSchemas.go_to_phase,
+    logLabel: "Go to phase",
     mutates: true,
     execute: async (sessionId, input) => {
-      const { step } = input as { step: 1 | 2 | 3 };
+      const { phase } = input as { phase: "scope" | "documents" | "audit" };
+      const stepMap: Record<"scope" | "documents" | "audit", 1 | 2 | 3> = { scope: 1, documents: 2, audit: 3 };
+      const step = stepMap[phase];
       setComplianceStep(sessionId, step);
       if (step >= 2) await ensureSetup(sessionId);
       const s = getComplianceSession(sessionId);
-      return { step: s?.step ?? step, selectedPackIds: s?.selectedPackIds ?? [] };
+      return { step, selectedPackIds: s?.selectedPackIds ?? [] };
     },
   },
 
   search_packs: {
     name: "search_packs",
-    description: "Search compliance packs by query, regulation, or industry.",
+    description: "Find compliance packs by keyword, regulation, or industry. Call during 'scope' phase when you need to identify relevant packs. Use before set_scope. Precondition: user has described their product or you have keywords to search.",
     inputSchema: ToolSchemas.search_packs,
     logLabel: "Search packs",
     mutates: false,
@@ -233,9 +259,69 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     },
   },
 
+  start_audit: {
+    name: "start_audit",
+    description: "Start the compliance audit for selected packs. Auto-runs validation and returns results. If documents are incomplete, call with force: true to start audit anyway.",
+    inputSchema: ToolSchemas.start_audit,
+    logLabel: "Start audit",
+    mutates: true,
+    execute: async (sessionId, input) => {
+      const { packIds, force } = input as { packIds?: string[]; force?: boolean };
+      const s = getComplianceSession(sessionId);
+      if (!s) return { error: "Session not found" };
+      const auditPackIds = packIds ?? s.selectedPackIds;
+      if (auditPackIds.length === 0) return { error: "No packs selected for audit" };
+
+      // Auto-run validation (always — refreshes state)
+      const docData = s.docData;
+      const missingFields: { pack: string; field: string }[] = [];
+      for (const packId of auditPackIds) {
+        const pack = getPack(packId);
+        if (!pack) continue;
+        for (const doc of pack.documents) {
+          for (const field of doc.fields) {
+            if (!field.required) continue;
+            const value = docData[doc.type]?.[field.field]?.value?.trim();
+            if (!value) {
+              missingFields.push({ pack: pack.title, field: field.label });
+            }
+          }
+        }
+      }
+
+      if (missingFields.length > 0) {
+        const checks = missingFields.map((m) => ({
+          id: `${m.pack}:${m.field}`,
+          title: m.field,
+          status: "fail" as const,
+          note: "Required field is empty",
+        }));
+        setComplianceValidation(sessionId, checks, 0);
+
+        if (!force) {
+          return {
+            auditStarted: false,
+            missingFields: missingFields.length,
+            hints: missingFields.map((m) => `[${m.pack}] ${m.field}`),
+            message: `${missingFields.length} required field(s) are empty. Ask the user if they want to fill them first or start the audit anyway.`,
+          };
+        }
+      }
+
+      setComplianceAuditRunning(sessionId, true);
+      clearComplianceAuditResults(sessionId);
+      return {
+        auditStarted: true,
+        packIds: auditPackIds,
+        validationPassed: missingFields.length === 0,
+        validationHints: missingFields.length > 0 ? missingFields.map((m) => `[${m.pack}] ${m.field}`) : [],
+      };
+    },
+  },
+
   get_pack_details: {
     name: "get_pack_details",
-    description: "Get full details for a compliance pack including its checks and required documents.",
+    description: "Get full details for a compliance pack — checks, required documents, and field definitions. Call during 'scope' phase when the user wants to understand what a pack requires before selecting it. Precondition: you have a pack ID from search_packs or recommend_packs.",
     inputSchema: ToolSchemas.get_pack_details,
     logLabel: "Get pack details",
     mutates: false,
@@ -248,7 +334,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   recommend_packs: {
     name: "recommend_packs",
-    description: "Recommend compliance packs based on a product description.",
+    description: "Get AI-driven recommendations for which compliance packs apply based on a product description. Call during 'scope' phase when you need a starting point. Precondition: user has described their product or use case.",
     inputSchema: ToolSchemas.recommend_packs,
     logLabel: "Recommend packs",
     mutates: false,
@@ -265,7 +351,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   get_session_state: {
     name: "get_session_state",
-    description: "Get the full current session state — selected packs, filled fields, uploaded files, audit results, validation.",
+    description: "Request the full current session — selected packs, filled fields, uploaded files, audit results, validation score and checks. Call at any time to check what's been done and what's outstanding. Useful after run_validation or before deciding the phase is complete.",
     inputSchema: ToolSchemas.get_session_state,
     logLabel: "Get session state",
     mutates: false,
@@ -278,7 +364,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   get_file_content: {
     name: "get_file_content",
-    description: "Read extracted text content from an uploaded file.",
+    description: "Read the extracted text from an uploaded file. Call after attach_file when you need to inspect file contents to fill document fields or answer user questions. Precondition: file has been uploaded via attach_file.",
     inputSchema: ToolSchemas.get_file_content,
     logLabel: "Get file content",
     mutates: false,
@@ -310,7 +396,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   run_validation: {
     name: "run_validation",
-    description: "Check document completeness — verify all required fields are filled and files uploaded. Not a compliance audit.",
+    description: "Check document completeness — verify all required fields across selected packs are filled. Call during 'documents' phase to confirm everything is ready before moving to audit. Use get_session_state after this to see results.",
     inputSchema: ToolSchemas.run_validation,
     logLabel: "Run validation",
     mutates: true,
@@ -318,22 +404,9 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       const s = getComplianceSession(sessionId);
       if (!s) return { error: "Session not found" };
 
-      // Process any uploaded files
-      const uploadedFiles = getComplianceFiles(sessionId);
-      if (uploadedFiles.length > 0) {
-        await ensureSetup(sessionId);
-        const files = uploadedFiles.filter((f) => f.dataUrl).map((f) => ({
-          name: f.name, size: parseInt(f.size) || 0,
-          type: f.dataUrl?.split(";")[0]?.split(":")[1] || "application/octet-stream",
-          dataUrl: f.dataUrl ?? "",
-        }));
-        try { await processSessionFiles({ sessionId, files }); } catch { /* non-critical */ }
-      }
-
       const docData = s.docData;
       const checks: { id: string; title: string; status: "pass" | "warn" | "fail"; note: string }[] = [];
 
-      // For each selected pack, check its required document fields
       for (const packId of s.selectedPackIds) {
         const pack = getPack(packId);
         if (!pack) continue;
@@ -353,26 +426,17 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
         }
       }
 
-      // File upload check — warn if no files
-      if (checks.length > 0) {
-        checks.push({
-          id: "file-upload",
-          title: "Supporting documents uploaded",
-          status: uploadedFiles.length > 0 ? "pass" : "warn",
-          note: uploadedFiles.length > 0 ? `${uploadedFiles.length} file(s) uploaded` : "No files uploaded — interview data works too",
-        });
-      }
-
       const passed = checks.filter((c) => c.status === "pass").length;
       const score = checks.length > 0 ? Math.round((passed / checks.length) * 100) : 100;
+      const missing = checks.filter((c) => c.status === "fail").length;
       setComplianceValidation(sessionId, checks, score);
-      return { checks, score };
+      return { checks, score, missing, total: checks.length };
     },
   },
 
   search_clauses: {
     name: "search_clauses",
-    description: "Search regulation clauses by keyword across available regulations.",
+    description: "Search regulation clauses by keyword across available regulations. Call during 'audit' phase when you need to look up specific regulatory requirements. Precondition: you have a keyword or topic to search for.",
     inputSchema: ToolSchemas.search_clauses,
     logLabel: "Search clauses",
     mutates: false,
@@ -387,7 +451,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   get_regulation_text: {
     name: "get_regulation_text",
-    description: "Get the full text of a regulation or a specific clause within it.",
+    description: "Get the full text of a regulation or a specific clause. Call during 'audit' phase when you need details on a specific regulation. Precondition: you know the regulation code (e.g. 'R48') from search_clauses or pack details.",
     inputSchema: ToolSchemas.get_regulation_text,
     logLabel: "Get regulation text",
     mutates: false,
@@ -407,7 +471,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   search_files: {
     name: "search_files",
-    description: "Search uploaded file content by keyword to find relevant information.",
+    description: "Search uploaded file content by keyword to find relevant information. Call during 'documents' or 'audit' phase when you need to locate specific data in uploaded documents. Precondition: files have been uploaded via attach_file.",
     inputSchema: ToolSchemas.search_files,
     logLabel: "Search files",
     mutates: false,
@@ -430,7 +494,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   suggest_lesson: {
     name: "suggest_lesson",
-    description: "Suggest a lesson learned from an audit result. On first call, saves as pending. If the user confirms, call again with applyToSkill=true to write it permanently into the skill.",
+    description: "Record a lesson learned from an audit finding. Call during 'audit' phase when you spot a pattern or insight worth saving. On first call, saves as pending; if user confirms, call again with applyToSkill=true to write permanently. Precondition: audit has produced findings worth capturing.",
     inputSchema: ToolSchemas.suggest_lesson,
     logLabel: "Suggest lesson",
     mutates: true,

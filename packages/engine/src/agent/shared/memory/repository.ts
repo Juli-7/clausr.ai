@@ -752,6 +752,12 @@ export function getComplianceFiles(sessionId: string): ComplianceFile[] {
   return safeJsonParse(getSessionFiles(sessionId), []);
 }
 
+export function removeComplianceFile(sessionId: string, fileName: string): void {
+  const files = getComplianceFiles(sessionId);
+  const filtered = files.filter((f) => f.name !== fileName);
+  saveSessionFiles(sessionId, JSON.stringify(filtered));
+}
+
 export function setComplianceAuditRunning(sessionId: string, running: boolean): void {
   const db = getDb();
   db.prepare("UPDATE compliance_session SET audit_running = ?, updated_at = ? WHERE session_id = ?").run(running ? 1 : 0, Date.now(), sessionId);

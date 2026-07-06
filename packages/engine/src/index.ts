@@ -52,6 +52,7 @@ export {
   addComplianceDocField,
   addComplianceFile,
   getComplianceFiles,
+  removeComplianceFile,
   setComplianceAuditRunning,
   setComplianceAuditDone,
   clearComplianceAuditResults,
@@ -172,6 +173,7 @@ export type { ProviderName } from "./agent/llm/factory";
 
 // ── Prompts ──
 export { COMPLIANCE_SYSTEM_PROMPTS, buildComplianceStepPrompt } from "./agent/pipeline/prompts";
+export type { SessionState } from "./agent/pipeline/prompts";
 
 // ── Compliance Packs (search/get/list with eager cache) ──
 export { searchPacks, getPack, packs, allRegs, allInds } from "./compliance-packs";

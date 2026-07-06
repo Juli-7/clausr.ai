@@ -76,47 +76,73 @@ const STEP_LABELS: Record<number, string> = {
   3: "Audit — review results and suggest improvements",
 };
 
-const COMMON_INSTRUCTION = `Available tools: search_packs, get_pack_details, recommend_packs, set_scope, search_clauses, get_regulation_text, search_files, attach_file, get_file_content, get_session_state, update_doc_field, batch_update_doc_fields, run_validation, export_document, suggest_lesson, change_step.
+const COMMON_INSTRUCTION = `You can call any tool at any time — tools are not restricted by phase. Use the tool descriptions to decide when each tool is appropriate. The following tools are available:
 
-You can call any tool at any step if it helps — tools are not restricted by step. But follow the step procedure below as the standard workflow.`;
+**Scope tools** (use when choosing packs):
+- search_packs, recommend_packs, get_pack_details, set_scope
+
+**Document tools** (use when collecting data and files):
+- update_doc_field, batch_update_doc_fields, attach_file, get_file_content, search_files, run_validation
+
+**Audit tools** (use when reviewing results):
+- search_clauses, get_regulation_text, suggest_lesson, export_document
+
+**Navigation & inspection** (use any time):
+- go_to_phase, get_session_state`;
 
 export const COMPLIANCE_SYSTEM_PROMPTS: Record<number, string> = {
-  1: `You are a compliance scoping system. **Step 1: ${STEP_LABELS[1]}**.
+  1: `You are a compliance scoping assistant. **Current phase: ${STEP_LABELS[1]}**.
+
+Your goal is to help the user choose the right compliance packs.
 
 ${COMMON_INSTRUCTION}
 
-Standard procedure:
-1. Call search_packs or recommend_packs based on product description — output what was found
-2. Call get_pack_details when the user wants details — output a summary
-3. Call set_scope with their chosen pack IDs — output confirmation
-4. Call change_step(2) when scope is set — output what Step 2 entails`,
+Typical workflow (not mandatory — use your judgment based on the user's needs):
+1. Ask about their product or use case if they haven't described it
+2. Call search_packs or recommend_packs to find relevant packs
+3. Call get_pack_details to show what a pack requires when they're interested
+4. Call set_scope once the user has decided
+5. Call go_to_phase with phase="documents" when scope is confirmed and the user is ready`,
 
-  2: `You are a document collection system. **Step 2: ${STEP_LABELS[2]}**.
+  2: `You are a document collection assistant. **Current phase: ${STEP_LABELS[2]}**.
 
-${COMMON_INSTRUCTION}
-
-Standard procedure:
-1. Identify unfilled required fields from session state
-2. Ask the user for values — batch multiple fields via batch_update_doc_fields. Use update_doc_field for single-field edits.
-3. Accept file uploads via attach_file — output confirmation
-4. Call run_validation to check completeness — output results
-5. When complete, call change_step(3) — output what Step 3 entails`,
-
-  3: `You are an audit review assistant. **Step 3: ${STEP_LABELS[3]}**.
+Your goal is to help the user fill in required document fields and upload supporting files.
 
 ${COMMON_INSTRUCTION}
 
-Standard procedure:
-1. The audit is started via the UI — guide the user to start it if not yet begun
+Typical workflow (not mandatory — use your judgment based on what's been done):
+1. Use get_session_state to see what fields are already filled
+2. Ask the user for unfilled values — prefer batch_update_doc_fields for multiple fields at once
+3. When the user has supporting files, call attach_file
+4. Call run_validation to check completeness
+5. Call go_to_phase with phase="audit" when validation passes and the user is ready`,
+
+  3: `You are an audit review assistant. **Current phase: ${STEP_LABELS[3]}**.
+
+Your goal is to help the user understand audit results and capture insights.
+
+${COMMON_INSTRUCTION}
+
+Typical workflow (not mandatory — use your judgment based on results):
+1. The audit runs via the UI — guide the user to start it if not yet begun
 2. Call get_session_state to check results and progress
 3. Use search_clauses or get_regulation_text to look up regulation details
-4. Call suggest_lesson to record insights from findings
-5. Call export_document when the user requests output`,
+4. Call suggest_lesson to record insights
+5. Call export_document when the user wants output files`,
 };
 
+export interface SessionState {
+  selectedPackIds?: string[];
+  filledFieldCount?: number;
+  totalRequiredFields?: number;
+  validationScore?: number;
+  validationChecks?: Array<{ id: string; title: string; status: string; note: string }>;
+  uploadedFileCount?: number;
+}
+
 /**
- * Build an enriched step prompt with pack-specific context.
- * Injects document fields (step 2) and checks/redlines/lessons (step 3) into the prompt.
+ * Build an enriched step prompt with pack context and current session state.
+ * Injects what phase the user is on, what's been done, and what remains.
  */
 export function buildComplianceStepPrompt(
   step: number,
@@ -136,12 +162,34 @@ export function buildComplianceStepPrompt(
         interview?: { question?: string; hint?: string };
       }>;
     }>;
-  }>
+  }>,
+  sessionState?: SessionState,
 ): string {
   const base = COMPLIANCE_SYSTEM_PROMPTS[step] ?? COMPLIANCE_SYSTEM_PROMPTS[1] ?? "";
-  if (!packs.length) return base;
+  if (!packs.length && !sessionState) return base;
 
   const sections: string[] = [base];
+
+  // ── Session state summary ──
+  if (sessionState) {
+    const lines: string[] = [];
+    if (sessionState.selectedPackIds?.length) {
+      lines.push(`- Selected packs: ${sessionState.selectedPackIds.join(", ")}`);
+    }
+    if (sessionState.totalRequiredFields !== undefined) {
+      const filled = sessionState.filledFieldCount ?? 0;
+      lines.push(`- Document fields: ${filled}/${sessionState.totalRequiredFields} filled`);
+    }
+    if (sessionState.validationScore !== undefined) {
+      lines.push(`- Validation score: ${sessionState.validationScore}%`);
+    }
+    if (sessionState.uploadedFileCount !== undefined) {
+      lines.push(`- Uploaded files: ${sessionState.uploadedFileCount}`);
+    }
+    if (lines.length) {
+      sections.push(`\n# Current Session State\n${lines.join("\n")}`);
+    }
+  }
 
   if (step === 2) {
     const docLines = packs.flatMap((p) =>

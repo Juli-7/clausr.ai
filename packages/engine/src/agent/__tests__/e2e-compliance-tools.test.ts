@@ -55,19 +55,19 @@ describe("Compliance tools end-to-end with real DB", () => {
     expect(session!.selectedPackIds).toEqual(["pack-a", "pack-b"]);
   });
 
-  it("change_step tool transitions step correctly", async () => {
-    const sid = validSessionId("step");
+  it("go_to_phase tool transitions phase correctly", async () => {
+    const sid = validSessionId("phase");
     getOrCreateSession(sid, "test-lighting");
     ensureComplianceSession(sid);
 
     let session = getComplianceSession(sid);
     expect(session!.step).toBe(1);
 
-    await TOOL_DEFS.change_step.execute(sid, { step: 2 });
+    await TOOL_DEFS.go_to_phase.execute(sid, { phase: "documents" });
     session = getComplianceSession(sid);
     expect(session!.step).toBe(2);
 
-    await TOOL_DEFS.change_step.execute(sid, { step: 3 });
+    await TOOL_DEFS.go_to_phase.execute(sid, { phase: "audit" });
     session = getComplianceSession(sid);
     expect(session!.step).toBe(3);
   });
@@ -187,7 +187,7 @@ describe("Compliance tools end-to-end with real DB", () => {
     ensureComplianceSession(sid);
 
     await TOOL_DEFS.set_scope.execute(sid, { packIds: ["automotive-lighting"] });
-    await TOOL_DEFS.change_step.execute(sid, { step: 2 });
+    await TOOL_DEFS.go_to_phase.execute(sid, { phase: "documents" });
 
     await TOOL_DEFS.batch_update_doc_fields.execute(sid, {
       docType: "declaration-of-conformity",
@@ -209,7 +209,7 @@ describe("Compliance tools end-to-end with real DB", () => {
     expect(validationResult.score).toBeGreaterThanOrEqual(0);
     expect(validationResult.score).toBeLessThanOrEqual(100);
 
-    await TOOL_DEFS.change_step.execute(sid, { step: 3 });
+    await TOOL_DEFS.go_to_phase.execute(sid, { phase: "audit" });
 
     const finalSession = getComplianceSession(sid);
     expect(finalSession!.step).toBe(3);
