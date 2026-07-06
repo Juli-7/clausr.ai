@@ -4,7 +4,6 @@ import {
   setComplianceAuditRunning,
   setComplianceAuditDone,
   setComplianceAgentResponse,
-  addUserMessage,
   getComplianceSession,
 } from "./agent/shared/memory/repository";
 import { getDocStore } from "./agent/user-info/vector-store";
@@ -89,9 +88,6 @@ export async function* runComplianceAudit(
             await delay(150);
           }
 
-          if (ar.content) {
-            addUserMessage(sessionId, ar.content);
-          }
         } else if (event.type === "error") {
           yield { type: "error", error: event.error };
         }
@@ -106,6 +102,5 @@ export async function* runComplianceAudit(
 
   setComplianceAuditRunning(sessionId, false);
   setComplianceAuditDone(sessionId, true);
-  addUserMessage(sessionId, "**Audit complete.** All checks have been processed. Review results on the right panel.");
   yield { type: "done", total: totalCompleted };
 }
