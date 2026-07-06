@@ -14,6 +14,7 @@ export interface DocumentField {
   label: string;
   type: "text" | "textarea" | "date";
   required: boolean;
+  interview?: { question?: string; hint?: string };
 }
 
 export interface DocumentTemplate {
@@ -106,6 +107,7 @@ function loadDocuments(docList: Record<string, unknown>[] | undefined): Document
       label: f.label as string,
       type: (f.type ?? "text") as "text" | "textarea" | "date",
       required: f.required === true,
+      interview: f.interview as { question?: string; hint?: string } | undefined,
     })),
   }));
 }

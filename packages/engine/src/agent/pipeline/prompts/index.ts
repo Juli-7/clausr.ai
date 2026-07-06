@@ -105,17 +105,19 @@ Typical workflow (not mandatory — use your judgment based on the user's needs)
 5. Call go_to_phase with phase="documents" when scope is confirmed and the user is ready`,
 
   2: `You are a document collection assistant. **Current phase: ${STEP_LABELS[2]}**.
-
-Your goal is to help the user fill in required document fields and upload supporting files.
-
-${COMMON_INSTRUCTION}
-
-Typical workflow (not mandatory — use your judgment based on what's been done):
-1. Use get_session_state to see what fields are already filled
-2. Ask the user for unfilled values — prefer batch_update_doc_fields for multiple fields at once
-3. When the user has supporting files, call attach_file
-4. Call run_validation to check completeness
-5. Call go_to_phase with phase="audit" when validation passes and the user is ready`,
+ 
+ Your goal is to help the user fill in required document fields and upload supporting files.
+ 
+ ${COMMON_INSTRUCTION}
+ 
+ Typical workflow (not mandatory — use your judgment based on what's been done):
+ 1. Use get_session_state to see what fields are already filled
+ 2. Look at the Required Documents & Fields section below — it groups fields by document type and shows interview hints
+ 3. Ask the user for unfilled values — prefer batch_update_doc_fields for multiple fields at once. Fields shared across documents are marked — fill once, applies everywhere
+ 4. Use interview hints/questions as conversation starters when you need to ask for a field
+ 5. When the user has supporting files, call attach_file
+ 6. Call run_validation to check completeness
+ 7. Call go_to_phase with phase="audit" when validation passes and the user is ready`,
 
   3: `You are an audit review assistant. **Current phase: ${STEP_LABELS[3]}**.
 
@@ -192,20 +194,36 @@ export function buildComplianceStepPrompt(
   }
 
   if (step === 2) {
-    const docLines = packs.flatMap((p) =>
-      (p.documents ?? []).flatMap((d) =>
-        d.fields
-          .filter((f) => f.required)
-          .map((f) => {
-            const q = f.interview?.question ? ` — ${f.interview.question}` : "";
-            return `- [${p.title}] ${f.field}: ${f.label}${q}`;
-          })
-      )
-    );
-    if (docLines.length) {
-      sections.push(
-        `\n# Required Documents & Fields\nUse these fields to guide your interview. Ask about each one.\n\n${docLines.join("\n")}`
-      );
+    sections.push(`\n# Required Documents & Fields`);
+    for (const p of packs) {
+      for (const d of p.documents ?? []) {
+        const required = d.fields.filter((f) => f.required);
+        if (!required.length) continue;
+        sections.push(`\n## ${p.title} → ${d.title} (\`${d.type}\`)`);
+        for (const f of required) {
+          const hint = f.interview?.hint ? ` (${f.interview.hint})` : "";
+          const q = f.interview?.question ? `\n  Interview question: ${f.interview.question}` : "";
+          sections.push(`- **${f.label}** (\`${f.field}\`)${hint}${q}`);
+        }
+      }
+    }
+    // Deduplicated field summary — show which fields appear in multiple documents
+    const fieldToDocs = new Map<string, string[]>();
+    for (const p of packs) {
+      for (const d of p.documents ?? []) {
+        for (const f of d.fields) {
+          if (!f.required) continue;
+          const key = `${p.title}/${f.field}`;
+          if (!fieldToDocs.has(key)) fieldToDocs.set(key, []);
+          fieldToDocs.get(key)!.push(d.title);
+        }
+      }
+    }
+    const sharedFields = [...fieldToDocs.entries()]
+      .filter(([, docs]) => docs.length > 1)
+      .map(([key, docs]) => `- \`${key.split("/")[1]}\` shared across: ${docs.join(", ")}`);
+    if (sharedFields.length) {
+      sections.push(`\n### Shared Fields\nThese fields appear in multiple documents — fill once, applies to all:\n${sharedFields.join("\n")}`);
     }
   }
 
