@@ -348,7 +348,6 @@ describe("createPipelineContext", () => {
     expect(ctx.steps).toBeInstanceOf(StepMemory);
     expect(ctx.files).toBeInstanceOf(FileRegistry);
     expect(ctx.palette).toBeInstanceOf(PaletteStore);
-    expect(ctx.report).toBeInstanceOf(ReportAssembler);
     expect(ctx.previousTurns).toEqual([]);
     expect(ctx.uploadedFiles).toEqual([]);
   });
@@ -484,31 +483,18 @@ describe("PaletteStore", () => {
 
   it("stores citation palette", () => {
     const store = new PaletteStore();
-    store.loadCitationPalette([{ id: "R48.6.2", regulation: "R48", clause: "6.2", text: "Mount at least 500mm" }]);
+    store.addPaletteEntries([{ id: "R48.6.2", regulation: "R48", clause: "6.2", text: "Mount at least 500mm" }]);
     expect(store.getCitationPalette()).toHaveLength(1);
   });
 
   it("finds citation by ref", () => {
     const store = new PaletteStore();
-    store.loadCitationPalette([
+    store.addPaletteEntries([
       { id: "R48.6.2", regulation: "R48", clause: "6.2", text: "text" },
       { id: "R112.5.5", regulation: "R112", clause: "5.5", text: "other" },
     ]);
     expect(store.findCitation("R48.6.2")?.regulation).toBe("R48");
     expect(store.findCitation("missing")).toBeUndefined();
-  });
-
-  it("formats context summary", () => {
-    const store = new PaletteStore();
-    store.loadCitationPalette([{ id: "R48.6.2", regulation: "R48", clause: "6.2", text: "Mount at least 500mm" }]);
-    const summary = store.formatContextSummary();
-    expect(summary).toContain("[R48.6.2]");
-    expect(summary).toContain("R48");
-    expect(summary).toContain("§6.2");
-  });
-
-  it("returns empty string for empty citation palette", () => {
-    expect(new PaletteStore().formatContextSummary()).toBe("");
   });
 });
 
@@ -551,18 +537,6 @@ describe("FileRegistry", () => {
     expect(summary).toContain("[S1.c2] chunk two");
   });
 
-  it("computes average OCR confidence", () => {
-    const reg = new FileRegistry();
-    reg.addFile({ fileId: "f1", filename: "a.png", extractedText: "", ocrConfidence: 80 });
-    reg.addFile({ fileId: "f2", filename: "b.png", extractedText: "", ocrConfidence: 90 });
-    expect(reg.averageOcrConfidence()).toBe(85);
-  });
-
-  it("returns 100 when no files have OCR confidence", () => {
-    const reg = new FileRegistry();
-    reg.addFile({ fileId: "f1", filename: "a.pdf", extractedText: "text" });
-    expect(reg.averageOcrConfidence()).toBe(100);
-  });
 });
 
 // ── ReportAssembler ──

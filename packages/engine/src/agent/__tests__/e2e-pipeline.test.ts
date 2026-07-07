@@ -117,7 +117,7 @@ describe("Full pipeline end-to-end", () => {
       ["R48", "R112"],
     );
 
-    ctx.palette.loadCitationPalette([
+    ctx.palette.addPaletteEntries([
       { id: "R48.6.1", regulation: "R48", clause: "6.1", text: "§6.1 Light source requirements" },
       { id: "R48.6.2", regulation: "R48", clause: "6.2", text: "§6.2 Mounting height minimum 500mm" },
       { id: "R112.5.5", regulation: "R112", clause: "5.5", text: "§5.5 Colour temperature not more than 6000K" },
@@ -209,7 +209,7 @@ describe("Full pipeline end-to-end", () => {
       ["R48", "R112"],
     );
 
-    ctx.palette.loadCitationPalette([
+    ctx.palette.addPaletteEntries([
       { id: "R48.6.1", regulation: "R48", clause: "6.1", text: "§6.1" },
       { id: "R48.6.2", regulation: "R48", clause: "6.2", text: "§6.2" },
       { id: "R112.5.5", regulation: "R112", clause: "5.5", text: "§5.5" },

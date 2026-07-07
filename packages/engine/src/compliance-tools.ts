@@ -9,6 +9,7 @@ import type { ComplianceFile, DocFieldValue } from "./agent/shared/memory/reposi
 import { setupSkill, processSessionFiles } from "./agent/loading/loading-orchestrator";
 import { saveCompiledPack } from "./agent/loading/skill/loader";
 import { saveLessonOverride, getLessonOverrides } from "./agent/shared/memory/repository";
+import { startBackgroundAudit } from "./compliance-audit";
 import { searchPacks, getPack, packs } from "./compliance-packs";
 import { buildSession } from "./compliance-session";
 import { getRegulationApi } from "./agent/knowledge/regulation-api";
@@ -24,6 +25,8 @@ export type ToolName =
   | "go_to_phase"
   | "search_packs"
   | "start_audit"
+  | "poll_audit"
+  | "get_check_detail"
   | "get_pack_details"
   | "recommend_packs"
   | "get_session_state"
@@ -78,6 +81,11 @@ export const ToolSchemas = {
   start_audit: z.object({
     packIds: z.array(z.string()).optional().describe("Optional: specific pack IDs to audit. Defaults to all selected packs."),
     force: z.boolean().optional().describe("Set true to start audit even if documents are incomplete. Default false."),
+  }),
+  poll_audit: z.object({}).describe("Poll the current audit status and results. Returns incremental per-pack results sorted by completion time."),
+  get_check_detail: z.object({
+    packId: z.string().describe("Pack ID to get check details for"),
+    checkId: z.string().describe("Check ID (check name) to get detailed results for"),
   }),
   get_pack_details: z.object({
     packId: z.string().describe("Pack ID"),
@@ -261,7 +269,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   start_audit: {
     name: "start_audit",
-    description: "Start the compliance audit for selected packs. Auto-runs validation and returns results. If documents are incomplete, call with force: true to start audit anyway.",
+    description: "Start the compliance audit for selected packs. Runs in background — call poll_audit once to check when done and read all results. If documents are incomplete, call with force: true to start audit anyway.",
     inputSchema: ToolSchemas.start_audit,
     logLabel: "Start audit",
     mutates: true,
@@ -310,11 +318,86 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
       setComplianceAuditRunning(sessionId, true);
       clearComplianceAuditResults(sessionId);
+      const auditPacks = auditPackIds.map((id) => {
+        const p = getPack(id);
+        return p ? { id: p.id, title: p.title } : null;
+      }).filter(Boolean) as { id: string; title: string }[];
+      startBackgroundAudit(sessionId, auditPacks);
       return {
         auditStarted: true,
         packIds: auditPackIds,
         validationPassed: missingFields.length === 0,
         validationHints: missingFields.length > 0 ? missingFields.map((m) => `[${m.pack}] ${m.field}`) : [],
+      };
+    },
+  },
+
+  poll_audit: {
+    name: "poll_audit",
+    description: "Get current audit results. Call once after start_audit — returns auditRunning, auditDone, and all accumulated results. If audit is still running, tell the user it's in progress and let them ask for updates later.",
+    inputSchema: ToolSchemas.poll_audit,
+    logLabel: "Poll audit",
+    mutates: false,
+    execute: async (sessionId) => {
+      const s = getComplianceSession(sessionId);
+      if (!s) return { error: "Session not found" };
+      const { auditResults, auditRunning, auditDone, selectedPackIds } = s;
+      const completedCount = auditResults.filter((r) => r.items.length > 0).length;
+      const totalCount = selectedPackIds.length;
+      return {
+        auditRunning,
+        auditDone,
+        completedPacks: completedCount,
+        totalPacks: totalCount,
+        results: auditResults,
+        progress: totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0,
+      };
+    },
+  },
+
+  get_check_detail: {
+    name: "get_check_detail",
+    description: "Get detailed results for a specific check in a pack — verdict, reasoning, citations, and sub-results. Call during 'audit' phase when the user wants to understand why a particular check passed or failed.",
+    inputSchema: ToolSchemas.get_check_detail,
+    logLabel: "Get check detail",
+    mutates: false,
+    execute: async (sessionId, input) => {
+      const { packId, checkId } = input as { packId: string; checkId: string };
+      const s = getComplianceSession(sessionId);
+      if (!s) return { error: "Session not found" };
+
+      // Check audit results first
+      const packResult = s.auditResults.find((r) => r.packId === packId);
+      const checkItem = packResult?.items.find((i) => i.name === checkId);
+
+      // Try full agent response for deeper detail
+      let detail: Record<string, unknown> = {};
+      try {
+        const raw = s.agentResponses[packId];
+        if (raw) {
+          const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+          const checkResults: { name: string; type: string; finding: string; verdict: string; citationRef: string[]; sourceCitation: string[] }[] = parsed?.checkResults ?? [];
+          const cr = checkResults.find((c) => c.name === checkId);
+          if (cr) {
+            detail = {
+              finding: cr.finding,
+              verdict: cr.verdict,
+              type: cr.type,
+              citations: cr.citationRef ?? [],
+              sources: cr.sourceCitation ?? [],
+            };
+          }
+        }
+      } catch {}
+
+      return {
+        packId,
+        checkId,
+        status: checkItem?.status ?? "wait",
+        statusLabel: checkItem?.statusLabel ?? "—",
+        description: checkItem?.desc ?? "",
+        ...detail,
+        subResults: checkItem?.checks ?? [],
       };
     },
   },

@@ -21,6 +21,66 @@ export type ComplianceAuditEvent =
   | { type: "error"; error: string }
   | { type: "done"; total: number };
 
+interface BackgroundAudit {
+  promise: Promise<void>;
+  events: ComplianceAuditEvent[];
+  done: boolean;
+  error?: string;
+}
+
+const runningAudits = new Map<string, BackgroundAudit>();
+
+const AUDIT_CLEANUP_MS = 5 * 60 * 1000;
+
+export function startBackgroundAudit(
+  sessionId: string,
+  packs: { id: string; title: string }[]
+): BackgroundAudit {
+  const existing = runningAudits.get(sessionId);
+  if (existing && !existing.done) return existing;
+
+  const entry: BackgroundAudit = { promise: null as unknown as Promise<void>, events: [], done: false };
+  runningAudits.set(sessionId, entry);
+
+  entry.promise = (async () => {
+    try {
+      for await (const event of runComplianceAudit(sessionId, packs)) {
+        entry.events.push(event);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Audit error";
+      entry.error = msg;
+      entry.events.push({ type: "error", error: msg });
+    } finally {
+      entry.done = true;
+      setTimeout(() => { if (runningAudits.get(sessionId) === entry) runningAudits.delete(sessionId); }, AUDIT_CLEANUP_MS);
+    }
+  })();
+
+  return entry;
+}
+
+export function getBackgroundAudit(sessionId: string): BackgroundAudit | undefined {
+  return runningAudits.get(sessionId);
+}
+
+export async function* streamBackgroundAuditEvents(
+  sessionId: string
+): AsyncGenerator<ComplianceAuditEvent> {
+  const entry = runningAudits.get(sessionId);
+  if (!entry) return;
+
+  let cursor = 0;
+  while (true) {
+    while (cursor < entry.events.length) {
+      yield entry.events[cursor]!;
+      cursor++;
+    }
+    if (entry.done) break;
+    await delay(200);
+  }
+}
+
 function buildEvidenceEntries(sessionId: string): ProcessedFile[] {
   const session = getComplianceSession(sessionId);
   if (!session) return [];

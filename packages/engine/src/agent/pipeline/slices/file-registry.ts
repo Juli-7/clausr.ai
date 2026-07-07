@@ -164,11 +164,6 @@ export class FileRegistry {
     return registry;
   }
 
-  averageOcrConfidence(): number {
-    const withOcr = this.files.filter((f) => f.ocrConfidence !== undefined);
-    if (withOcr.length === 0) return 100;
-    return withOcr.reduce((s, f) => s + (f.ocrConfidence ?? 100), 0) / withOcr.length;
-  }
 }
 
 function isCjkChar(ch: string): boolean {

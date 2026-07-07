@@ -111,58 +111,6 @@ export class CheckStore {
   }
 
   /**
-   * Build citations from structured claims (Layer 5).
-   * Merges with existing entries — never removes.
-   */
-  buildCitationsFromClaims(
-    citationPalette: CitationPaletteEntry[],
-    sourcePalette: SourcePaletteEntry[]
-  ): void {
-    if (this.claims.length === 0) return;
-
-    const citationMap = new Map(this.compiledCitations.map((c) => [c.ref, c]));
-    const sourceMap = new Map(this.compiledSourceCitations.map((s) => [s.ref, s]));
-
-    for (const claim of this.claims) {
-      if (claim.citationRef.startsWith("R") && !citationMap.has(claim.citationRef)) {
-        const entry = citationPalette.find((e) => e.id === claim.citationRef);
-        if (entry) {
-          citationMap.set(claim.citationRef, {
-            ref: entry.id,
-            regulation: entry.regulation,
-            clause: entry.clause,
-          });
-          logPipeline(`  [CHECK-STORE] added citation ${claim.citationRef} from claims`);
-        }
-      }
-      if (claim.sourceCitation && !sourceMap.has(claim.sourceCitation)) {
-        const entry = sourcePalette.find((e) => e.id === claim.sourceCitation);
-        if (entry) {
-          sourceMap.set(claim.sourceCitation, {
-            ref: claim.sourceCitation,
-            fileId: entry.fileId,
-            filename: entry.filename,
-            fileUrl: entry.dataUrl,
-            extractedText: entry.extractedText,
-            keyExcerpt: entry.keyExcerpt,
-            chunks: entry.chunks,
-            boundingBox: entry.chunks?.[0]?.bbox,
-            pageNumber: entry.pageNumber,
-            pageCount: entry.pageCount,
-          });
-        }
-      }
-    }
-
-    this.compiledCitations = Array.from(citationMap.values()).sort((a, b) =>
-      a.ref.localeCompare(b.ref)
-    );
-    this.compiledSourceCitations = Array.from(sourceMap.values()).sort((a, b) =>
-      a.ref.localeCompare(b.ref)
-    );
-  }
-
-  /**
    * Supplement citations by scanning report content for [R48.x.x] and [SN] markers.
    * Backfills any missing entries.
    */

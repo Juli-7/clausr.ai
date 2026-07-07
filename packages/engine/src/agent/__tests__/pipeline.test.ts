@@ -133,7 +133,7 @@ function createPopulatedContext(sessionId: string, correlationId: string): Pipel
     },
   ]);
 
-  ctx.palette.loadCitationPalette([
+  ctx.palette.addPaletteEntries([
     { id: "R48.6.1", regulation: "R48", clause: "6.1", text: "§6.1 Light source requirements" },
     { id: "R48.6.2", regulation: "R48", clause: "6.2", text: "§6.2 Mounting height minimum 500mm" },
     { id: "R112.5.5", regulation: "R112", clause: "5.5", text: "§5.5 Colour temperature not more than 6000K" },
@@ -362,7 +362,7 @@ describe("executeLlmToolStep with mocked LLM", () => {
     getOrCreateSession(sid, "test-lighting");
 
     const ctx = createPipelineContext("test-lighting", LIGHTING_SKILL_MD, sid, cid, TEST_CHECKS, [], ["R48", "R112"]);
-    ctx.palette.loadCitationPalette([
+    ctx.palette.addPaletteEntries([
       { id: "R48.6.1", regulation: "R48", clause: "6.1", text: "§6.1 Light source requirements" },
     ]);
     ctx.files.addFile({
@@ -400,7 +400,7 @@ describe("executeLlmToolStep with mocked LLM", () => {
     getOrCreateSession(sid, "test-lighting");
 
     const ctx = createPipelineContext("test-lighting", LIGHTING_SKILL_MD, sid, cid, TEST_CHECKS, [], ["R48", "R112"]);
-    ctx.palette.loadCitationPalette([
+    ctx.palette.addPaletteEntries([
       { id: "R48.6.2", regulation: "R48", clause: "6.2", text: "§6.2 Mounting height minimum 500mm" },
     ]);
 

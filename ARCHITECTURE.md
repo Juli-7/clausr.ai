@@ -1,86 +1,142 @@
-# clausr.ai Architecture
+# clausr Engine Architecture
 
-## Segments
+## Entry Point
 
-### 1. Knowledge Layer
-- **Regulation DB** (`src/lib/agent/regulation/`) — structured regulation data with API interface
-  - `regulation-types.ts` — types for Regulation, Clause, versioning, API request/response, Zod validation schemas
-  - `regulation-api.ts` — `IRegulationApi` interface (`getRegulation`, `getClause`, `listRegulations`, `searchClauses`, `resolveCode`, `invalidateCache`); factory `getRegulationApi()` / `setRegulationApi()` for swapping mock ↔ real
-  - `mock-regulation-api.ts` — mock implementation with R48, R112, R83, R154, R13; code alias resolution; clause-level caching; Zod validation on return
-  - `skill-source.ts` — skill-specific §6 rule parsing; `loadReferencesForConditions` (old format) / `loadReferencesForRegulationIds` (new format); async variants `getClauseTextAsync` / `loadReferencesForRegulationIdsAsync` prefer API, fall back to file-based `references/` directory
-- **Domain Skills** (`src/lib/agent/skill/`) — SKILL.md loaded via `loader.ts`; new format uses `## Checks` table parsed by `check-parser.ts` to derive regulation IDs and domain schema; old `## Workflow` format still supported
+`packages/engine/src/index.ts` — barrel that defines the public API. The engine is consumed as `@clausr/engine` by an external application (not in this repo). Every export is the contract with that consumer.
 
-### 2. Input Layer
-- **File extraction** (`src/lib/agent/file/`) — OCR, PDF, DOCX with chunk-level positioning
-- **Schema validation** — Zod schemas in `src/lib/agent/schemas.ts`
-- **Session persistence** (`src/lib/agent/memory/`) — conversation history, context snapshots
-
-### 3. Pipeline (`src/lib/agent/pipeline/`)
-- **Orchestrator** (`orchestrator-v2.ts`) — coordinator async generator; calls 5 phases in sequence, keeps step execution loop inline for real-time token/tool-result streaming
-- **PipelineContext** (`pipeline-context.ts`) — shared state: skill (incl. `checks`), files, palette, conversation, session store
-- **Step dispatcher** (`step-executor.ts`) — dispatch by type: `llm`, `llm+tool`, `builtin:*`; retry logic
-- **Phase modules** (`phases/`):
-  - `init-phase.ts` — load skill, create session, build `PipelineContext`
-  - `input-phase.ts` — extract files or restore from saved chunks
-  - `execute-phase.ts` — `parseStepsPhase()`: parse SKILL.md §2 Execution Flow
-  - `report-phase.ts` — template auto-report with claim extraction + chunk validation retry
-  - `finalize-phase.ts` — verdict, confidence, post-validation, response assembly, persist
-- **Builtins** (`builtins.ts`) — reference loading: picks `loadReferencesForRegulationIds` when checks present, falls back to `extractConditions` + `loadReferencesForConditions` for old format; compliance check calculator
-- **LLM executor** (`executors/llm-executor.ts`) — `streamText` with dual-path output guide: `buildDomainSchemaGuide()` for new format (checks → Zod → structured output guide), `buildTemplateOutputGuide()` for old format
-
-### 4. Output Layer
-- **Report assembly** (`src/lib/agent/export/`) — sections, claims, citations
-- **.docx export** (`src/lib/export-docx.ts`) — template placeholder replacement: ID-based matching first (`{{R48.6.2}}`), convention-based fallback (`{{vehicle.make}}` → `data.vehicle.make`)
-
-## Key Design Decisions
-- Domain schema derived from `## Checks` table at runtime, not separate `domain-schema.json`
-- Convention-based template mapping avoids `mapping.json` overhead
-- Regulation loading via file I/O (`skill-source.ts`), not mock/DB — `mock-regulations.ts` unused
-- Backward-compatible: old `## Workflow`/keyword-based format works via fallback at every layer
-- Pipeline decomposed into 5 phases, each in its own module under `phases/`; orchestrator coordinates and handles all streaming/yielding
+```
+src/
+├── index.ts                       # Barrel — public API (~200 exports)
+├── client.ts                      # Thin client wrapper for external consumers
+├── types-only.ts                  # Type-only re-exports (no runtime code)
+├── db/schema.ts                   # SQLite schema DDL
+├── compliance-packs.ts            # Compliance pack search/get/list
+├── compliance-session.ts          # UI-friendly compliance session builder
+├── compliance-tools.ts            # LLM-callable tool definitions
+├── compliance-chat.ts             # Multi-step tool loop for compliance chat
+├── compliance-audit.ts            # Async pack-by-pack audit pipeline
+├── skill-generator.ts             # LLM-based SKILL.md generation
+└── agent/
+    ├── shared/                    # Cross-cutting dependencies
+    │   ├── schemas.ts             #   Zod schemas (ChatRequest, AgentResponse, etc.)
+    │   ├── types.ts               #   TypeScript type re-exports from schemas
+    │   └── memory/
+    │       ├── database.ts        #   SQLite connection lifecycle
+    │       └── repository.ts      #   All DB read/write (session, chunks, messages, skills)
+    ├── knowledge/                 # Regulation data
+    │   ├── regulation-api.ts      #   IRegulationApi interface + get/set factory
+    │   ├── mock-regulation-api.ts #   Mock implementation (R48, R112, R83, R154, R13)
+    │   └── regulation-types.ts    #   Regulation/Clause types
+    ├── user-info/                 # File extraction
+    │   ├── extractors/            #   PDF (pdfjs-dist), DOCX (mammoth), OCR (tesseract)
+    │   └── vector-store/          #   IDocStore interface + mock implementation
+    ├── loading/                   # One-time session setup
+    │   ├── loading-orchestrator.ts #   setupSession() coordinator
+    │   ├── generate-steps.ts      #   ParsedCheck[] → ExecutableStep[]
+    │   ├── cleanup.ts             #   Session pruning
+    │   ├── phases/
+    │   │   ├── init-phase.ts      #   Skill loading, session creation
+    │   │   └── input-phase.ts     #   File processing during setup
+    │   └── skill/
+    │       ├── loader.ts          #   SKILL.md loading + parsing
+    │       └── check-parser.ts    #   ## Checks → ParsedCheck[]
+    ├── pipeline/                  # Per-turn step execution
+    │   ├── orchestrator-v2.ts     #   Async generator — coordinates one turn
+    │   ├── pipeline-context.ts    #   Shared state factory + DB restore
+    │   ├── builtins.ts            #   Reference loading + compliance check tool
+    │   ├── errors.ts              #   PipelineError hierarchy + correlation IDs
+    │   ├── logger.ts              #   Pipeline debug logging
+    │   ├── revision-phase.ts      #   Step revision targeting
+    │   ├── types.ts               #   ExecutableStep, StepResult, PipelineEvent
+    │   ├── prompts/index.ts       #   All LLM system prompts
+    │   ├── executors/
+    │   │   ├── llm-executor.ts    #   streamText-based LLM step executor
+    │   │   └── script-runner.ts   #   Python subprocess execution
+    │   └── slices/                # Pipeline-owned state stores
+    │       ├── check-store.ts     #   CheckResult[], compiled citations
+    │       ├── step-memory.ts     #   Step outputs by number
+    │       ├── file-registry.ts   #   Uploaded files + chunk metadata
+    │       ├── palette-store.ts   #   Regulation clauses + citation palette
+    │       └── report-assembler.ts#   Report sections + content assembly
+    ├── evaluation/                # Post-execution evaluation
+    │   ├── index.ts               #   evaluate() entry point
+    │   ├── confidence.ts          #   Confidence scoring (OCR, PDF, LLM multipliers)
+    │   ├── summary.ts             #   Findings builder from check results
+    │   ├── validate.ts            #   Citation/chunk consistency validation
+    │   └── types.ts               #   Evaluation input/output types
+    ├── present/                   # Response assembly
+    │   ├── phases/
+    │   │   └── finalize-phase.ts  #   Verdict + AgentResponse building
+    │   ├── export/
+    │   │   └── export-docx.ts     #   .docx template filling
+    │   └── template-types.ts      #   Report template types
+    └── llm/                       # LLM provider abstraction
+        ├── factory.ts             #   createModel() — Anthropic/OpenAI/DeepSeek
+        ├── config.ts              #   Provider + retention config management
+        └── deepseek.ts            #   DeepSeek provider adapter
+```
 
 ## Data Flow
+
+### Setup (once per session)
+
 ```
-orchestratePipeline() — async generator, coordinates phases, yields events
-│
-├─ Phase 1 (init-phase.ts)
-│   loadSkill → createPipelineContext → return ctx
-│
-├─ Phase 2 (input-phase.ts)
-│   extractFileContent (or restore from saved chunks) → modify ctx.files
-│
-├─ Phase 3 — parse & execute
-│   ├─ parseStepsPhase (execute-phase.ts): parseSteps from skillmd
-│   └─ Step execution loop (inline in orchestrator):
-│       for each step: executeStep → yield tokens/tool-results → snapshot
-│
-├─ Phase 4 (report-phase.ts)
-│   template auto-report with claim extraction + chunk validation retry
-│   or simple results display (no template)
-│
-└─ Phase 5 (finalize-phase.ts)
-    computeVerdict → computeObjectiveConfidence → postValidate →
-    build response → AgentResponseSchema.parse → persist → return AgentResponse
+setupSession({skillName?, sessionId, files?, message?})
+  ├── initSession()            → load SKILL.md, parse ##Checks, create DB session
+  ├── inputPhase()             → extract files (pdfjs/mammoth/OCR)
+  ├── skillGenPhase()          → (optional) LLM-generate SKILL.md from user message
+  ├── generateStepsFromChecks()→ ParsedCheck[] → ExecutableStep[]
+  └── saveSessionSetup()       → persist skill + steps + file metadata to DB
 ```
 
-## Pipeline Directory Structure
+### Chat (per turn — async generator yielding PipelineEvent for SSE)
+
 ```
-pipeline/
-├── orchestrate-v2.ts          # coordinator, async generator, yields events
-├── pipeline-context.ts         # shared state + factory
-├── step-executor.ts            # step dispatch (llm/llm+tool/builtin)
-├── builtins.ts                 # built-in step handlers (ref loading, compliance calc)
-├── clause-texts.ts             # palette → clause text map
-├── post-validate.ts            # post-execution validation (citations, chunks, template)
-├── errors.ts                   # PipelineError types + correlation IDs
-├── logger.ts                   # pipeline debug logging
-├── executors/llm-executor.ts   # LLM step execution (streamText, tool dispatch)
-└── phases/
-    ├── types.ts                # PipelineEvent union type
-    ├── init-phase.ts           # skill loading, session, context creation
-    ├── input-phase.ts          # file extraction / restoration
-    ├── execute-phase.ts        # step parsing (parseStepsPhase)
-    ├── report-phase.ts         # auto report compilation
-    └── finalize-phase.ts       # verdict, confidence, validation, response
-## Pre-existing Issues (not introduced by segmentation work)
-- `schemas.test.ts`: 7 of 21 tests fail — `CitationSchema.ref` type mismatch, `dataUrl` pattern reject
+orchestratePipeline(sessionId, message, revisionFields?)
+  ├── restoreContext()         → load PipelineContext + ExecutableStep[] from DB
+  ├── docStore.getFiles()      → populate ctx.files with chunk data
+  ├── loadRegulationSummaries()→ populate ctx.palette with regulation clauses
+  ├── initPipelineTurn()       → log message, restore previous turn data
+  ├── identifyRevisionTargets()→ map revision field names → step numbers
+  ├── [loop per step]
+  │     executeStepWithRetry()
+  │       └── executeLlmToolStep()
+  │             ├── buildContextSummary (file chunks, palette, prior results)
+  │             ├── streamText({model, system prompt, tools, maxSteps})
+  │             │     └── onStepFinish → parse JSON → CheckResult
+  │             ├── ctx.checks.addResults()
+  │             └── ctx.steps.write(stepNumber, output)
+  └── finalizePhase()
+        ├── evaluate()         → confidence score + findings + validation
+        ├── build AgentResponse (content, citations, sections, verdict)
+        └── persist to DB
+```
+
+## Key Exports by Layer
+
+| Barrel group | Key exports | Purpose |
+|---|---|---|
+| **Repository** | `getOrCreateSession`, `addUserMessage`, `addAssistantResponse`, `getConversationHistory`, `saveContextSnapshot`, `searchChunksFts5`, `saveSessionSetup`, `loadSessionSetup` | All DB operations |
+| **Schemas** | `AgentResponseSchema`, `ChatRequestSchema`, `ConfidenceSchema`, `parseChunkRef` | Zod validation + chunk ref parsing |
+| **Pipeline** | `orchestratePipeline` | Per-turn LLM execution loop |
+| **Loading** | `setupSession`, `setupSkill`, `processSessionFiles` | One-time session initialization |
+| **Knowledge** | `getRegulationApi`, `setRegulationApi`, `seedRegulations` | Regulation data source (mock/real) |
+| **Extractors** | `extractFileContent` | PDF/DOCX/image → text + chunks |
+| **Evaluation** | `evaluate`, `computeConfidence` | Post-execution scoring |
+| **Presentation** | `generateDocx` | .docx template filling |
+| **LLM** | `createModel`, `setLLMConfig` | LLM provider + configuration |
+| **Compliance** | `complianceChat`, `runComplianceAudit`, `searchPacks`, `TOOL_DEFS` | Compliance-specific tool loops |
+| **Skill Gen** | `generateSkill` | LLM-based SKILL.md generation |
+
+## Core Data Structures
+
+- **`PipelineContext`** — in-memory carrier for all session state on each turn. Owns 4 slices: `CheckStore` (verdicts), `StepMemory` (LLM outputs), `FileRegistry` (uploaded file chunks), `PaletteStore` (regulation clauses).
+- **`ExecutableStep`** — a single evaluation step derived from one `## Checks` row. Carries `number`, `title`, `type` (llm+tool, builtin), `instructions`, `field` reference.
+- **`CheckResult`** — per-field evaluation outcome: `{field, type, finding, verdict, citationRef[], sourceCitation[]}`.
+- **`AgentResponse`** — final output to the consumer: `{content, reasoning, citations, verdict, confidence, sections, ...}`.
+
+## Constraints
+
+- **Setup runs once per session.** Pipeline restores from DB on each turn — `setupSession()` must be called before `orchestratePipeline()`.
+- **LLM calls use `streamText`** (not `streamObject`) for reliable tool calling across providers. JSON output is fence-stripped and parsed post-hoc.
+- **Skills are self-describing.** Domain schema is derived from the `## Checks` table at runtime, not a separate config file.

@@ -1,9 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { getLineStyle, isListItem, isTableRow } from "../user-info/extractors/pdf-extract";
+import { getLineStyle } from "../user-info/extractors/pdf-extract";
 import { splitLargeText } from "../user-info/extractors/docx-extract";
 import { expandFtsQueries } from "../pipeline/slices/file-registry";
 import type { PdfTextItem } from "../user-info/extractors/pdf-extract";
-import type { WordBox } from "../user-info/extractors";
 
 function makePdfItem(str: string, fontSize = 12, fontName = "NotoSans-Regular"): PdfTextItem {
   return {
@@ -64,60 +63,6 @@ describe("getLineStyle", () => {
     const style = getLineStyle([]);
     expect(style.bucket).toBe(2);
     expect(style.isBold).toBe(false);
-  });
-});
-
-describe("isListItem", () => {
-  it("detects dash list markers", () => {
-    expect(isListItem("- item")).toBe(true);
-    expect(isListItem("  - indented")).toBe(true);
-  });
-
-  it("detects bullet markers", () => {
-    expect(isListItem("• item")).toBe(true);
-    expect(isListItem("  • indented bullet")).toBe(true);
-  });
-
-  it("detects numbered list markers", () => {
-    expect(isListItem("1. first")).toBe(true);
-    expect(isListItem("  99) numbered")).toBe(true);
-  });
-
-  it("rejects plain text", () => {
-    expect(isListItem("This is a normal paragraph")).toBe(false);
-  });
-
-  it("rejects empty text", () => {
-    expect(isListItem("")).toBe(false);
-  });
-});
-
-describe("isTableRow", () => {
-  function wordBox(x: number, w: number): WordBox {
-    return { x, y: 0, width: w, height: 10 };
-  }
-
-  it("detects column-like rows with uneven gaps", () => {
-    const words = [wordBox(10, 20), wordBox(35, 20), wordBox(100, 20), wordBox(125, 20)];
-    // gaps: 5, 45, 5 → avg 18.3 → large gap 45 > 36.6 → true
-    expect(isTableRow(words, "")).toBe(true);
-  });
-
-  it("rejects single-word rows", () => {
-    expect(isTableRow([wordBox(10, 30)], "")).toBe(false);
-  });
-
-  it("rejects two-word rows", () => {
-    expect(isTableRow([wordBox(10, 30), wordBox(50, 25)], "")).toBe(false);
-  });
-
-  it("rejects normal paragraph words (tight spacing)", () => {
-    const words = [wordBox(10, 30), wordBox(42, 25), wordBox(72, 20)];
-    expect(isTableRow(words, "")).toBe(false);
-  });
-
-  it("handles empty word list", () => {
-    expect(isTableRow([], "")).toBe(false);
   });
 });
 

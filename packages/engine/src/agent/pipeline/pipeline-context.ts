@@ -4,7 +4,6 @@ import { CheckStore } from "./slices/check-store";
 import { StepMemory } from "./slices/step-memory";
 import { FileRegistry } from "./slices/file-registry";
 import { PaletteStore } from "./slices/palette-store";
-import { ReportAssembler } from "./slices/report-assembler";
 import { loadSessionSetup } from "../shared/memory/repository";
 
 // ── Types ──
@@ -61,7 +60,6 @@ export interface PipelineContext {
   steps: StepMemory;
   files: FileRegistry;
   palette: PaletteStore;
-  report: ReportAssembler;
 
   /** Data carried across turns */
   previousTurns: {
@@ -102,7 +100,6 @@ export function createPipelineContext(
     steps: new StepMemory(),
     files: new FileRegistry(),
     palette: new PaletteStore(),
-    report: new ReportAssembler(),
     previousTurns: [],
     uploadedFiles: [],
   };

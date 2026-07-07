@@ -62,10 +62,6 @@ export class PaletteStore {
     }
   }
 
-  loadCitationPalette(entries: CitationPaletteEntry[]): void {
-    this.citationPalette = entries;
-  }
-
   getCitationPalette(): readonly CitationPaletteEntry[] {
     return this.citationPalette;
   }
@@ -111,45 +107,6 @@ export class PaletteStore {
     }
   }
 
-  // ── Context summary for LLM system prompt ──
-
-  formatContextSummary(): string {
-    const parts: string[] = [];
-
-    if (this.summaries.length > 0) {
-      parts.push("# Available Regulations");
-      for (const s of this.summaries) {
-        const clauses = s.clauseIndex
-          .map((c) => (c.title ? `\xA7${c.number} — ${c.title}` : `\xA7${c.number}`))
-          .join(", ");
-        parts.push(`${s.code} — ${s.title}\n  Clauses: ${clauses}`);
-      }
-    }
-
-    if (this.citationPalette.length > 0) {
-      parts.push("# Pre-loaded Citations");
-      for (const e of this.citationPalette) {
-        const textLines = e.text.split("\n");
-        const firstLine = textLines[0]?.replace(/^\xA7\d+(\.\d+)*\s*/, "").trim() || "";
-        const snippet = firstLine || (textLines[1] || "").slice(0, 80);
-        parts.push(`[${e.id}] ${e.regulation} \xA7${e.clause} — ${snippet}`);
-      }
-    }
-
-    return parts.join("\n\n");
-  }
-
-  formatSourceSummary(sourcePalette: SourcePaletteEntry[]): string {
-    if (sourcePalette.length === 0) return "";
-    const summary = sourcePalette
-      .flatMap((s) => {
-        const chunks = s.chunks?.map((c) => `[${s.id}] ${s.filename} — ${c.text.slice(0, 80)}`) ?? [];
-        return chunks.length > 0 ? chunks : [`[${s.id}] ${s.filename}`];
-      })
-      .join("\n");
-    return `Source Chunks:\n${summary}`;
-  }
-
   // ── Serialization ──
 
   toJSON(): { references: LoadedReference[]; citationPalette: CitationPaletteEntry[]; summaries: RegulationSummary[] } {
@@ -160,15 +117,4 @@ export class PaletteStore {
     };
   }
 
-  static fromJSON(data: {
-    references: LoadedReference[];
-    citationPalette: CitationPaletteEntry[];
-    summaries: RegulationSummary[];
-  }): PaletteStore {
-    const store = new PaletteStore();
-    store.loadReferences(data.references);
-    store.loadCitationPalette(data.citationPalette);
-    store.loadSummaries(data.summaries);
-    return store;
-  }
 }

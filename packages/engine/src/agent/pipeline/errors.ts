@@ -67,11 +67,3 @@ export function generateCorrelationId(): string {
   return `corr-${Date.now()}-${counter.toString(36)}`;
 }
 
-export function formatPipelineError(err: unknown, fallbackCorrelationId?: string): string {
-  if (err instanceof PipelineError) {
-    const cid = err.correlationId ?? fallbackCorrelationId;
-    return `[${err.code}] ${err.message}${cid ? ` (cid: ${cid})` : ""}`;
-  }
-  if (err instanceof Error) return err.message;
-  return String(err);
-}

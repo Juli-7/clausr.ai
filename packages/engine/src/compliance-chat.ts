@@ -1,4 +1,4 @@
-import { streamText, stepCountIs, tool } from "ai";
+import { streamText, tool } from "ai";
 import { createModel } from "./agent/llm/factory";
 import { addAssistantMessage } from "./agent/shared/memory/repository";
 import { logInfo } from "./agent/pipeline/logger";
@@ -55,7 +55,22 @@ export async function* complianceChat(
   const result = streamText({
     model: llmModel,
     system: systemPrompt,
-    stopWhen: stepCountIs(5),
+    stopWhen: ({ steps }) => {
+      if (steps.length >= 5) return true;
+      if (steps.length < 2) return false;
+      const prevSteps = steps.slice(0, -1);
+      const seen = new Set<string>();
+      for (const s of prevSteps) {
+        for (const tc of s.toolCalls ?? []) {
+          seen.add(tc.toolName);
+        }
+      }
+      const cur = steps[steps.length - 1];
+      for (const tc of cur.toolCalls ?? []) {
+        if (seen.has(tc.toolName)) return true;
+      }
+      return false;
+    },
     maxRetries: 3,
     abortSignal: abortController.signal,
     onStepFinish: ({ text, finishReason, toolCalls, toolResults, stepNumber }) => {

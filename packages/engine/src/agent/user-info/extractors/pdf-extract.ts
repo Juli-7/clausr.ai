@@ -200,22 +200,6 @@ export function getLineStyle(line: PdfTextItem[]): LineStyle {
   return { bucket, isBold: boldCount > line.length / 2 };
 }
 
-export function isListItem(text: string): boolean {
-  return /^\s*[-*•]\s/.test(text) || /^\s*\d+[.)]\s/.test(text);
-}
-
-export function isTableRow(words: WordBox[], _text: string): boolean {
-  if (words.length < 3) return false;
-  const gaps: number[] = [];
-  for (let i = 1; i < words.length; i++) {
-    gaps.push(words[i]!.x - (words[i - 1]!.x + words[i - 1]!.width));
-  }
-  if (gaps.length < 2) return false;
-  const avgGap = gaps.reduce((s, g) => s + g, 0) / gaps.length;
-  const largeGaps = gaps.filter((g) => g > avgGap * 2).length;
-  return largeGaps >= 1;
-}
-
 // ── Header / footer removal (#4) ──
 
 interface StructuredLine {

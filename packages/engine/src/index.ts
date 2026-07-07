@@ -191,7 +191,7 @@ export { complianceChat } from "./compliance-chat";
 export type { ComplianceChatEvent, ComplianceChatParams } from "./compliance-chat";
 
 // ── Compliance Audit (async generator for pack-by-pack pipeline) ──
-export { runComplianceAudit } from "./compliance-audit";
+export { runComplianceAudit, startBackgroundAudit, streamBackgroundAuditEvents, getBackgroundAudit } from "./compliance-audit";
 export type { ComplianceAuditEvent } from "./compliance-audit";
 
 // ── Skill Generator ──
