@@ -3,4 +3,4 @@
 
 export { generateDocx } from "./agent/present/export/export-docx";
 
-export type { AgentResponse, ChatRequestFile } from "./agent/shared/schemas";
+export type { AgentResponse } from "./agent/shared/schemas";
