@@ -482,8 +482,8 @@ export async function resolveCitation(
 } | null> {
   const m = ref.match(/^S(\d+)\.c(\d+)$/);
   if (!m) return null;
-  const fileIdx = parseInt(m[1], 10) - 1;
-  const chunkIdx = parseInt(m[2], 10);
+  const fileIdx = parseInt(m[1]!, 10) - 1;
+  const chunkIdx = parseInt(m[2]!, 10);
   let files: { fileId: string; filename: string; dataUrl?: string; pageCount?: number; chunks: { id: string; text: string; bbox?: unknown; wordBoxes?: unknown; pageNumber?: number; pageWidth?: number; pageHeight?: number }[] }[];
   try {
     files = await getDocStore().getFiles(sessionId);

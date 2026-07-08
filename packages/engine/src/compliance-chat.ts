@@ -76,7 +76,7 @@ export async function* complianceChat(
           seen.add(tc.toolName);
         }
       }
-      const cur = steps[steps.length - 1];
+      const cur = steps[steps.length - 1]!;
       for (const tc of cur.toolCalls ?? []) {
         if (seen.has(tc.toolName)) return true;
       }
