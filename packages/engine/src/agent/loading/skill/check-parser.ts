@@ -145,26 +145,3 @@ function parseFieldType(raw: string): CheckFieldType | null {
   return null;
 }
 
-/**
- * Extract the ## Red Lines section from SKILL.md content.
- * Returns the section text (without the heading) or empty string.
- */
-export function extractRedline(skillmd: string): string {
-  const sectionStart = skillmd.indexOf("## Red Lines");
-  if (sectionStart === -1) return "";
-  let sectionEnd = skillmd.indexOf("\n## ", sectionStart + 1);
-  if (sectionEnd === -1) sectionEnd = skillmd.length;
-  return skillmd.substring(sectionStart, sectionEnd).replace(/^## Red Lines\n?/, "").trim();
-}
-
-/**
- * Extract the ## Lessons Learnt section from SKILL.md content.
- * Returns the section text (without the heading) or empty string.
- */
-export function extractLessons(skillmd: string): string {
-  const sectionStart = skillmd.indexOf("## Lessons Learnt");
-  if (sectionStart === -1) return "";
-  let sectionEnd = skillmd.indexOf("\n## ", sectionStart + 1);
-  if (sectionEnd === -1) sectionEnd = skillmd.length;
-  return skillmd.substring(sectionStart, sectionEnd).replace(/^## Lessons Learnt\n?/, "").trim();
-}

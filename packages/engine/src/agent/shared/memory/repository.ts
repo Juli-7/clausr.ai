@@ -107,14 +107,6 @@ export function getChunksByIds(ids: string[]): StoredChunk[] {
   return rows.map(hydrateStoredChunk);
 }
 
-export function getChunksBySession(sessionId: string): StoredChunk[] {
-  const db = getDb();
-  const rows = db
-    .prepare("SELECT id, file_id as fileId, text, chunk_html as chunkHtml, page_number as pageNumber, bbox_json as bboxJson, word_boxes_json as wordBoxesJson, page_width as pageWidth, page_height as pageHeight FROM chunk_store WHERE session_id = ?")
-    .all(sessionId) as StoredChunkRow[];
-  return rows.map(hydrateStoredChunk);
-}
-
 export function deleteChunksBySession(sessionId: string): void {
   const db = getDb();
   db.prepare("DELETE FROM chunk_store WHERE session_id = ?").run(sessionId);
@@ -265,97 +257,6 @@ export function deleteSession(sessionId: string): void {
   db.prepare("DELETE FROM messages WHERE session_id = ?").run(sessionId);
   db.prepare("DELETE FROM responses WHERE session_id = ?").run(sessionId);
   db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
-}
-
-export function getRecentMemories(skillName: string, limit = 5): string[] {
-  const db = getDb();
-  const rows = db
-    .prepare(
-      `SELECT content FROM messages
-       WHERE role = 'assistant'
-       AND session_id IN (SELECT id FROM sessions WHERE skill_name = ?)
-       ORDER BY id DESC
-       LIMIT ?`
-    )
-    .all(skillName, limit) as { content: string }[];
-  return rows.map((r) => r.content.slice(0, 120));
-}
-
-export function getSessionMeta(sessionId: string): { skillName: string } | null {
-  const db = getDb();
-  const row = db.prepare("SELECT skill_name FROM sessions WHERE id = ?").get(sessionId) as { skill_name: string } | undefined;
-  return row ? { skillName: row.skill_name } : null;
-}
-
-export function getAllSessions(tenantId?: string, userId?: string): {
-  id: string;
-  skillName: string;
-  verdict: string;
-  timestamp: number;
-  starred: boolean;
-  shared: boolean;
-  userEmail: string;
-  confidenceScore?: number;
-  confidenceColor?: string;
-  needsExpert?: boolean;
-}[] {
-  const db = getDb();
-  const rows = db
-    .prepare(
-      `SELECT
-        s.id, s.skill_name, s.created_at, s.starred, s.shared, s.user_email,
-        (SELECT verdict FROM responses WHERE session_id = s.id ORDER BY id DESC LIMIT 1) as verdict,
-        (SELECT confidence_json FROM responses WHERE session_id = s.id AND confidence_json IS NOT NULL ORDER BY id DESC LIMIT 1) as confidence_json
-      FROM sessions s
-      ${
-        tenantId && userId
-          ? "WHERE s.tenant_id = ? AND (s.user_id = ? OR s.shared = 1)"
-          : tenantId
-            ? "WHERE s.tenant_id = ?"
-            : ""
-      }
-      ORDER BY s.created_at DESC`
-    )
-    .all(...(tenantId && userId ? [tenantId, userId] : tenantId ? [tenantId] : [])) as {
-    id: string;
-    skill_name: string;
-    created_at: number;
-    starred: number;
-    shared: number;
-    user_email: string;
-    verdict: string | null;
-    confidence_json: string | null;
-  }[];
-
-  return rows.map((r) => {
-    let confidenceScore: number | undefined;
-    let confidenceColor: string | undefined;
-    let needsExpert: boolean | undefined;
-    if (r.confidence_json) {
-      try {
-        const c = JSON.parse(r.confidence_json);
-        confidenceScore = c.score;
-        needsExpert = c.needsExpert;
-        if (c.score >= 99) confidenceColor = "#1a7f37";
-        else if (c.score >= 80) confidenceColor = "#3fb950";
-        else if (c.score >= 50) confidenceColor = "#d29922";
-        else confidenceColor = "#f85149";
-      } catch {
-          console.warn("[repository] corrupt confidence_json in response", r.id);
-        }
-    }
-    return {
-      id: r.id,
-      skillName: r.skill_name,
-      verdict: r.verdict ?? "UNKNOWN",
-      timestamp: r.created_at,
-      starred: (r.starred ?? 0) === 1,
-      shared: (r.shared ?? 0) === 1,
-      userEmail: r.user_email ?? "",
-      confidenceScore,
-      confidenceColor,
-    };
-  });
 }
 
 export function getResponsesForSession(sessionId: string): {
@@ -513,57 +414,6 @@ export function saveContextSnapshot(snapshot: ContextSnapshot): void {
   );
 }
 
-export function getContextSnapshots(sessionId: string): ContextSnapshot[] {
-  const db = getDb();
-  const rows = db
-    .prepare(
-      "SELECT * FROM context_snapshots WHERE session_id = ? ORDER BY id ASC"
-    )
-    .all(sessionId) as {
-      session_id: string;
-      turn_number: number;
-      step_number: number;
-      step_title: string;
-      step_type: string;
-      system_prompt: string;
-      user_message: string;
-      context_summary: string;
-      skillmd: string;
-      template_json: string | null;
-      loaded_references: string;
-      uploaded_files_json: string;
-      step_outputs_json: string;
-      created_at: number;
-    }[];
-  return rows.map((r) => ({
-    sessionId: r.session_id,
-    turnNumber: r.turn_number,
-    stepNumber: r.step_number,
-    stepTitle: r.step_title,
-    stepType: r.step_type,
-    systemPrompt: r.system_prompt,
-    userMessage: r.user_message,
-    contextSummary: r.context_summary,
-    skillmd: r.skillmd,
-    templateJson: r.template_json,
-    loadedReferences: r.loaded_references,
-    uploadedFilesJson: r.uploaded_files_json,
-    stepOutputsJson: r.step_outputs_json,
-  }));
-}
-
-// ── Starring ──
-
-export function toggleStar(sessionId: string, starred: boolean): void {
-  const db = getDb();
-  db.prepare("UPDATE sessions SET starred = ? WHERE id = ?").run(starred ? 1 : 0, sessionId);
-}
-
-export function toggleShare(sessionId: string, shared: boolean): void {
-  const db = getDb();
-  db.prepare("UPDATE sessions SET shared = ? WHERE id = ?").run(shared ? 1 : 0, sessionId);
-}
-
 // ── Lesson Overrides ──
 
 export function saveLessonOverride(skillId: string, lessonText: string, tenantId?: string): void {
@@ -583,70 +433,6 @@ export function getLessonOverrides(skillId: string, tenantId?: string): string[]
     )
     .all(skillId, tenantId ?? "") as { lesson_text: string }[];
   return rows.map((r) => r.lesson_text);
-}
-
-// ── User-Created Skills ──
-
-export interface UserSkillRow {
-  name: string;
-  description: string;
-  skillmd: string;
-  checksJson: string;
-  regulationIdsJson: string;
-  redline: string;
-  lessons: string;
-  createdBy: string;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export function saveUserSkill(params: {
-  name: string;
-  description: string;
-  skillmd: string;
-  checks: { field: string; type: { kind: string; values?: string[] }; description?: string; clause?: string; constraint?: string; dependsOn?: string; sample?: string; attention?: string }[];
-  regulationIds: string[];
-  redline?: string;
-  lessons?: string;
-  tenantId?: string;
-  createdBy?: string;
-}): void {
-  const db = getDb();
-  db.prepare(
-    `INSERT OR REPLACE INTO user_skills (name, description, skillmd, checks_json, regulation_ids_json, redline, lessons, tenant_id, created_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM user_skills WHERE name = ?), ?), ?)`
-  ).run(
-    params.name,
-    params.description,
-    params.skillmd,
-    JSON.stringify(params.checks),
-    JSON.stringify(params.regulationIds),
-    params.redline ?? "",
-    params.lessons ?? "",
-    params.tenantId ?? "",
-    params.createdBy ?? "",
-    params.name,
-    Date.now(),
-    Date.now(),
-  );
-}
-
-export function deleteUserSkill(name: string): void {
-  getDb().prepare("DELETE FROM user_skills WHERE name = ?").run(name);
-}
-
-export function listUserSkillNames(): string[] {
-  const rows = getDb()
-    .prepare("SELECT name FROM user_skills ORDER BY updated_at DESC")
-    .all() as { name: string }[];
-  return rows.map((r) => r.name);
-}
-
-export function listUserSkillNamesByTenant(tenantId: string): string[] {
-  const rows = getDb()
-    .prepare("SELECT name FROM user_skills WHERE tenant_id = ? ORDER BY updated_at DESC")
-    .all(tenantId) as { name: string }[];
-  return rows.map((r) => r.name);
 }
 
 // ── Compliance Session (v2 workflow state) ──
@@ -669,6 +455,7 @@ export interface ComplianceSessionData {
   agentResponses: Record<string, string>;
   validationChecks: { id: string; title: string; status: string; note: string }[];
   validationScore: number;
+  packStates: Record<string, unknown>;
 }
 
 export function getComplianceSession(sessionId: string): ComplianceSessionData | null {
@@ -685,6 +472,7 @@ export function getComplianceSession(sessionId: string): ComplianceSessionData |
     agent_responses: string;
     validation_checks: string;
     validation_score: number;
+    pack_states: string;
   } | undefined;
   if (!row) return null;
   return {
@@ -699,14 +487,15 @@ export function getComplianceSession(sessionId: string): ComplianceSessionData |
     agentResponses: safeJsonParse(row.agent_responses, {}),
     validationChecks: safeJsonParse(row.validation_checks, []),
     validationScore: row.validation_score ?? 0,
+    packStates: safeJsonParse(row.pack_states, {}),
   };
 }
 
 export function ensureComplianceSession(sessionId: string): void {
   const db = getDb();
   db.prepare(
-    `INSERT OR IGNORE INTO compliance_session (session_id, step, selected_pack_ids, doc_data, audit_results, audit_running, audit_done, precheck_done, updated_at)
-     VALUES (?, 1, '[]', '{}', '[]', 0, 0, 0, ?)`
+    `INSERT OR IGNORE INTO compliance_session (session_id, step, selected_pack_ids, doc_data, audit_results, audit_running, audit_done, precheck_done, pack_states, updated_at)
+     VALUES (?, 1, '[]', '{}', '[]', 0, 0, 0, '{}', ?)`
   ).run(sessionId, Date.now());
 }
 
@@ -786,10 +575,6 @@ export function setCompliancePackAuditResult(
   db.prepare("UPDATE compliance_session SET audit_results = ?, updated_at = ? WHERE session_id = ?").run(JSON.stringify(results), Date.now(), sessionId);
 }
 
-export function setCompliancePrecheckDone(sessionId: string, done: boolean): void {
-  getDb().prepare("UPDATE compliance_session SET precheck_done = ?, updated_at = ? WHERE session_id = ?").run(done ? 1 : 0, Date.now(), sessionId);
-}
-
 export function setComplianceValidation(sessionId: string, checks: { id: string; title: string; status: string; note: string }[], score: number): void {
   getDb().prepare("UPDATE compliance_session SET validation_checks = ?, validation_score = ?, updated_at = ? WHERE session_id = ?").run(JSON.stringify(checks), score, Date.now(), sessionId);
 }
@@ -811,39 +596,13 @@ export function setComplianceAgentResponse(sessionId: string, packId: string, re
   db.prepare("UPDATE compliance_session SET agent_responses = ?, updated_at = ? WHERE session_id = ?").run(JSON.stringify(responses), Date.now(), sessionId);
 }
 
-export function getAllComplianceSessions(): { id: string; step: number; selectedPackIds: string[]; auditDone: boolean; createdAt: number }[] {
-  const db = getDb();
-  const rows = db
-    .prepare(
-      `SELECT cs.session_id, cs.step, cs.selected_pack_ids, cs.audit_done, s.created_at
-       FROM compliance_session cs JOIN sessions s ON cs.session_id = s.id
-       ORDER BY s.created_at DESC`
-    )
-    .all() as { session_id: string; step: number; selected_pack_ids: string; audit_done: number; created_at: number }[];
-  return rows.map((r) => ({
-    id: r.session_id,
-    step: r.step,
-    selectedPackIds: safeJsonParse(r.selected_pack_ids, []),
-    auditDone: r.audit_done === 1,
-    createdAt: r.created_at,
-  }));
+export function setCompliancePackStates(sessionId: string, packStates: Record<string, unknown>): void {
+  getDb().prepare("UPDATE compliance_session SET pack_states = ?, updated_at = ? WHERE session_id = ?").run(JSON.stringify(packStates), Date.now(), sessionId);
 }
 
-export function loadUserSkill(name: string): UserSkillRow | null {
-  const row = getDb()
-    .prepare("SELECT * FROM user_skills WHERE name = ?")
-    .get(name) as Record<string, unknown> | undefined;
-  if (!row) return null;
-  return {
-    name: row.name as string,
-    description: row.description as string,
-    skillmd: row.skillmd as string,
-    checksJson: row.checks_json as string,
-    regulationIdsJson: row.regulation_ids_json as string,
-    redline: (row.redline as string) ?? "",
-    lessons: (row.lessons as string) ?? "",
-    createdBy: row.created_by as string,
-    createdAt: row.created_at as number,
-    updatedAt: row.updated_at as number,
-  };
+export function getCompliancePackStates(sessionId: string): Record<string, unknown> {
+  const session = getComplianceSession(sessionId);
+  return session?.packStates ?? {};
 }
+
+

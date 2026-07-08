@@ -38,7 +38,4 @@ export function logInfo(msg: string): void {
   process.stderr.write(`${LOG_PREFIX} ${msg}\n`);
 }
 
-export function logError(tag: string, err: unknown): void {
-  const detail = err instanceof Error ? err.message : String(err ?? "unknown");
-  process.stderr.write(`${LOG_PREFIX} ${tag}: ${detail}\n`);
-}
+

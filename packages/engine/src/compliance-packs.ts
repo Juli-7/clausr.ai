@@ -15,9 +15,6 @@ function buildPackIndex() {
 const _index = buildPackIndex();
 
 export const packs: SkillPack[] = _index.all;
-export const allRegs: readonly string[] = _index.regs;
-export const allInds: readonly string[] = _index.inds;
-
 export function searchPacks(filters: { query?: string; regulation?: string; industry?: string }): SkillPack[] {
   let result = [...packs];
   if (filters.query) {

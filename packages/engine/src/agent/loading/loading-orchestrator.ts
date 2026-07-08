@@ -6,17 +6,6 @@ import { generateCorrelationId } from "../pipeline/errors";
 import { saveSessionSetup, loadSessionSetup } from "../shared/memory/repository";
 import { logPipeline } from "../pipeline/logger";
 
-export interface SetupSessionParams {
-  skillName?: string;
-  sessionId: string;
-  tenantId?: string;
-  userId?: string;
-  userEmail?: string;
-  files?: { name: string; size: number; type: string; dataUrl?: string }[];
-  message?: string;
-  lessonOverrides?: string[];
-}
-
 // ── Phase 1: Load SKILL.md + create context + generate steps + persist ──
 
 export async function setupSkill(
@@ -94,47 +83,6 @@ export async function processSessionFiles(params: ProcessFilesParams): Promise<v
     steps: setup.steps,
     fileRegistry: updatedRegistry,
   });
-
-  logPipeline(`=== PROCESS-FILES DONE === session="${sessionId}" added=${files.length} total=${updatedRegistry.length}`);
 }
 
-// ── Original atomic setupSession (unchanged, uses same internal phases) ──
 
-export async function setupSession(params: SetupSessionParams): Promise<{ correlationId: string }> {
-  const correlationId = generateCorrelationId();
-  logPipeline(`=== SETUP START === skill="${params.skillName ?? "(auto)"}" session="${params.sessionId}"`);
-
-  const { skill } = await initSession(params.skillName, params.sessionId, params.tenantId, params.userId, params.userEmail);
-
-  const ctx = createPipelineContext(
-    skill.name, skill.skillmd, params.sessionId, correlationId,
-    skill.checks, skill.scripts, skill.regulationIds,
-  );
-
-  if (params.files && params.files.length > 0) {
-    logPipeline(`[SETUP] processing ${params.files.length} file(s)`);
-    await inputPhase(ctx, { files: params.files, sessionId: params.sessionId });
-  }
-
-  if (params.lessonOverrides && params.lessonOverrides.length > 0) {
-    const lessonBlock = params.lessonOverrides.map((t) => `- ${t}`).join("\n");
-    ctx.skill.skillmd = ctx.skill.skillmd + "\n\n### Tenant Lessons\n" + lessonBlock;
-    logPipeline(`[SETUP] merged ${params.lessonOverrides.length} lesson override(s)`);
-  }
-
-  const steps = generateStepsFromChecks(ctx.skill.checks, ctx.skill.regulationIds);
-  logPipeline(`[SETUP] generated ${steps.length} step(s) from ${ctx.skill.checks.length} check(s)`);
-
-  saveSessionSetup(params.sessionId, {
-    skillName: ctx.skill.name,
-    skillmd: ctx.skill.skillmd,
-    checks: ctx.skill.checks,
-    scripts: ctx.skill.scripts,
-    regulationIds: ctx.skill.regulationIds,
-    steps,
-    fileRegistry: ctx.files.toJSON(),
-  });
-
-  logPipeline(`=== SETUP DONE === session="${params.sessionId}" cid=${correlationId}`);
-  return { correlationId };
-}

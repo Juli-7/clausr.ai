@@ -12,6 +12,9 @@ export {
   deleteSession,
   setComplianceComments,
   getComplianceComments,
+  getConversationHistory,
+  getResponsesForSession,
+  getSessionFiles,
 } from "./agent/shared/memory/repository";
 
 export { buildSession } from "./compliance-session";
@@ -28,6 +31,7 @@ export type { ToolDef, ToolName, ToolInput } from "./compliance-tools";
 
 // ── Tool Implementations ──
 export { executeComplianceCheck } from "./agent/pipeline/builtins";
+export { buildComplianceStepPrompt } from "./agent/pipeline/prompts";
 export { runScript } from "./agent/pipeline/executors/script-runner";
 export { evaluate } from "./agent/evaluation";
 export { computeConfidence } from "./agent/evaluation/confidence";
@@ -40,6 +44,7 @@ export type { ReportTemplate, TemplateSection, TemplateField } from "./agent/pre
 // ── Chat ──
 export { complianceChat } from "./compliance-chat";
 export type { ComplianceChatEvent, ComplianceChatParams } from "./compliance-chat";
+export { resolveCitation } from "./compliance-audit-tools";
 
 // ── Shared Types ──
 export type { AgentResponse } from "./agent/shared/types";

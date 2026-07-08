@@ -9,7 +9,10 @@ import type { ComplianceFile, DocFieldValue } from "./agent/shared/memory/reposi
 import { setupSkill, processSessionFiles } from "./agent/loading/loading-orchestrator";
 import { saveCompiledPack } from "./agent/loading/skill/loader";
 import { saveLessonOverride, getLessonOverrides } from "./agent/shared/memory/repository";
-import { startBackgroundAudit } from "./compliance-audit";
+import {
+  setupPackAudit, runPendingChecks, retryCheck,
+  getPackAuditState, finalizeAudit,
+} from "./compliance-audit-tools";
 import { searchPacks, getPack, packs } from "./compliance-packs";
 import { buildSession } from "./compliance-session";
 import { getRegulationApi } from "./agent/knowledge/regulation-api";
@@ -25,8 +28,11 @@ export type ToolName =
   | "go_to_phase"
   | "search_packs"
   | "start_audit"
-  | "poll_audit"
-  | "get_check_detail"
+  | "setup_pack_audit"
+  | "run_pending_checks"
+  | "retry_check"
+  | "get_pack_audit_state"
+  | "finalize_audit"
   | "get_pack_details"
   | "recommend_packs"
   | "get_session_state"
@@ -82,11 +88,21 @@ export const ToolSchemas = {
     packIds: z.array(z.string()).optional().describe("Optional: specific pack IDs to audit. Defaults to all selected packs."),
     force: z.boolean().optional().describe("Set true to start audit even if documents are incomplete. Default false."),
   }),
-  poll_audit: z.object({}).describe("Poll the current audit status and results. Returns incremental per-pack results sorted by completion time."),
-  get_check_detail: z.object({
-    packId: z.string().describe("Pack ID to get check details for"),
-    checkId: z.string().describe("Check ID (check name) to get detailed results for"),
+  setup_pack_audit: z.object({
+    packId: z.string().describe("Pack ID to set up for auditing"),
   }),
+  run_pending_checks: z.object({
+    packId: z.string().describe("Pack ID whose ready checks to execute"),
+    maxConcurrency: z.number().optional().describe("Max concurrent check executions (default 20)"),
+  }),
+  retry_check: z.object({
+    packId: z.string().describe("Pack ID containing the check to retry"),
+    checkId: z.string().describe("Check ID to retry — cascades to all dependents"),
+  }),
+  get_pack_audit_state: z.object({
+    packId: z.string().describe("Pack ID to get audit state for"),
+  }),
+  finalize_audit: z.object({}).describe("Finalize the audit — sets auditDone=true, stores final results."),
   get_pack_details: z.object({
     packId: z.string().describe("Pack ID"),
   }),
@@ -269,7 +285,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   start_audit: {
     name: "start_audit",
-    description: "Start the compliance audit for selected packs. Runs in background — call poll_audit once to check when done and read all results. If documents are incomplete, call with force: true to start audit anyway.",
+    description: "Start the compliance audit for selected packs. Sets up each selected pack, then runs ready checks. Call this once — the audit runs incrementally. Use setup_pack_audit, run_pending_checks, retry_check individually for fine-grained control. If documents are incomplete, call with force: true to start anyway.",
     inputSchema: ToolSchemas.start_audit,
     logLabel: "Start audit",
     mutates: true,
@@ -280,7 +296,6 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       const auditPackIds = packIds ?? s.selectedPackIds;
       if (auditPackIds.length === 0) return { error: "No packs selected for audit" };
 
-      // Auto-run validation (always — refreshes state)
       const docData = s.docData;
       const missingFields: { pack: string; field: string }[] = [];
       for (const packId of auditPackIds) {
@@ -318,87 +333,83 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
       setComplianceAuditRunning(sessionId, true);
       clearComplianceAuditResults(sessionId);
-      const auditPacks = auditPackIds.map((id) => {
-        const p = getPack(id);
-        return p ? { id: p.id, title: p.title } : null;
-      }).filter(Boolean) as { id: string; title: string }[];
-      startBackgroundAudit(sessionId, auditPacks);
+
+      // Set up each pack and run initial checks
+      const results: Record<string, unknown>[] = [];
+      for (const packId of auditPackIds) {
+        const setupResult = await setupPackAudit(sessionId, packId);
+        const runResult = await runPendingChecks(sessionId, packId);
+        results.push({ ...setupResult, checksCompleted: runResult.completed, checksFailed: runResult.failed });
+      }
+
       return {
         auditStarted: true,
         packIds: auditPackIds,
         validationPassed: missingFields.length === 0,
         validationHints: missingFields.length > 0 ? missingFields.map((m) => `[${m.pack}] ${m.field}`) : [],
+        packResults: results,
       };
     },
   },
 
-  poll_audit: {
-    name: "poll_audit",
-    description: "Get current audit results. Call once after start_audit — returns auditRunning, auditDone, and all accumulated results. If audit is still running, tell the user it's in progress and let them ask for updates later.",
-    inputSchema: ToolSchemas.poll_audit,
-    logLabel: "Poll audit",
-    mutates: false,
-    execute: async (sessionId) => {
-      const s = getComplianceSession(sessionId);
-      if (!s) return { error: "Session not found" };
-      const { auditResults, auditRunning, auditDone, selectedPackIds } = s;
-      const completedCount = auditResults.filter((r) => r.items.length > 0).length;
-      const totalCount = selectedPackIds.length;
-      return {
-        auditRunning,
-        auditDone,
-        completedPacks: completedCount,
-        totalPacks: totalCount,
-        results: auditResults,
-        progress: totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0,
-      };
+  setup_pack_audit: {
+    name: "setup_pack_audit",
+    description: "Set up a pack for audit — loads its skill, generates check steps, and initializes per-check state. Must be called before run_pending_checks for a pack. Returns the list of checks with their dependency depths.",
+    inputSchema: ToolSchemas.setup_pack_audit,
+    logLabel: "Setup pack audit",
+    mutates: true,
+    execute: async (sessionId, input) => {
+      const { packId } = input as { packId: string };
+      return await setupPackAudit(sessionId, packId) as unknown as Record<string, unknown>;
     },
   },
 
-  get_check_detail: {
-    name: "get_check_detail",
-    description: "Get detailed results for a specific check in a pack — verdict, reasoning, citations, and sub-results. Call during 'audit' phase when the user wants to understand why a particular check passed or failed.",
-    inputSchema: ToolSchemas.get_check_detail,
-    logLabel: "Get check detail",
-    mutates: false,
+  run_pending_checks: {
+    name: "run_pending_checks",
+    description: "Execute all ready checks for a pack (dependencies satisfied, state=pending). Processes one dependency depth level per call. Call repeatedly until allDone=true or blocked=true. Results accumulate in audit state and are pollable via get_pack_audit_state.",
+    inputSchema: ToolSchemas.run_pending_checks,
+    logLabel: "Run pending checks",
+    mutates: true,
+    execute: async (sessionId, input) => {
+      const { packId, maxConcurrency } = input as { packId: string; maxConcurrency?: number };
+      return await runPendingChecks(sessionId, packId, maxConcurrency) as unknown as Record<string, unknown>;
+    },
+  },
+
+  retry_check: {
+    name: "retry_check",
+    description: "Retry a specific check that failed. Resets the check and all its transitive dependents to pending state. Call run_pending_checks afterward to re-execute. Does NOT re-execute the check itself.",
+    inputSchema: ToolSchemas.retry_check,
+    logLabel: "Retry check",
+    mutates: true,
     execute: async (sessionId, input) => {
       const { packId, checkId } = input as { packId: string; checkId: string };
-      const s = getComplianceSession(sessionId);
-      if (!s) return { error: "Session not found" };
+      return await retryCheck(sessionId, packId, checkId) as unknown as Record<string, unknown>;
+    },
+  },
 
-      // Check audit results first
-      const packResult = s.auditResults.find((r) => r.packId === packId);
-      const checkItem = packResult?.items.find((i) => i.name === checkId);
+  get_pack_audit_state: {
+    name: "get_pack_audit_state",
+    description: "Get the current audit state for a pack — per-check status (pending/ready/running/done/failed), verdicts, reasoning, and errors. Call after run_pending_checks to see results, or during retry_check to see which checks were reset.",
+    inputSchema: ToolSchemas.get_pack_audit_state,
+    logLabel: "Get pack audit state",
+    mutates: false,
+    execute: async (sessionId, input) => {
+      const { packId } = input as { packId: string };
+      const state = getPackAuditState(sessionId, packId);
+      if (!state) return { error: "Pack not set up" };
+      return state as unknown as Record<string, unknown>;
+    },
+  },
 
-      // Try full agent response for deeper detail
-      let detail: Record<string, unknown> = {};
-      try {
-        const raw = s.agentResponses[packId];
-        if (raw) {
-          const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
-          const checkResults: { name: string; type: string; finding: string; verdict: string; citationRef: string[]; sourceCitation: string[] }[] = parsed?.checkResults ?? [];
-          const cr = checkResults.find((c) => c.name === checkId);
-          if (cr) {
-            detail = {
-              finding: cr.finding,
-              verdict: cr.verdict,
-              type: cr.type,
-              citations: cr.citationRef ?? [],
-              sources: cr.sourceCitation ?? [],
-            };
-          }
-        }
-      } catch {}
-
-      return {
-        packId,
-        checkId,
-        status: checkItem?.status ?? "wait",
-        statusLabel: checkItem?.statusLabel ?? "—",
-        description: checkItem?.desc ?? "",
-        ...detail,
-        subResults: checkItem?.checks ?? [],
-      };
+  finalize_audit: {
+    name: "finalize_audit",
+    description: "Finalize the compliance audit — stores final results for all packs, sets auditDone=true, and sets auditRunning=false. Call after all packs are done (check via get_pack_audit_state or the auditDone session field). No more checks will be executed after this.",
+    inputSchema: ToolSchemas.finalize_audit,
+    logLabel: "Finalize audit",
+    mutates: true,
+    execute: async (sessionId, _input) => {
+      return await finalizeAudit(sessionId) as unknown as Record<string, unknown>;
     },
   },
 

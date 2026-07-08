@@ -3,6 +3,7 @@ import {
   getConversationHistory,
   getComplianceFiles,
   getComplianceComments,
+  getCompliancePackStates,
   type DocFieldValue,
 } from "./agent/shared/memory/repository";
 
@@ -28,6 +29,7 @@ export interface ComplianceSession {
   comments: string;
   validationChecks?: ValidationCheck[];
   validationScore?: number;
+  packStates: Record<string, unknown>;
 }
 
 export function buildSession(id: string): ComplianceSession | undefined {
@@ -59,5 +61,6 @@ export function buildSession(id: string): ComplianceSession | undefined {
     comments: getComplianceComments(id),
     validationChecks: cs.validationChecks as ValidationCheck[] | undefined,
     validationScore: cs.validationScore,
+    packStates: getCompliancePackStates(id),
   };
 }

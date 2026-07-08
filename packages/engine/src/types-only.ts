@@ -8,3 +8,4 @@ export type { EvaluationInput, EvaluationResult } from "./agent/evaluation/types
 export type { ReportTemplate, TemplateSection, TemplateField } from "./agent/present/template-types";
 export type { ComplianceChatEvent, ComplianceChatParams } from "./compliance-chat";
 export type { IRegulationApi } from "./agent/knowledge/regulation-api";
+export type { ChatRequestFile, ToolCallRecord, ReasoningStep } from "./agent/shared/types";

@@ -8,7 +8,6 @@ import { CheckStore } from "../pipeline/slices/check-store";
 import { StepMemory } from "../pipeline/slices/step-memory";
 import { PaletteStore } from "../pipeline/slices/palette-store";
 import { FileRegistry } from "../pipeline/slices/file-registry";
-import { ReportAssembler } from "../pipeline/slices/report-assembler";
 
 // ── parseChunkRef ──
 
@@ -537,42 +536,4 @@ describe("FileRegistry", () => {
     expect(summary).toContain("[S1.c2] chunk two");
   });
 
-});
-
-// ── ReportAssembler ──
-
-describe("ReportAssembler", () => {
-  it("stores and retrieves content", () => {
-    const r = new ReportAssembler();
-    r.setContent({ summary: "All checks pass." });
-    expect(r.getContent()).toContain("summary");
-    expect(r.getContent()).toContain("All checks pass.");
-  });
-
-  it("returns fallback when no content set", () => {
-    expect(new ReportAssembler().getContent()).toBe("Assessment not available.");
-  });
-
-  it("stores and retrieves sections", () => {
-    const r = new ReportAssembler();
-    r.setContent({ findings: { "mounting_height": "650 [PASS]" } });
-    expect(r.getSections()).toEqual({ findings: { "mounting_height": "650 [PASS]" } });
-    expect(r.getSection("findings")).toEqual({ "mounting_height": "650 [PASS]" });
-    expect(r.getSection("missing")).toBeUndefined();
-  });
-
-  it("returns all content flat", () => {
-    const r = new ReportAssembler();
-    r.setContent({ a: "hello", b: { x: "world" } });
-    expect(r.getAllContentFlat()).toBe("hello world");
-  });
-
-  it("handles verdict", () => {
-    const r = new ReportAssembler();
-    expect(r.getVerdict()).toBeNull();
-    r.setVerdict("PASS");
-    expect(r.getVerdict()).toBe("PASS");
-  });
-});
-
-// ── (enforceChecks removed — step execution loop is the sole verdict source) ──
+});// ── (enforceChecks removed — step execution loop is the sole verdict source) ──

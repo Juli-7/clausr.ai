@@ -1,8 +1,9 @@
 import { streamText, tool } from "ai";
 import { createModel } from "./agent/llm/factory";
-import { addAssistantMessage } from "./agent/shared/memory/repository";
+import { addAssistantMessage, addUserMessage } from "./agent/shared/memory/repository";
 import { logInfo } from "./agent/pipeline/logger";
-import { COMPLIANCE_SYSTEM_PROMPTS } from "./agent/pipeline/prompts";
+import { COMPLIANCE_SYSTEM_PROMPTS, buildComplianceStepPrompt, type SessionState } from "./agent/pipeline/prompts";
+import type { SkillPack } from "./agent/loading/skill/loader";
 import { TOOL_DEFS } from "./compliance-tools";
 
 export type ComplianceChatEvent =
@@ -17,17 +18,27 @@ export interface ComplianceChatParams {
   messages: { role: "user" | "assistant"; content: string }[];
   step?: number;
   systemPrompt?: string;
+  packs?: SkillPack[];
+  sessionState?: SessionState;
 }
 
 export async function* complianceChat(
   sessionId: string,
   params: ComplianceChatParams
 ): AsyncGenerator<ComplianceChatEvent> {
-  const { messages, step, systemPrompt: customPrompt } = params;
-  const systemPrompt = customPrompt ?? (step ? COMPLIANCE_SYSTEM_PROMPTS[step] : undefined);
+  const { messages, step, systemPrompt: customPrompt, packs, sessionState } = params;
+  const systemPrompt = customPrompt
+    ?? (packs && step !== undefined ? buildComplianceStepPrompt(step, packs, sessionState) : undefined)
+    ?? (step ? COMPLIANCE_SYSTEM_PROMPTS[step] : undefined);
   if (!systemPrompt) {
     yield { type: "error", error: step ? `No system prompt for step ${step}` : "systemPrompt is required when step is not provided" };
     return;
+  }
+
+  // Persist user message
+  const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+  if (lastUserMsg) {
+    addUserMessage(sessionId, lastUserMsg.content);
   }
 
   let llmModel;

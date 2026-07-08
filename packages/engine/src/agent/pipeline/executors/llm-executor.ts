@@ -214,7 +214,7 @@ export async function executeLlmToolStep(
 
 // ── Helpers ──
 
-function parseLlmOutput(text: string): { value: string; sourceCitation: string[]; citationRef: string[]; verdict: string } | null {
+export function parseLlmOutput(text: string): { value: string; sourceCitation: string[]; citationRef: string[]; verdict: string } | null {
   let cleaned = text.trim();
   const startFence = cleaned.indexOf("```");
   if (startFence !== -1) {

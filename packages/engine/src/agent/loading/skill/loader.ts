@@ -346,16 +346,6 @@ export function saveSkillToFs(name: string, fullText: string, createdBy?: string
   }
 }
 
-/**
- * Remove a skill directory from the filesystem at skills/{name}/.
- */
-export function deleteSkillFromFs(name: string): void {
-  const skillDir = path.join(SKILLS_DIR, name);
-  if (fs.existsSync(skillDir)) {
-    fs.rmSync(skillDir, { recursive: true, force: true });
-  }
-}
-
 function getScriptDescription(filePath: string, filename: string): string {
   try {
     const content = fs.readFileSync(filePath, "utf-8");

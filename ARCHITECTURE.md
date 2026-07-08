@@ -12,10 +12,9 @@ src/
 ├── db/schema.ts                   # SQLite schema DDL
 ├── compliance-packs.ts            # Pack search + browse
 ├── compliance-session.ts          # UI-friendly session state builder
-├── compliance-tools.ts            # LLM-callable tool definitions + registries
+├── compliance-tools.ts            # LLM-callable tool schemas + dispatch
 ├── compliance-chat.ts             # Single LLM+tool chat entry point
-├── compliance-audit.ts            # (being replaced by tools)
-├── skill-generator.ts             # (being replaced by tools)
+├── compliance-audit-tools.ts      # start_audit workflow engine (see Sub-agent pattern)
 └── agent/
     ├── shared/                    # Cross-cutting dependencies
     │   ├── schemas.ts             #   Zod schemas
@@ -33,7 +32,6 @@ src/
     ├── loading/                   # Session setup (internal — consumed by tools)
     │   ├── loading-orchestrator.ts
     │   ├── generate-steps.ts
-    │   ├── cleanup.ts
     │   ├── phases/
     │   └── skill/
     ├── pipeline/                  # Step execution (internal — consumed by tools)
@@ -75,30 +73,67 @@ consumer UI ──→ complianceChat(sessionId, {messages, step, systemPrompt?})
                           error          → error message
 ```
 
-### What each tool does
+### Tool classification
 
-| Tool | Mutates | Purpose |
-|---|---|---|
-| `set_scope` | yes | Select compliance packs |
-| `update_doc_field` | yes | Fill a single document field |
-| `batch_update_doc_fields` | yes | Fill multiple fields at once |
-| `attach_file` | yes | Upload + process a file |
-| `detach_file` | yes | Remove an uploaded file |
-| `export_document` | no | Generate download URL |
-| `go_to_phase` | yes | Move workflow phase |
-| `search_packs` | no | Browse/filter packs |
-| `start_audit` | yes | Begin audit run |
-| `poll_audit` | no | Check audit status |
-| `get_check_detail` | no | Read per-check results |
-| `get_pack_details` | no | Pack definition |
-| `recommend_packs` | no | AI-driven pack suggestions |
-| `get_session_state` | no | Full snapshot |
-| `get_file_content` | no | Read extracted file text |
-| `run_validation` | yes | Check doc completeness |
-| `search_clauses` | no | Keyword search in regulations |
-| `get_regulation_text` | no | Full regulation/clause text |
-| `search_files` | no | Keyword search in uploaded files |
-| `suggest_lesson` | yes | Record lesson from findings |
+Most tools are plain function calls — the LLM invokes them and gets back a result synchronously. `start_audit` is different: it's a **predefined multi-step workflow** that spawns a sub-agent.
+
+| Tool | Mutates | Kind | Purpose |
+|---|---|---|---|
+| `set_scope` | yes | function | Select compliance packs |
+| `update_doc_field` | yes | function | Fill a single document field |
+| `batch_update_doc_fields` | yes | function | Fill multiple fields at once |
+| `attach_file` | yes | function | Upload + process a file |
+| `detach_file` | yes | function | Remove an uploaded file |
+| `export_document` | no | function | Generate download URL |
+| `go_to_phase` | yes | function | Move workflow phase |
+| `search_packs` | no | function | Browse/filter packs |
+| `start_audit` | yes | **workflow** | Run predefined audit pipeline (see below) |
+| `poll_audit` | no | function | Check audit status |
+| `get_check_detail` | no | function | Read per-check results |
+| `get_pack_details` | no | function | Pack definition |
+| `recommend_packs` | no | function | AI-driven pack suggestions |
+| `get_session_state` | no | function | Full snapshot |
+| `get_file_content` | no | function | Read extracted file text |
+| `run_validation` | yes | function | Check doc completeness |
+| `search_clauses` | no | function | Keyword search in regulations |
+| `get_regulation_text` | no | function | Full regulation/clause text |
+| `search_files` | no | function | Keyword search in uploaded files |
+| `suggest_lesson` | yes | function | Record lesson from findings |
+
+### `start_audit` — the sub-agent workflow
+
+`start_audit` is registered as a tool but internally runs a **three-layer pipeline**:
+
+```
+outer LLM (complianceChat, step=3 prompts)
+  │
+  └─ calls start_audit tool
+       │
+       ├─ setupPackAudit()                  ← Layer 1: non-LLM
+       │    init session → create context → generate steps → persist
+       │
+       ├─ runPendingChecks()                ← Layer 2: sub-agent
+       │    └─ for each pending check:
+       │         executeLlmToolStep(check, ctx)
+       │           ├─ buildSystemPrompt()   ← its own system prompt (per-check eval)
+       │           ├─ buildUserMessage()
+       │           ├─ tool: checkCompliance ← its own tool registry
+       │           └─ returns {value, verdict, citations}
+       │
+       └─ outer LLM receives results       ← Layer 3: back to chat LLM
+            calls: export_document, search_clauses, suggest_lesson, etc.
+```
+
+**Layer 1** is pure DB + context setup. **Layer 2** is a sub-agent: it gets its own system prompt (`buildSystemPrompt`), its own user message per check, and its own limited tool set (`checkCompliance` for numerical evaluation). It never talks to the user. **Layer 3** returns control to the outer LLM, which can call any other tool to present results.
+
+This means the engine has **two LLM call sites** with different roles:
+
+| Call site | Location | Prompt | Role |
+|---|---|---|---|
+| `complianceChat` | `compliance-chat.ts` | `COMPLIANCE_SYSTEM_PROMPTS[1\|2\|3]` | Conversational orchestrator — talks to user, calls tools (including `start_audit`) |
+| `executeLlmToolStep` | `executors/llm-executor.ts` | `buildSystemPrompt()` + `buildUserMessage()` | Structured evaluator — reads documents, produces fixed-format JSON per check |
+
+The two-tier design keeps conversation fluid (outer) while evaluations stay rigid and parseable (inner).
 
 ### Directly callable exports (for UI buttons outside chat)
 
