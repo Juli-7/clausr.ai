@@ -18,12 +18,12 @@ export {
 } from "./agent/shared/memory/repository";
 
 export { buildSession } from "./compliance-session";
-export type { ComplianceSession, ValidationCheck } from "./compliance-session";
+export type { ComplianceSession, ValidationCheck, Questionnaire } from "./compliance-session";
 
 // ── Packs ──
-export { searchPacks, getPack } from "./compliance-packs";
+export { searchPacks, getPack, readPackContent } from "./compliance-packs";
 export { listPacks, loadPack, saveSkillToFs } from "./agent/loading/skill/loader";
-export type { SkillPack, PackCheck } from "./agent/loading/skill/loader";
+export type { SkillPack, PackCheck, PackField, DocumentTemplate } from "./agent/loading/skill/loader";
 
 // ── Tool Registry ──
 export { TOOL_DEFS, ToolSchemas, getTool } from "./compliance-tools";

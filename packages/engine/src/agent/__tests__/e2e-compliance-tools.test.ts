@@ -78,20 +78,18 @@ describe("Compliance tools end-to-end with real DB", () => {
     ensureComplianceSession(sid);
 
     await TOOL_DEFS.update_doc_field.execute(sid, {
-      docType: "declaration-of-conformity",
       field: "manufacturer",
       value: { value: "Acme Corp", sourceCitation: ["S1.c3"] },
     });
 
     await TOOL_DEFS.update_doc_field.execute(sid, {
-      docType: "declaration-of-conformity",
       field: "model",
       value: { value: "XL-2000" },
     });
 
     const session = getComplianceSession(sid);
-    expect(session!.docData["declaration-of-conformity"]!.manufacturer).toEqual({ value: "Acme Corp", sourceCitation: ["S1.c3"] });
-    expect(session!.docData["declaration-of-conformity"]!.model).toEqual({ value: "XL-2000" });
+    expect(session!.docData["manufacturer"]).toEqual({ value: "Acme Corp", sourceCitation: ["S1.c3"] });
+    expect(session!.docData["model"]).toEqual({ value: "XL-2000" });
   });
 
   it("batch_update_doc_fields tool writes multiple fields at once", async () => {
@@ -100,7 +98,6 @@ describe("Compliance tools end-to-end with real DB", () => {
     ensureComplianceSession(sid);
 
     const result = await TOOL_DEFS.batch_update_doc_fields.execute(sid, {
-      docType: "test-report",
       fields: {
         temperature: { value: "25C" },
         humidity: { value: "60%" },
@@ -109,10 +106,10 @@ describe("Compliance tools end-to-end with real DB", () => {
     });
 
     expect(result.docData).toBeDefined();
-    const docData = (result as { docData: Record<string, Record<string, { value: string }>> }).docData;
-    expect(docData["test-report"]!.temperature).toEqual({ value: "25C" });
-    expect(docData["test-report"]!.humidity).toEqual({ value: "60%" });
-    expect(docData["test-report"]!.voltage).toEqual({ value: "230V" });
+    const docData = (result as { docData: Record<string, { value: string }> }).docData;
+    expect(docData["temperature"]).toEqual({ value: "25C" });
+    expect(docData["humidity"]).toEqual({ value: "60%" });
+    expect(docData["voltage"]).toEqual({ value: "230V" });
   });
 
   it("attach_file tool stores file metadata", async () => {
@@ -149,20 +146,36 @@ describe("Compliance tools end-to-end with real DB", () => {
     ensureComplianceSession(sid);
     setComplianceScope(sid, ["pack-x"]);
     setComplianceStep(sid, 2);
-    addComplianceDocField(sid, "doc", "field1", { value: "val1" });
+    addComplianceDocField(sid, "field1", { value: "val1" });
 
     const result = await TOOL_DEFS.get_session_state.execute(sid, {});
     expect(result.step).toBe(2);
     expect(result.selectedPackIds).toEqual(["pack-x"]);
     expect(result.docData).toBeDefined();
+    // questionnaire is undefined when pack IDs don't resolve to real packs
+    expect(result.questionnaire).toBeUndefined();
   });
 
-  it("search_packs tool returns pack results", async () => {
-    const result = await TOOL_DEFS.search_packs.execute("session-ignored", { query: "lighting" });
-    expect(result).toHaveProperty("packs");
-    expect(Array.isArray(result.packs)).toBe(true);
-    expect(result).toHaveProperty("regs");
-    expect(result).toHaveProperty("inds");
+  it("list_packs tool returns packs with titles", async () => {
+    const result = await TOOL_DEFS.list_packs.execute("session-ignored", {});
+    const packs = result.packs as Array<{ id: string; title: unknown }>;
+    expect(Array.isArray(packs)).toBe(true);
+    if (packs.length > 0) {
+      expect(packs[0]).toHaveProperty("id");
+      expect(packs[0]).toHaveProperty("title");
+    }
+  });
+
+  it("read_pack tool returns pack content", async () => {
+    const list = await TOOL_DEFS.list_packs.execute("session-ignored", {});
+    const packList = (list.packs as Array<{ id: string }>) ?? [];
+    if (packList.length > 0) {
+      const result = await TOOL_DEFS.read_pack.execute("session-ignored", { packId: packList[0]!.id });
+      expect(result).toHaveProperty("content");
+      expect(typeof result.content).toBe("string");
+      expect(result).toHaveProperty("source");
+      expect(["pack.json", "SKILL.md"]).toContain(result.source);
+    }
   });
 
   it("suggest_lesson tool saves lesson", async () => {
@@ -190,7 +203,6 @@ describe("Compliance tools end-to-end with real DB", () => {
     await TOOL_DEFS.go_to_phase.execute(sid, { phase: "documents" });
 
     await TOOL_DEFS.batch_update_doc_fields.execute(sid, {
-      docType: "declaration-of-conformity",
       fields: {
         manufacturer: { value: "Acme Corp" },
         model: { value: "XL-2000" },

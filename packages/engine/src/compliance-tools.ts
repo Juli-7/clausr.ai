@@ -13,7 +13,7 @@ import {
   setupPackAudit, runPendingChecks, retryCheck,
   getPackAuditState, finalizeAudit,
 } from "./compliance-audit-tools";
-import { searchPacks, getPack, packs } from "./compliance-packs";
+import { getPack, packs, readPackContent } from "./compliance-packs";
 import { buildSession } from "./compliance-session";
 import { getRegulationApi } from "./agent/knowledge/regulation-api";
 import { getDocStore } from "./agent/user-info/vector-store";
@@ -26,15 +26,14 @@ export type ToolName =
   | "detach_file"
   | "export_document"
   | "go_to_phase"
-  | "search_packs"
+  | "list_packs"
+  | "read_pack"
   | "start_audit"
   | "setup_pack_audit"
   | "run_pending_checks"
   | "retry_check"
   | "get_pack_audit_state"
   | "finalize_audit"
-  | "get_pack_details"
-  | "recommend_packs"
   | "get_session_state"
   | "get_file_content"
   | "run_validation"
@@ -48,8 +47,7 @@ export const ToolSchemas = {
     packIds: z.array(z.string()).describe("Pack IDs to select"),
   }),
   update_doc_field: z.object({
-    docType: z.string().describe("Document type, e.g. declaration-of-conformity"),
-    field: z.string().describe("Field name"),
+    field: z.string().describe("Field ID, e.g. 'manufacturer'"),
     value: z.object({
       value: z.string().describe("Field value"),
       sourceCitation: z.array(z.string()).optional().describe("Source chunk IDs this value was derived from, e.g. ['S1.c3']"),
@@ -57,12 +55,11 @@ export const ToolSchemas = {
     }).describe("Field value with optional evidence provenance"),
   }),
   batch_update_doc_fields: z.object({
-    docType: z.string().describe("Document type, e.g. declaration-of-conformity"),
     fields: z.record(z.string(), z.object({
       value: z.string().describe("Field value"),
       sourceCitation: z.array(z.string()).optional().describe("Source chunk IDs this value was derived from, e.g. ['S1.c3']"),
       citationRef: z.array(z.string()).optional().describe("Regulation clause IDs this value relates to, e.g. ['R48.6.2']"),
-    })).describe("Record of field name → structured value with provenance"),
+    })).describe("Record of field ID → structured value with provenance"),
   }),
   attach_file: z.object({
     name: z.string().describe("Original file name"),
@@ -79,10 +76,9 @@ export const ToolSchemas = {
   go_to_phase: z.object({
     phase: z.enum(["scope", "documents", "audit"]).describe("Target phase. 'scope' to choose packs, 'documents' to collect data/files, 'audit' to review results."),
   }),
-  search_packs: z.object({
-    query: z.string().optional().describe("Search term"),
-    regulation: z.string().optional().describe("Regulation filter"),
-    industry: z.string().optional().describe("Industry filter"),
+  list_packs: z.object({}).describe("List all available compliance packs with titles and metadata"),
+  read_pack: z.object({
+    packId: z.string().describe("Pack ID to read — returns the pack's full content so you can assess relevance"),
   }),
   start_audit: z.object({
     packIds: z.array(z.string()).optional().describe("Optional: specific pack IDs to audit. Defaults to all selected packs."),
@@ -103,12 +99,6 @@ export const ToolSchemas = {
     packId: z.string().describe("Pack ID to get audit state for"),
   }),
   finalize_audit: z.object({}).describe("Finalize the audit — sets auditDone=true, stores final results."),
-  get_pack_details: z.object({
-    packId: z.string().describe("Pack ID"),
-  }),
-  recommend_packs: z.object({
-    productDescription: z.string().describe("Product description"),
-  }),
   get_session_state: z.object({}),
   get_file_content: z.object({
     fileName: z.string().describe("Name of the uploaded file to read"),
@@ -158,7 +148,7 @@ export interface ToolDef {
 export const TOOL_DEFS: Record<ToolName, ToolDef> = {
   set_scope: {
     name: "set_scope",
-    description: "Select compliance packs to include in the assessment. Call after searching or getting recommendations — once the user has chosen which packs apply. Precondition: user has decided on pack(s).",
+    description: "Select compliance packs to include in the assessment. Call after reading packs via read_pack and the user has chosen which ones apply. Precondition: user has decided on pack(s).",
     inputSchema: ToolSchemas.set_scope,
     logLabel: "Set compliance scope",
     mutates: true,
@@ -171,13 +161,13 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   update_doc_field: {
     name: "update_doc_field",
-    description: "Save a value for a single document field (e.g. manufacturer name on Declaration of Conformity). Prefer batch_update_doc_fields when filling multiple fields at once. Call during 'documents' phase after identifying unfilled required fields from session state.",
+    description: "Save a value for a single questionnaire field (e.g. manufacturer name). Prefer batch_update_doc_fields when filling multiple fields at once. Call during 'documents' phase after identifying unfilled required fields from session state.",
     inputSchema: ToolSchemas.update_doc_field,
     logLabel: "Update document field",
     mutates: true,
     execute: async (sessionId, input) => {
-      const { docType, field, value } = input as { docType: string; field: string; value: DocFieldValue };
-      addComplianceDocField(sessionId, docType, field, value);
+      const { field, value } = input as { field: string; value: DocFieldValue };
+      addComplianceDocField(sessionId, field, value);
       const s = getComplianceSession(sessionId);
       return { docData: s?.docData ?? {} };
     },
@@ -185,14 +175,14 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   batch_update_doc_fields: {
     name: "batch_update_doc_fields",
-    description: "Fill multiple document fields at once for a document type (e.g. company name, address, phone on Declaration of Conformity). PREFER this over calling update_doc_field repeatedly. Call during 'documents' phase after identifying unfilled required fields. Precondition: user has provided values for the fields.",
+    description: "Fill multiple questionnaire fields at once (e.g. manufacturer name, model number). PREFER this over calling update_doc_field repeatedly. Call during 'documents' phase after identifying unfilled required fields. Precondition: user has provided values for the fields.",
     inputSchema: ToolSchemas.batch_update_doc_fields,
     logLabel: "Batch update document fields",
     mutates: true,
     execute: async (sessionId, input) => {
-      const { docType, fields } = input as { docType: string; fields: Record<string, DocFieldValue> };
+      const { fields } = input as { fields: Record<string, DocFieldValue> };
       for (const [field, value] of Object.entries(fields)) {
-        addComplianceDocField(sessionId, docType, field, value);
+        addComplianceDocField(sessionId, field, value);
       }
       const s = getComplianceSession(sessionId);
       return { docData: s?.docData ?? {} };
@@ -268,18 +258,35 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     },
   },
 
-  search_packs: {
-    name: "search_packs",
-    description: "Find compliance packs by keyword, regulation, or industry. Call during 'scope' phase when you need to identify relevant packs. Use before set_scope. Precondition: user has described their product or you have keywords to search.",
-    inputSchema: ToolSchemas.search_packs,
-    logLabel: "Search packs",
+  list_packs: {
+    name: "list_packs",
+    description: "List available compliance packs with their titles and regulation IDs. Call during 'scope' phase to see what packs exist, then call read_pack to inspect any pack's full content.",
+    inputSchema: ToolSchemas.list_packs,
+    logLabel: "List packs",
+    mutates: false,
+    execute: async () => {
+      return {
+        packs: packs.map((p) => ({
+          id: p.id,
+          title: p.title,
+          regs: p.regs,
+          inds: p.inds,
+        })),
+      };
+    },
+  },
+
+  read_pack: {
+    name: "read_pack",
+    description: "Read a compliance pack's full content (from pack.json or SKILL.md) so you can assess whether it applies to the user's product. Use during 'scope' phase after list_packs or when the user mentions a pack. Read it, reason about relevance yourself, then recommend to the user.",
+    inputSchema: ToolSchemas.read_pack,
+    logLabel: "Read pack",
     mutates: false,
     execute: async (_sessionId, input) => {
-      const result = searchPacks(input as { query?: string; regulation?: string; industry?: string });
-      return {
-        packs: result.map((p) => ({ id: p.id, title: p.title, desc: p.desc, regs: p.regs, inds: p.inds })),
-        regs: packs.flatMap((p) => p.regs), inds: packs.flatMap((p) => p.inds),
-      };
+      const { packId } = input as { packId: string };
+      const result = readPackContent(packId);
+      if (!result) return { error: `Pack "${packId}" not found` };
+      return { packId, content: result.content, source: result.source };
     },
   },
 
@@ -301,13 +308,12 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       for (const packId of auditPackIds) {
         const pack = getPack(packId);
         if (!pack) continue;
-        for (const doc of pack.documents) {
-          for (const field of doc.fields) {
-            if (!field.required) continue;
-            const value = docData[doc.type]?.[field.field]?.value?.trim();
-            if (!value) {
-              missingFields.push({ pack: pack.title, field: field.label });
-            }
+        for (const field of pack.fields) {
+          if (!field.required) continue;
+          const label = typeof field.label === "string" ? field.label : (field.label.en ?? field.id);
+          const value = docData[field.id]?.value?.trim();
+          if (!value) {
+            missingFields.push({ pack: typeof pack.title === "string" ? pack.title : (pack.title.en ?? pack.id), field: label });
           }
         }
       }
@@ -413,35 +419,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     },
   },
 
-  get_pack_details: {
-    name: "get_pack_details",
-    description: "Get full details for a compliance pack — checks, required documents, and field definitions. Call during 'scope' phase when the user wants to understand what a pack requires before selecting it. Precondition: you have a pack ID from search_packs or recommend_packs.",
-    inputSchema: ToolSchemas.get_pack_details,
-    logLabel: "Get pack details",
-    mutates: false,
-    execute: async (_sessionId, input) => {
-      const { packId } = input as { packId: string };
-      const pack = getPack(packId);
-      return (pack ?? { error: "Pack not found" }) as Record<string, unknown>;
-    },
-  },
 
-  recommend_packs: {
-    name: "recommend_packs",
-    description: "Get AI-driven recommendations for which compliance packs apply based on a product description. Call during 'scope' phase when you need a starting point. Precondition: user has described their product or use case.",
-    inputSchema: ToolSchemas.recommend_packs,
-    logLabel: "Recommend packs",
-    mutates: false,
-    execute: async (_sessionId, input) => {
-      const { productDescription } = input as { productDescription: string };
-      const results = searchPacks({ query: productDescription });
-      const recommendations = results.slice(0, 3).map((p) => ({
-        id: p.id, title: p.title,
-        reason: `${p.title} covers ${p.regs.join(", ")} which applies to ${p.inds.join(", ")} products.`,
-      }));
-      return { recommendations, reasoning: `Based on your product description, I recommend these packs.` };
-    },
-  },
 
   get_session_state: {
     name: "get_session_state",
@@ -490,7 +468,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   run_validation: {
     name: "run_validation",
-    description: "Check document completeness — verify all required fields across selected packs are filled. Call during 'documents' phase to confirm everything is ready before moving to audit. Use get_session_state after this to see results.",
+    description: "Check questionnaire completeness — verify all required fields across selected packs are filled. Call during 'documents' phase to confirm everything is ready before moving to audit. Use get_session_state after this to see results.",
     inputSchema: ToolSchemas.run_validation,
     logLabel: "Run validation",
     mutates: true,
@@ -505,18 +483,17 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
         const pack = getPack(packId);
         if (!pack) continue;
 
-        for (const doc of pack.documents) {
-          for (const field of doc.fields) {
-            if (!field.required) continue;
-            const value = docData[doc.type]?.[field.field]?.value?.trim();
-            const filled = !!value;
-            checks.push({
-              id: `${packId}:${doc.type}:${field.field}`,
-              title: `[${pack.title}] ${field.label}`,
-              status: filled ? "pass" : "fail",
-              note: filled ? "" : "Required field is empty",
-            });
-          }
+        for (const field of pack.fields) {
+          if (!field.required) continue;
+          const label = typeof field.label === "string" ? field.label : (field.label.en ?? field.id);
+          const value = docData[field.id]?.value?.trim();
+          const filled = !!value;
+          checks.push({
+            id: `${packId}:${field.id}`,
+            title: `[${typeof pack.title === "string" ? pack.title : pack.title.en}] ${label}`,
+            status: filled ? "pass" : "fail",
+            note: filled ? "" : "Required field is empty",
+          });
         }
       }
 

@@ -24,9 +24,10 @@ You are an expert in executing information handling jobs in general.
 
 # Instructions
 - Retrieve relevant chunks according to the step description provided in the user's message.
-- Your output must be a JSON object with these exact fields: value (narrative assessment with citation markers), sourceCitation (chunk IDs), citationRef (regulation references), verdict (PASS or FAIL).
+- Your output must be a JSON object with these exact fields: value (narrative assessment — plain text, no citation markers), sourceCitation (chunk IDs), citationRef (regulation references), verdict (PASS or FAIL).
 - Output ONLY valid JSON in this exact format — no code blocks, no explanation before or after:
-  {"value": "narrative assessment with [S1.cN] markers", "sourceCitation": ["S1.c3"], "citationRef": ["R48.5.11"], "verdict": "PASS"}
+  {"value": "narrative assessment text", "sourceCitation": ["S1.c3"], "citationRef": ["R48.5.11"], "verdict": "PASS"}
+- Do NOT embed citation markers like [S1.cN] or [R48.x.x] in the value text. Citation info belongs in the sourceCitation and citationRef arrays only.
 - For qualitative steps: assess the evidence and output your finding and final verdict.
 - For numerical steps: extract the value from the available chunks, then call the \`checkCompliance\` tool to perform the comparison. Do NOT determine the verdict yourself — let the tool compute it.
 - \`citationRef\`: use EXACT regulation IDs from Available Citations (e.g., "R48.5.11")
@@ -80,7 +81,7 @@ const STEP_LABELS: Record<number, string> = {
 const COMMON_INSTRUCTION = `You can call any tool at any time — tools are not restricted by phase. Use the tool descriptions to decide when each tool is appropriate. The following tools are available:
 
 **Scope tools** (use when choosing packs):
-- search_packs, recommend_packs, get_pack_details, set_scope
+- list_packs, read_pack, set_scope
 
 **Document tools** (use when collecting data and files):
 - update_doc_field, batch_update_doc_fields, attach_file, get_file_content, search_files, run_validation
@@ -100,25 +101,24 @@ ${COMMON_INSTRUCTION}
 
 Typical workflow (not mandatory — use your judgment based on the user's needs):
 1. Ask about their product or use case if they haven't described it
-2. Call search_packs or recommend_packs to find relevant packs
-3. Call get_pack_details to show what a pack requires when they're interested
+2. Call list_packs to see what compliance packs are available
+3. Call read_pack to read a pack's full content and assess whether it applies — use your own judgment, don't rely on keyword matching
 4. Call set_scope once the user has decided
 5. Call go_to_phase with phase="documents" when scope is confirmed and the user is ready`,
 
-  2: `You are a document collection assistant. **Current phase: ${STEP_LABELS[2]}**.
- 
- Your goal is to help the user fill in required document fields and upload supporting files.
- 
- ${COMMON_INSTRUCTION}
- 
- Typical workflow (not mandatory — use your judgment based on what's been done):
- 1. Use get_session_state to see what fields are already filled
- 2. Look at the Required Documents & Fields section below — it groups fields by document type and shows interview hints
- 3. Ask the user for unfilled values — prefer batch_update_doc_fields for multiple fields at once. Fields shared across documents are marked — fill once, applies everywhere
- 4. Use interview hints/questions as conversation starters when you need to ask for a field
- 5. When the user has supporting files, call attach_file
- 6. Call run_validation to check completeness
- 7. Call go_to_phase with phase="audit" when validation passes and the user is ready`,
+  2: `You are a questionnaire assistant. **Current phase: ${STEP_LABELS[2]}**.
+  
+  Your goal is to help the user fill in required questionnaire fields and upload supporting files.
+  
+  ${COMMON_INSTRUCTION}
+  
+  Typical workflow (not mandatory — use your judgment based on what's been done):
+  1. Use get_session_state to see what fields are already filled
+  2. Look at the Questionnaire section below — it lists all required fields grouped by pack
+  3. Ask the user for unfilled values — prefer batch_update_doc_fields for multiple fields at once
+  4. When the user has supporting files, call attach_file
+  5. Call run_validation to check completeness
+  6. Call go_to_phase with phase="audit" when validation passes and the user is ready`,
 
   3: `You are an audit review assistant. **Current phase: ${STEP_LABELS[3]}**.
 
@@ -180,48 +180,31 @@ export function buildComplianceStepPrompt(
   }
 
   if (step === 2) {
-    sections.push(`\n# Required Documents & Fields`);
+    sections.push(`\n# Questionnaire`);
     for (const p of packs) {
-      for (const d of p.documents ?? []) {
-        const required = (d.fields ?? []).filter((f) => f.required);
-        if (!required.length) continue;
-        sections.push(`\n## ${p.title} → ${d.title} (\`${d.type}\`)`);
-        for (const f of required) {
-          const hint = f.interview?.hint ? ` (${f.interview.hint})` : "";
-          const q = f.interview?.question ? `\n  Interview question: ${f.interview.question}` : "";
-          sections.push(`- **${f.label}** (\`${f.field}\`)${hint}${q}`);
-        }
+      const required = (p.fields ?? []).filter((f) => f.required);
+      if (!required.length) continue;
+      const packTitle = typeof p.title === "string" ? p.title : (p.title.en ?? p.id);
+      sections.push(`\n## ${packTitle}`);
+      for (const f of required) {
+        const label = typeof f.label === "string" ? f.label : (f.label.en ?? f.id);
+        let typeInfo = f.type && f.type !== "text" ? ` (\`${f.type}\`)` : "";
+        sections.push(`- **${label}** (\`${f.id}\`)${typeInfo}`);
       }
-    }
-    const fieldToDocs = new Map<string, string[]>();
-    for (const p of packs) {
-      for (const d of p.documents ?? []) {
-        for (const f of d.fields ?? []) {
-          if (!f.required) continue;
-          const key = `${p.title}/${f.field}`;
-          if (!fieldToDocs.has(key)) fieldToDocs.set(key, []);
-          fieldToDocs.get(key)!.push(d.title);
-        }
-      }
-    }
-    const sharedFields = [...fieldToDocs.entries()]
-      .filter(([, docs]) => docs.length > 1)
-      .map(([key, docs]) => `- \`${key.split("/")[1]}\` shared across: ${docs.join(", ")}`);
-    if (sharedFields.length) {
-      sections.push(`\n### Shared Fields\nThese fields appear in multiple documents — fill once, applies to all:\n${sharedFields.join("\n")}`);
     }
   }
 
   if (step === 3) {
     for (const p of packs) {
+      const packTitle = typeof p.title === "string" ? p.title : (p.title.en ?? p.id);
       const checkLines = (p.checks ?? []).map(
-        (c) => `- **${c.id}**: ${c.desc ?? ""}`
+        (c) => `- **${c.id}** (\`${c.field}\`): ${c.description ?? ""}`
       );
       const redlineLines = (p.redlines ?? []).map((r) => `- ❌ ${r}`);
       const lessonLines = (p.lessons ?? []).map((l) => `- ${l}`);
 
       const packSection = [
-        `\n## Pack: ${p.title}`,
+        `\n## Pack: ${packTitle}`,
         ...(checkLines.length ? ["\n### Checks", ...checkLines] : []),
         ...(redlineLines.length ? ["\n### Red Lines (never violate)", ...redlineLines] : []),
         ...(lessonLines.length ? ["\n### Lessons Learnt", ...lessonLines] : []),

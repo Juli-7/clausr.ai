@@ -86,12 +86,12 @@ Most tools are plain function calls — the LLM invokes them and gets back a res
 | `detach_file` | yes | function | Remove an uploaded file |
 | `export_document` | no | function | Generate download URL |
 | `go_to_phase` | yes | function | Move workflow phase |
-| `search_packs` | no | function | Browse/filter packs |
+| `list_packs` | no | function | List available packs |
+| `read_pack` | no | function | Read pack content for relevance assessment |
 | `start_audit` | yes | **workflow** | Run predefined audit pipeline (see below) |
 | `poll_audit` | no | function | Check audit status |
 | `get_check_detail` | no | function | Read per-check results |
-| `get_pack_details` | no | function | Pack definition |
-| `recommend_packs` | no | function | AI-driven pack suggestions |
+
 | `get_session_state` | no | function | Full snapshot |
 | `get_file_content` | no | function | Read extracted file text |
 | `run_validation` | yes | function | Check doc completeness |

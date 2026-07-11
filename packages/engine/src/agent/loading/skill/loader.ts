@@ -5,41 +5,49 @@ import { SkillLoadError } from "../../pipeline/errors";
 import { parseChecks } from "../../loading/skill/check-parser";
 import type { ParsedCheck } from "../../loading/skill/check-parser";
 
-const SKILLS_DIR = path.join(process.cwd(), "packs");
+export const SKILLS_DIR = path.join(process.cwd(), "packs");
 
 // ── Shared types ──
 
-export interface DocumentField {
-  field: string;
-  label: string;
-  type: "text" | "textarea" | "date";
-  required: boolean;
-  interview?: { question?: string; hint?: string };
+export interface PackField {
+  id: string;
+  label: string | Record<string, string>;
+  type?: "text" | "textarea" | "number" | "boolean" | "select" | "date";
+  required?: boolean;
+  options?: { value: string; label: string | Record<string, string> }[];
+  validation?: { min?: number; max?: number; maxLength?: number };
 }
 
 export interface DocumentTemplate {
   type: string;
-  title: string;
-  fields: DocumentField[];
+  title: string | Record<string, string>;
+  template?: string;
+  fields: string[];
 }
 
 export interface PackCheck {
   id: string;
-  title: string;
-  desc: string;
+  field: string;
+  type: "number" | "boolean" | "narrative" | "string" | "enum";
+  description: string;
+  clause?: string;
+  constraint?: string;
+  rounding?: number;
+  depends_on?: string[];
+  sample?: string;
 }
 
 export interface SkillPack {
   id: string;
-  title: string;
-  desc: string;
+  title: string | Record<string, string>;
+  desc: string | Record<string, string>;
   regs: string[];
   inds: string[];
   icon: string;
   version: string;
-  methodology: string;
-  checks: PackCheck[];
+  fields: PackField[];
   documents: DocumentTemplate[];
+  checks: PackCheck[];
   redlines: string[];
   lessons: string[];
 }
@@ -63,20 +71,20 @@ export interface LoadPackOptions {
 
 interface PackFileData {
   pack?: {
-    title?: string;
-    description?: string;
+    title?: string | Record<string, string>;
+    description?: string | Record<string, string>;
     industries?: string[];
     icon?: string;
     version?: string;
     author?: string;
-    methodology?: string;
     regulation_ids?: string[];
-    triggers?: string[];
   };
+  regulation_ids?: string[];
+  fields?: Record<string, unknown>[];
+  documents?: Record<string, unknown>[];
+  checks?: Record<string, unknown>[];
   redlines?: string[];
   lessons?: string[];
-  checks?: ParsedCheck[];
-  documents?: Record<string, unknown>[];
 }
 
 // ── Helpers ──
@@ -97,18 +105,25 @@ function humanize(field: string): string {
   return field.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function loadFields(fieldList: Record<string, unknown>[] | undefined): PackField[] {
+  if (!fieldList || fieldList.length === 0) return [];
+  return fieldList.map((f) => ({
+    id: f.id as string,
+    label: f.label as string | Record<string, string>,
+    type: (f.type ?? "text") as PackField["type"],
+    required: f.required === true,
+    options: f.options as { value: string; label: string | Record<string, string> }[] | undefined,
+    validation: f.validation as { min?: number; max?: number; maxLength?: number } | undefined,
+  }));
+}
+
 function loadDocuments(docList: Record<string, unknown>[] | undefined): DocumentTemplate[] {
   if (!docList || docList.length === 0) return [];
   return docList.map((d) => ({
     type: d.type as string,
-    title: d.title as string,
-    fields: ((d.fields as Record<string, unknown>[]) ?? []).map((f) => ({
-      field: f.field as string,
-      label: f.label as string,
-      type: (f.type ?? "text") as "text" | "textarea" | "date",
-      required: f.required === true,
-      interview: f.interview as { question?: string; hint?: string } | undefined,
-    })),
+    title: d.title as string | Record<string, string>,
+    template: d.template as string | undefined,
+    fields: (d.fields as string[]) ?? [],
   }));
 }
 
@@ -149,6 +164,21 @@ function buildSkillmd(checks: ParsedCheck[], redlines: string[], lessons: string
 
 // ── Pack (marketplace) functions ──
 
+function loadChecks(checkList: Record<string, unknown>[] | undefined): PackCheck[] {
+  if (!checkList || checkList.length === 0) return [];
+  return checkList.map((c) => ({
+    id: c.id as string,
+    field: c.field as string,
+    type: (c.type ?? "narrative") as PackCheck["type"],
+    description: (c.description ?? "") as string,
+    clause: c.clause as string | undefined,
+    constraint: c.constraint as string | undefined,
+    rounding: c.rounding as number | undefined,
+    depends_on: c.depends_on as string[] | undefined,
+    sample: c.sample as string | undefined,
+  }));
+}
+
 export function loadPack(packName: string, options?: LoadPackOptions): SkillPack | null {
   const packsDir = options?.packsDir ?? SKILLS_DIR;
   const packDir = path.join(packsDir, packName);
@@ -158,44 +188,50 @@ export function loadPack(packName: string, options?: LoadPackOptions): SkillPack
   const packFile = loadPackFile<PackFileData>(packDir);
   const docPack = packFile?.pack ?? {};
 
-  const title = (docPack.title as string) ?? packName;
-  const description = (docPack.description as string) ?? "";
-  const industries = (docPack.industries as string[]) ?? DEFAULT_INDUSTRIES;
-  const icon = (docPack.icon as string) ?? DEFAULT_ICON;
-  const version = (docPack.version as string) ?? DEFAULT_VERSION;
-  const methodology = (docPack.methodology as string) ?? "";
-  const regs: string[] = docPack.regulation_ids ?? [];
+  const title = docPack.title ?? packName;
+  const description = docPack.description ?? "";
+  const industries = docPack.industries ?? DEFAULT_INDUSTRIES;
+  const icon = docPack.icon ?? DEFAULT_ICON;
+  const version = docPack.version ?? DEFAULT_VERSION;
+  const regs: string[] = docPack.regulation_ids ?? packFile?.regulation_ids ?? [];
 
-  let parsedChecks: ParsedCheck[];
-  if (packFile?.checks) {
-    parsedChecks = packFile.checks;
-  } else {
+  let fields = loadFields(packFile?.fields);
+  if (fields.length === 0) {
+    // Backward compat: infer a single field from the legacy checks
     const raw = fs.readFileSync(skillPath, "utf-8");
     const parsed = matter(raw);
-    parsedChecks = parseChecks(parsed.content);
-  }
-
-  const packChecks: PackCheck[] = parsedChecks.map((c, i) => ({
-    id: `C${i + 1}`,
-    title: humanize(c.field),
-    desc: c.description ?? "",
-  }));
-
-  let documents = loadDocuments(packFile?.documents);
-  if (documents.length === 0) {
-    const inferredFields = parsedChecks.map((c) => ({
-      field: c.field,
+    const parsedChecks = parseChecks(parsed.content);
+    fields = parsedChecks.map((c) => ({
+      id: c.field,
       label: humanize(c.field),
-      type: "text" as const,
       required: true,
     }));
-    documents.push({ type: "default", title, fields: inferredFields });
+  }
+
+  let documents = loadDocuments(packFile?.documents);
+  if (documents.length === 0 && fields.length > 0) {
+    documents.push({
+      type: "default",
+      title: typeof title === "string" ? title : title.en ?? "",
+      fields: fields.map((f) => f.id),
+    });
+  }
+
+  let checks = loadChecks(packFile?.checks);
+  if (checks.length === 0 && fields.length > 0) {
+    // Backward compat: create simple checks from fields
+    checks = fields.map((f) => ({
+      id: f.id,
+      field: f.id,
+      type: f.type === "number" ? "number" : "narrative" as PackCheck["type"],
+      description: `Evaluate ${f.id}`,
+    }));
   }
 
   return {
     id: packName, title, desc: description, regs,
-    inds: industries, icon, version, methodology,
-    checks: packChecks, documents,
+    inds: industries, icon, version,
+    fields, documents, checks,
     redlines: packFile?.redlines ?? [],
     lessons: packFile?.lessons ?? [],
   };
@@ -255,13 +291,15 @@ export function loadSkill(skillId: string): SkillLoader {
     const templatePath = path.join(skillDir, "assets", "template.docx");
     const hasTemplate = fs.existsSync(templatePath);
 
+    const parsedChecks = packFile.checks as unknown as ParsedCheck[];
+
     return {
       name: skillId,
-      description: docPack.description ?? "",
-      triggers: docPack.triggers ?? [],
-      skillmd: buildSkillmd(packFile.checks, redlines, lessons),
+      description: typeof docPack.description === "string" ? docPack.description : (docPack.description?.en ?? ""),
+      triggers: [],
+      skillmd: buildSkillmd(parsedChecks, redlines, lessons),
       scripts,
-      checks: packFile.checks,
+      checks: parsedChecks,
       regulationIds: docPack.regulation_ids ?? [],
       redlines,
       lessons,
@@ -397,7 +435,7 @@ export function saveCompiledPack(
     pack = JSON.parse(fs.readFileSync(packPath, "utf-8"));
   }
   if (!pack.pack) pack.pack = {};
-  if (data.checks) pack.checks = data.checks;
+  if (data.checks) pack.checks = data.checks as unknown as Record<string, unknown>[];
   if (data.redlines) pack.redlines = data.redlines;
   if (data.lessons) {
     const existing = pack.lessons ?? [];
