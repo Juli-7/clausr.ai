@@ -6,6 +6,8 @@ import {
   getCompliancePackStates,
   type DocFieldValue,
 } from "./agent/shared/memory/repository";
+import { getPack } from "./compliance-packs";
+import type { PackField, DocumentTemplate, PackCheck } from "./agent/loading/skill/loader";
 
 export interface ValidationCheck {
   id: string;
@@ -14,11 +16,19 @@ export interface ValidationCheck {
   note: string;
 }
 
+export interface Questionnaire {
+  fields: PackField[];
+  documents: DocumentTemplate[];
+  checks: PackCheck[];
+  docData: Record<string, DocFieldValue>;
+}
+
 export interface ComplianceSession {
   id: string;
   step: 1 | 2 | 3;
   selectedPackIds: string[];
-  docData: Record<string, Record<string, DocFieldValue>>;
+  docData: Record<string, DocFieldValue>;
+  questionnaire?: Questionnaire;
   uploadedFiles: { name: string; size: string; time: string; dataUrl?: string }[];
   auditResults: { packId: string; items: { name: string; desc: string; status: "wait" | "run" | "done" | "err"; statusLabel: string; checks: { name: string; pass: boolean }[] }[] }[];
   messages: { role: string; content: string }[];
@@ -32,16 +42,33 @@ export interface ComplianceSession {
   packStates: Record<string, unknown>;
 }
 
+function buildQuestionnaire(packIds: string[]): Questionnaire | undefined {
+  const allFields: PackField[] = [];
+  const allDocuments: DocumentTemplate[] = [];
+  const allChecks: PackCheck[] = [];
+  for (const packId of packIds) {
+    const pack = getPack(packId);
+    if (!pack) continue;
+    allFields.push(...pack.fields);
+    allDocuments.push(...pack.documents);
+    allChecks.push(...pack.checks);
+  }
+  if (allFields.length === 0) return undefined;
+  return { fields: allFields, documents: allDocuments, checks: allChecks, docData: {} };
+}
+
 export function buildSession(id: string): ComplianceSession | undefined {
   const cs = getComplianceSession(id);
   if (!cs) return;
   const messages = getConversationHistory(id);
   const files = getComplianceFiles(id);
+  const questionnaire = buildQuestionnaire(cs.selectedPackIds);
   return {
     id: cs.id,
     step: cs.step,
     selectedPackIds: cs.selectedPackIds,
     docData: cs.docData,
+    questionnaire: questionnaire ? { ...questionnaire, docData: cs.docData } : undefined,
     uploadedFiles: files.map((f) => ({ name: f.name, size: f.size, time: f.time, dataUrl: f.dataUrl })),
     auditResults: cs.auditResults.map((r) => ({
       packId: r.packId,

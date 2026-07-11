@@ -1,0 +1,152 @@
+{
+  "pack": {
+    "title": { "en": "Automotive Lighting — UN R48", "cn": "汽车照明 — UN R48" },
+    "description": { "en": "Safety and installation requirements for vehicle lighting under UN R48", "cn": "UN R48 车辆照明安全及安装要求" },
+    "industries": ["automotive", "vehicle-manufacturing"],
+    "icon": "💡",
+    "version": "1.2.0",
+    "author": "Clausr Engineering",
+    "regulation_ids": ["R48"]
+  },
+
+  "fields": [
+    {
+      "id": "manufacturer",
+      "label": { "en": "Manufacturer Name", "cn": "制造商名称" },
+      "required": true
+    },
+    {
+      "id": "manufacturer_address",
+      "label": { "en": "Manufacturer Address", "cn": "制造商地址" },
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "model",
+      "label": { "en": "Model / Part Number", "cn": "型号/零件号" },
+      "required": true
+    },
+    {
+      "id": "light_source",
+      "label": { "en": "Light Source Type", "cn": "光源类型" },
+      "type": "select",
+      "required": true,
+      "options": [
+        { "value": "led", "label": { "en": "LED", "cn": "LED" } },
+        { "value": "halogen", "label": { "en": "Halogen", "cn": "卤素" } },
+        { "value": "xenon", "label": { "en": "Xenon / HID", "cn": "氙气 / HID" } },
+        { "value": "laser", "label": { "en": "Laser", "cn": "激光" } }
+      ]
+    },
+    {
+      "id": "has_auto_leveling",
+      "label": { "en": "Auto-Leveling System", "cn": "自动调平系统" },
+      "type": "boolean",
+      "required": true
+    },
+    {
+      "id": "mounting_height",
+      "label": { "en": "Mounting Height (mm)", "cn": "安装高度（毫米）" },
+      "type": "number",
+      "required": true
+    },
+    {
+      "id": "luminous_flux",
+      "label": { "en": "Luminous Flux (lm)", "cn": "光通量（流明）" },
+      "type": "number"
+    },
+    {
+      "id": "colour_temperature",
+      "label": { "en": "Colour Temperature (K)", "cn": "色温（开尔文）" },
+      "type": "number"
+    },
+    {
+      "id": "test_date",
+      "label": { "en": "Test Date", "cn": "测试日期" },
+      "type": "date",
+      "required": true
+    },
+    {
+      "id": "certification_body",
+      "label": { "en": "Certification Body", "cn": "认证机构" }
+    }
+  ],
+
+  "documents": [
+    {
+      "type": "declaration-of-conformity",
+      "title": { "en": "Declaration of Conformity", "cn": "符合性声明" },
+      "template": "templates/declaration.docx",
+      "fields": ["manufacturer", "manufacturer_address", "model", "light_source", "test_date"]
+    },
+    {
+      "type": "test-report",
+      "title": { "en": "Test Report", "cn": "测试报告" },
+      "template": "templates/test-report.docx",
+      "fields": ["manufacturer", "model", "mounting_height", "luminous_flux", "colour_temperature", "test_date", "certification_body"]
+    },
+    {
+      "type": "technical-drawing",
+      "title": { "en": "Technical Drawing", "cn": "技术图纸" },
+      "template": "templates/technical-drawing.docx",
+      "fields": ["manufacturer", "model", "mounting_height", "light_source", "has_auto_leveling"]
+    }
+  ],
+
+  "checks": [
+    {
+      "id": "mounting_height_range",
+      "field": "mounting_height",
+      "type": "number",
+      "description": "Headlamp mounting height measured in mm from ground — must be between 500 and 1200 mm under R48.6.2",
+      "clause": "R48.6.2",
+      "constraint": "range(500-1200)",
+      "rounding": 0,
+      "sample": "The headlamp mounting height is 650 mm, within the 500–1200 mm range required by R48.6.2."
+    },
+    {
+      "id": "auto_leveling_requirement",
+      "field": "has_auto_leveling",
+      "type": "boolean",
+      "description": "If light_source is LED or laser, auto-leveling must be present per R48.6.3. Skip if halogen or xenon",
+      "clause": "R48.6.3",
+      "sample": "Light source is LED. Auto-leveling system is present — PASS per R48.6.3."
+    },
+    {
+      "id": "luminous_flux_measurement",
+      "field": "luminous_flux",
+      "type": "number",
+      "description": "Luminous flux must be positive and documented per R48.7.1",
+      "clause": "R48.7.1",
+      "constraint": ">= 0",
+      "depends_on": ["mounting_height_range"],
+      "sample": "Luminous flux is 1800 lm, positive and documented per R48.7.1."
+    },
+    {
+      "id": "colour_temperature_range",
+      "field": "colour_temperature",
+      "type": "number",
+      "description": "Colour temperature of road-legal lighting must be between 3000K and 6000K per R48.7.2",
+      "clause": "R48.7.2",
+      "constraint": "range(3000-6000)",
+      "sample": "Colour temperature is 4500K, within the 3000–6000K range per R48.7.2."
+    },
+    {
+      "id": "light_source_compatibility",
+      "field": "light_source",
+      "type": "narrative",
+      "description": "Assess whether the light source type is compatible with the vehicle category and installation. Cross-reference with mounting height and auto-leveling findings",
+      "clause": "R48.5",
+      "depends_on": ["mounting_height_range", "auto_leveling_requirement"],
+      "sample": "LED light source with auto-leveling present, mounting height 650 mm — suitable for M1 category. Compatible with R48.5."
+    }
+  ],
+
+  "redlines": [
+    "Do not issue PASS where uploaded document evidence is insufficient or missing for numerical checks",
+    "Do not skip auto-leveling check for LED light sources — it is legally required under R48.6.3",
+    "Do not assess PASS/FAIL for numerical checks without calling the checkCompliance tool"
+  ],
+
+  "lessons": []
+}

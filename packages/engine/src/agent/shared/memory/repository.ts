@@ -447,7 +447,7 @@ export interface ComplianceSessionData {
   id: string;
   step: 1 | 2 | 3;
   selectedPackIds: string[];
-  docData: Record<string, Record<string, DocFieldValue>>;
+  docData: Record<string, DocFieldValue>;
   auditResults: { packId: string; items: { name: string; desc: string; status: string; statusLabel: string; checks: { name: string; pass: boolean }[] }[] }[];
   auditRunning: boolean;
   auditDone: boolean;
@@ -507,17 +507,15 @@ export function setComplianceScope(sessionId: string, packIds: string[]): void {
   getDb().prepare("UPDATE compliance_session SET selected_pack_ids = ?, updated_at = ? WHERE session_id = ?").run(JSON.stringify(packIds), Date.now(), sessionId);
 }
 
-export function setComplianceDocData(sessionId: string, docData: Record<string, Record<string, DocFieldValue>>): void {
+export function setComplianceDocData(sessionId: string, docData: Record<string, DocFieldValue>): void {
   getDb().prepare("UPDATE compliance_session SET doc_data = ?, updated_at = ? WHERE session_id = ?").run(JSON.stringify(docData), Date.now(), sessionId);
 }
 
-export function addComplianceDocField(sessionId: string, docType: string, field: string, value: DocFieldValue): void {
+export function addComplianceDocField(sessionId: string, field: string, value: DocFieldValue): void {
   const db = getDb();
   const session = getComplianceSession(sessionId);
   if (!session) return;
-  const docData = { ...session.docData };
-  if (!docData[docType]) docData[docType] = {};
-  docData[docType] = { ...docData[docType], [field]: value };
+  const docData = { ...session.docData, [field]: value };
   setComplianceDocData(sessionId, docData);
 }
 

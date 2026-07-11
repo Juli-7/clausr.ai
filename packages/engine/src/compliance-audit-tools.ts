@@ -190,54 +190,64 @@ export async function runPendingChecks(
   }
 
   packState.state = "running";
-  for (const checkId of batch) {
-    packState.checkStates[checkId]!.state = "running";
-  }
-  setCompliancePackStates(sessionId, all);
   setComplianceAuditRunning(sessionId, true);
+
+  // Store initial skeleton agent response (all checks PENDING) so frontend can render the layout immediately
+  const skeletonAgentResponse = await buildAgentResponse(packState, sessionId);
+  setComplianceAgentResponse(sessionId, packId, JSON.stringify(skeletonAgentResponse));
 
   const completed: RunChecksResult["results"] = [];
   const errors: RunChecksResult["errors"] = [];
 
-  const stepResults = await Promise.all(
-    batch.map(async (checkId): Promise<{ ok: true; checkId: string; result: StepResult } | { ok: false; checkId: string; error: string }> => {
+  // Run checks in parallel but persist each result as it finishes
+  await Promise.all(
+    batch.map(async (checkId) => {
       const cs = packState.checkStates[checkId]!;
+      cs.state = "running";
       const step = packState.setup!.steps.find((s) => s.number === cs.stepNumber);
-      if (!step) return { ok: false, checkId, error: `Step ${cs.stepNumber} not found` };
+      if (!step) {
+        cs.state = "failed";
+        cs.error = `Step ${cs.stepNumber} not found`;
+        errors.push({ checkId, error: cs.error });
+        return;
+      }
 
       try {
         const result = await executeLlmToolStep(step, ctx);
         if (result.success) {
-          return { ok: true, checkId, result };
+          cs.state = "done";
+          const check = packState.setup!.checks.find((c) => c.field === checkId);
+          const simpleResult = extractResult(result, check);
+          cs.result = simpleResult;
+          completed.push({ checkId, ...simpleResult });
+        } else {
+          cs.state = "failed";
+          cs.error = result.error ?? "Step failed";
+          errors.push({ checkId, error: cs.error });
         }
-        return { ok: false, checkId, error: result.error ?? "Step failed" };
       } catch (err) {
-        return { ok: false, checkId, error: err instanceof Error ? err.message : "Unknown error" };
+        cs.state = "failed";
+        cs.error = err instanceof Error ? err.message : "Unknown error";
+        errors.push({ checkId, error: cs.error });
+      }
+
+      // Persist this single check's result so frontend polling picks it up progressively
+      const packItems = buildAuditItems(packState);
+      setCompliancePackAuditResult(sessionId, packId, packItems);
+      setCompliancePackStates(sessionId, all);
+      // Build and store incremental agent response per-check so frontend uses the same layout throughout
+      try {
+        const agentResponse = await buildAgentResponse(packState, sessionId);
+        setComplianceAgentResponse(sessionId, packId, JSON.stringify(agentResponse));
+      } catch {
+        // Non-fatal: agent response will be built at batch end
       }
     })
   );
 
-  for (const sr of stepResults) {
-    if (sr.ok) {
-      const cs = packState.checkStates[sr.checkId]!;
-      cs.state = "done";
-
-      const check = packState.setup.checks.find((c) => c.field === sr.checkId);
-      const simpleResult = extractResult(sr.result, check);
-
-      cs.result = simpleResult;
-      completed.push({ checkId: sr.checkId, ...simpleResult });
-    } else {
-      const cs = packState.checkStates[sr.checkId]!;
-      cs.state = "failed";
-      cs.error = sr.error;
-      errors.push({ checkId: sr.checkId, error: sr.error });
-    }
-  }
-
-  // Write per-pack audit results incrementally
-  const packItems = buildAuditItems(packState);
-  setCompliancePackAuditResult(sessionId, packId, packItems);
+  // Ensure agent response is built at batch end (catches failed checks that didn't persist one)
+  const finalAgentResponse = await buildAgentResponse(packState, sessionId);
+  setComplianceAgentResponse(sessionId, packId, JSON.stringify(finalAgentResponse));
 
   const allDone = Object.values(packState.checkStates).every(
     (cs) => cs.state === "done" || cs.state === "failed"
@@ -246,9 +256,6 @@ export async function runPendingChecks(
 
   if (allDone) {
     packState.state = "done";
-    // Store final agent response
-    const agentResponse = await buildAgentResponse(packState, sessionId);
-    setComplianceAgentResponse(sessionId, packId, JSON.stringify(agentResponse));
   }
 
   setCompliancePackStates(sessionId, all);
@@ -516,42 +523,70 @@ export async function resolveCitation(
 }
 
 async function buildAgentResponse(packState: PackAuditState, sessionId: string): Promise<Record<string, unknown>> {
-  const checkResults = Object.entries(packState.checkStates)
-    .filter(([_, cs]) => cs.state === "done")
-    .map(([checkId, cs]) => ({
+  const allEntries = Object.entries(packState.checkStates);
+
+  // Pre-resolve all unique source citation refs from DONE entries only
+  const allRefs = [...new Set(
+    allEntries
+      .filter(([_, cs]) => cs.state === "done")
+      .flatMap(([_, cs]) => cs.result?.sourceCitation ?? [])
+  )];
+  const resolvedMap = new Map<string, Record<string, unknown>>();
+  if (allRefs.length > 0) {
+    const resolved = await Promise.allSettled(
+      allRefs.map((ref) => resolveCitation(sessionId, ref))
+    );
+    for (let i = 0; i < allRefs.length; i++) {
+      const r = resolved[i];
+      if (r?.status === "fulfilled" && r.value) {
+        resolvedMap.set(allRefs[i]!, r.value);
+      }
+    }
+  }
+
+  // Build checkResults for ALL entries — PENDING for not-yet-complete checks
+  const checkResults = allEntries.map(([checkId, cs]) => {
+    if (cs.state === "done") {
+      const srcCitationRefs = cs.result?.sourceCitation ?? [];
+      const sourceCitations = srcCitationRefs
+        .map((ref) => {
+          const resolved = resolvedMap.get(ref);
+          return resolved ? { ...resolved } : { ref };
+        });
+      return {
+        name: checkId,
+        type: "qualitative",
+        finding: cs.result?.finding ?? "",
+        verdict: cs.result?.verdict ?? "PASS",
+        citationRef: cs.result?.citationRef ?? [],
+        sourceCitations,
+      };
+    }
+    return {
       name: checkId,
       type: "qualitative",
-      finding: cs.result?.finding ?? "",
-      verdict: cs.result?.verdict ?? "PASS",
-      citationRef: cs.result?.citationRef ?? [],
-      sourceCitation: cs.result?.sourceCitation ?? [],
-    }));
+      finding: "",
+      verdict: "PENDING",
+      citationRef: [],
+      sourceCitations: [],
+    };
+  });
+  const sourceCitations = Array.from(resolvedMap.values());
 
-  // Store only raw ref strings — no eager file resolution
-  const allRefs = [...new Set(checkResults.flatMap((cr) => cr.sourceCitation))];
-  const sourceCitations = allRefs.map((ref) => ({ ref }));
-
-  // Build content with citation markers
+  // Build clean markdown content
   const sections: Record<string, string> = {};
   for (const cr of checkResults) {
-    const body = (cr.finding || `**Verdict: ${cr.verdict}**`).replace(
-      /\[([A-Za-z0-9.-]+)\]/g,
-      '<cite class="source-citation-marker" data-source-citation="$1">[$1]</cite>'
-    );
-    sections[cr.name] = body;
+    if (cr.verdict !== "PENDING") {
+      sections[cr.name] = cr.finding || `**Verdict: ${cr.verdict}**`;
+    }
   }
   sections._checkResults = JSON.stringify(
-    checkResults.map((cr) => ({ name: cr.name, verdict: cr.verdict }))
+    checkResults.map((cr) => ({ name: cr.name, verdict: cr.verdict, citationRef: cr.citationRef, sourceCitation: cr.sourceCitations.map((s: Record<string, unknown>) => s.ref) }))
   );
 
   const content = checkResults
-    .map((cr) => {
-      const body = (cr.finding || `**Verdict:** ${cr.verdict}`).replace(
-        /\[([A-Za-z0-9.-]+)\]/g,
-        '<cite class="source-citation-marker" data-source-citation="$1">[$1]</cite>'
-      );
-      return `### ${cr.name}\n\n${body}`;
-    })
+    .filter((cr) => cr.verdict !== "PENDING")
+    .map((cr) => `### ${cr.name}\n\n${cr.finding || `**Verdict:** ${cr.verdict}`}`)
     .join("\n\n");
 
   return {
