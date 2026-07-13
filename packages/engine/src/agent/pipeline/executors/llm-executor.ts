@@ -1,4 +1,4 @@
-import { streamText, tool, stepCountIs, type ToolSet } from "ai";
+import { streamText, tool, type ToolSet } from "ai";
 import { z } from "zod";
 import { createModel } from "../../llm/factory";
 import { runScript } from "./script-runner";
@@ -113,7 +113,10 @@ export async function executeLlmToolStep(
       system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],
       tools: Object.keys(tools).length > 0 ? tools : undefined,
-      stopWhen: stepCountIs(5),
+      stopWhen: ({ steps }) => {
+        const lastStep = steps[steps.length - 1];
+        return !lastStep || lastStep.toolCalls.length === 0 || steps.length >= 10;
+      },
       maxRetries: 3,
       abortSignal: abortController.signal,
       ...(step.temperature !== undefined ? { temperature: step.temperature } : {}),
