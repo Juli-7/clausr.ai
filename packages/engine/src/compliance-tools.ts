@@ -4,19 +4,22 @@ import {
   addComplianceDocField, addComplianceFile, getComplianceFiles, removeComplianceFile,
   setComplianceValidation, hasSessionSetup, loadSessionSetup,
   setComplianceAuditRunning, clearComplianceAuditResults,
+  setComplianceDocumentsFinalized,
 } from "./agent/shared/memory/repository";
 import type { ComplianceFile, DocFieldValue } from "./agent/shared/memory/repository";
 import { setupSkill, processSessionFiles } from "./agent/loading/loading-orchestrator";
-import { saveCompiledPack } from "./agent/loading/skill/loader";
 import { saveLessonOverride, getLessonOverrides } from "./agent/shared/memory/repository";
 import {
   setupPackAudit, runPendingChecks, retryCheck,
   getPackAuditState, finalizeAudit,
 } from "./compliance-audit-tools";
-import { getPack, packs, readPackContent } from "./compliance-packs";
+import { getPack, packs, readPackContent, writePack, appendPackLessons } from "./compliance-packs";
+import type { CreatePackInput } from "./compliance-packs";
 import { buildSession } from "./compliance-session";
 import { getRegulationApi } from "./agent/knowledge/regulation-api";
 import { getDocStore } from "./agent/user-info/vector-store";
+import { generateDocx } from "./agent/present/export/export-docx";
+import type { AgentResponse } from "./agent/shared/types";
 
 export type ToolName =
   | "set_scope"
@@ -28,6 +31,7 @@ export type ToolName =
   | "go_to_phase"
   | "list_packs"
   | "read_pack"
+  | "create_pack"
   | "start_audit"
   | "setup_pack_audit"
   | "run_pending_checks"
@@ -37,6 +41,7 @@ export type ToolName =
   | "get_session_state"
   | "get_file_content"
   | "run_validation"
+  | "prepare_for_audit"
   | "search_clauses"
   | "get_regulation_text"
   | "search_files"
@@ -80,6 +85,49 @@ export const ToolSchemas = {
   read_pack: z.object({
     packId: z.string().describe("Pack ID to read — returns the pack's full content so you can assess relevance"),
   }),
+  create_pack: z.object({
+    id: z.string().describe("Pack ID / directory name — lowercase, hyphens, e.g. 'ev-battery-r100'"),
+    title: z.union([z.string(), z.record(z.string(), z.string())]).describe("Pack title string or i18n record like { en, cn }"),
+    description: z.union([z.string(), z.record(z.string(), z.string())]).describe("Pack description string or i18n record"),
+    industries: z.array(z.string()).describe("Industries this pack applies to, e.g. ['automotive']"),
+    icon: z.string().optional().describe("Emoji icon for the pack"),
+    version: z.string().optional().describe("Semver version, defaults to 1.0.0"),
+    regulation_ids: z.array(z.string()).optional().describe("Regulation codes e.g. ['R100']"),
+    fields: z.array(z.object({
+      id: z.string(),
+      label: z.union([z.string(), z.record(z.string(), z.string())]),
+      type: z.enum(["text", "textarea", "number", "boolean", "select", "date"]).optional(),
+      required: z.boolean().optional(),
+      options: z.array(z.object({
+        value: z.string(),
+        label: z.union([z.string(), z.record(z.string(), z.string())]),
+      })).optional(),
+      validation: z.object({ min: z.number().optional(), max: z.number().optional(), maxLength: z.number().optional() }).optional(),
+    })).describe("Questionnaire fields required from the user"),
+    documents: z.array(z.object({
+      type: z.string(),
+      title: z.union([z.string(), z.record(z.string(), z.string())]),
+      template: z.string().optional().describe("Path to template in assets/, e.g. 'assets/declaration.docx'"),
+      fields: z.array(z.string()),
+    })).describe("Document templates referencing field IDs"),
+    checks: z.array(z.object({
+      id: z.string(),
+      field: z.string(),
+      type: z.enum(["number", "boolean", "narrative", "string", "enum"]),
+      description: z.string(),
+      clause: z.string().optional(),
+      constraint: z.string().optional(),
+      rounding: z.number().optional(),
+      depends_on: z.array(z.string()).optional(),
+      sample: z.string().optional(),
+    })).describe("Compliance checks the LLM will evaluate"),
+    redlines: z.array(z.string()).describe("Rules the LLM must never violate during audit"),
+    lessons: z.array(z.string()).optional().describe("Accumulated knowledge — starts empty"),
+    templates: z.array(z.object({
+      docType: z.string().describe("Document type key matching a documents[].type"),
+      dataUrl: z.string().describe("Base64-encoded DOCX file data URL"),
+    })).optional().describe("Uploaded DOCX template files to store in assets/"),
+  }),
   start_audit: z.object({
     packIds: z.array(z.string()).optional().describe("Optional: specific pack IDs to audit. Defaults to all selected packs."),
     force: z.boolean().optional().describe("Set true to start audit even if documents are incomplete. Default false."),
@@ -104,6 +152,7 @@ export const ToolSchemas = {
     fileName: z.string().describe("Name of the uploaded file to read"),
   }),
   run_validation: z.object({}),
+  prepare_for_audit: z.object({}).describe("Generate documents from questionnaire, store them as chunked files, and mark documents as finalized. Must call run_validation first. Must get user confirmation before calling this."),
   search_clauses: z.object({
     keyword: z.string().describe("Keyword to search for across regulation clauses"),
     regulationCodes: z.array(z.string()).optional().describe("Filter: only search within these regulation codes"),
@@ -290,9 +339,25 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     },
   },
 
+  create_pack: {
+    name: "create_pack",
+    description: "Create a new compliance pack with full metadata, questionnaire fields, document definitions, checks, and redlines. Call during 'scope' phase when no existing pack fits the user's product. Interview the user first to gather requirements — study existing packs via read_pack as reference. After creation, the new pack is immediately available via list_packs and read_pack. Precondition: you have gathered enough information from the user to define the complete pack.",
+    inputSchema: ToolSchemas.create_pack,
+    logLabel: "Create pack",
+    mutates: true,
+    execute: async (_sessionId, input) => {
+      try {
+        writePack(input as unknown as CreatePackInput);
+        return { created: true, packId: (input as { id: string }).id, message: "Pack created successfully." };
+      } catch (err) {
+        return { created: false, error: err instanceof Error ? err.message : "Unknown error" };
+      }
+    },
+  },
+
   start_audit: {
     name: "start_audit",
-    description: "Start the compliance audit for selected packs. Sets up each selected pack, then runs ready checks. Call this once — the audit runs incrementally. Use setup_pack_audit, run_pending_checks, retry_check individually for fine-grained control. If documents are incomplete, call with force: true to start anyway.",
+    description: "Start the compliance audit for selected packs. Sets up each selected pack, then runs ready checks. Call prepare_for_audit first to generate documents and finalize. Call this once — the audit runs incrementally. Use setup_pack_audit, run_pending_checks, retry_check individually for fine-grained control.",
     inputSchema: ToolSchemas.start_audit,
     logLabel: "Start audit",
     mutates: true,
@@ -300,6 +365,9 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       const { packIds, force } = input as { packIds?: string[]; force?: boolean };
       const s = getComplianceSession(sessionId);
       if (!s) return { error: "Session not found" };
+      if (!s.documentsFinalized) {
+        return { error: "Documents not finalized. Call prepare_for_audit first to generate documents and mark documents as complete." };
+      }
       const auditPackIds = packIds ?? s.selectedPackIds;
       if (auditPackIds.length === 0) return { error: "No packs selected for audit" };
 
@@ -505,6 +573,99 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     },
   },
 
+  prepare_for_audit: {
+    name: "prepare_for_audit",
+    description: "Generate documents from questionnaire data, store them as chunked files, and mark documents as finalized. Must call run_validation first. Must get the user's explicit confirmation before calling this. After this succeeds, call start_audit.",
+    inputSchema: ToolSchemas.prepare_for_audit,
+    logLabel: "Prepare for audit",
+    mutates: true,
+    execute: async (sessionId) => {
+      const s = getComplianceSession(sessionId);
+      if (!s) return { error: "Session not found" };
+
+      if (!s.validationChecks || s.validationChecks.length === 0) {
+        return { error: "run_validation has not been called. Call run_validation first to check document completeness, then ask the user to confirm before calling prepare_for_audit." };
+      }
+
+      const missingCount = s.validationChecks.filter((c) => c.status === "fail").length;
+
+      await ensureSetup(sessionId);
+
+      const generated: string[] = [];
+      const errors: string[] = [];
+
+      for (const packId of s.selectedPackIds) {
+        const pack = getPack(packId);
+        if (!pack || !pack.documents?.length) continue;
+
+        for (const doc of pack.documents) {
+          const docType = doc.type;
+          const label = typeof doc.title === "string" ? doc.title : (doc.title.en ?? docType);
+
+          let content = `# ${label}\n\n`;
+          for (const fieldId of doc.fields) {
+            const val = s.docData[fieldId]?.value || "";
+            const packField = pack.fields.find((f) => f.id === fieldId);
+            const fieldLabel = packField
+              ? (typeof packField.label === "string" ? packField.label : (packField.label.en ?? fieldId))
+              : fieldId;
+            content += `## ${fieldLabel}\n`;
+            content += val ? `${val}\n\n` : "(not provided)\n\n";
+          }
+
+          const sections: Record<string, string> = {};
+          for (const fieldId of doc.fields) {
+            sections[fieldId] = s.docData[fieldId]?.value || "";
+          }
+
+          const response = {
+            content,
+            reasoning: `Generated document: ${label}`,
+            citations: [],
+            round: 0,
+            sessionId,
+            sections,
+          } as AgentResponse;
+
+          try {
+            const blob = await generateDocx(response);
+            const buf = Buffer.from(await blob.arrayBuffer());
+            const base64 = buf.toString("base64");
+            const dataUrl = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${base64}`;
+            const filename = `_generated/${packId}/${docType}.docx`;
+
+            addComplianceFile(sessionId, { name: filename, size: String(buf.length), time: new Date().toISOString().slice(0, 10), dataUrl, _generated: true });
+            await processSessionFiles({
+              sessionId,
+              files: [{
+                name: filename,
+                type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                size: buf.length,
+                dataUrl,
+              }],
+            });
+            generated.push(filename);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : "Unknown error";
+            errors.push(`${packId}/${docType}: ${msg}`);
+          }
+        }
+      }
+
+      setComplianceDocumentsFinalized(sessionId, true);
+
+      return {
+        ok: true,
+        documentsFinalized: true,
+        generatedFiles: generated,
+        generatedFileCount: generated.length,
+        missingFieldCount: missingCount,
+        warning: missingCount > 0 ? `${missingCount} required field(s) still empty. Review with the user before starting audit, or call start_audit with force: true to proceed anyway.` : undefined,
+        errors: errors.length > 0 ? errors : undefined,
+      };
+    },
+  },
+
   search_clauses: {
     name: "search_clauses",
     description: "Search regulation clauses by keyword across available regulations. Call during 'audit' phase when you need to look up specific regulatory requirements. Precondition: you have a keyword or topic to search for.",
@@ -575,9 +736,9 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       const entry = sourceCheck ? `**${sourceCheck}**: ${text}` : text;
 
       if (applyToSkill) {
-        saveCompiledPack(skillName, { lessons: [entry] });
+        appendPackLessons(skillName, [entry]);
         saveLessonOverride(skillName, entry);
-        return { saved: true, lesson: entry, message: "Lesson permanently added to skill." };
+        return { saved: true, lesson: entry, message: "Lesson permanently added to pack." };
       }
 
       saveLessonOverride(skillName, entry);

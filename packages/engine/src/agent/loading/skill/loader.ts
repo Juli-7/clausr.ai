@@ -3,7 +3,7 @@ import path from "path";
 import matter from "gray-matter";
 import { SkillLoadError } from "../../pipeline/errors";
 import { parseChecks } from "../../loading/skill/check-parser";
-import type { ParsedCheck } from "../../loading/skill/check-parser";
+import type { ParsedCheck, CheckFieldType } from "../../loading/skill/check-parser";
 
 export const SKILLS_DIR = path.join(process.cwd(), "packs");
 
@@ -256,6 +256,31 @@ export function listPacks(packsDir?: string): string[] {
  *    parse checks/redlines/lessons from SKILL.md (backward compat)
  * 3. If no pack.json → full SKILL.md fallback (legacy)
  */
+function toParsedCheck(c: Record<string, unknown>): ParsedCheck {
+  const typeMap: Record<string, CheckFieldType> = {
+    number: { kind: "number" },
+    boolean: { kind: "boolean" },
+    string: { kind: "string" },
+    narrative: { kind: "string" },
+    enum: { kind: "enum", values: [] },
+  };
+  const rawType = c.type;
+  return {
+    field: c.field as string,
+    type: typeof rawType === "string" ? (typeMap[rawType] ?? { kind: "string" }) : (rawType as CheckFieldType),
+    attention: (c.attention as string) ?? null,
+    constraint: (c.constraint as string) ?? null,
+    clause: (c.clause as string) ?? null,
+    dependsOn: (() => {
+      const d = c.dependsOn ?? c.depends_on;
+      return Array.isArray(d) ? d.join(", ") : (d as string) ?? null;
+    })(),
+    description: (c.description as string) ?? null,
+    sample: (c.sample as string) ?? null,
+    rounding: (c.rounding != null ? String(c.rounding) : null) as string | null,
+  };
+}
+
 export function loadSkill(skillId: string): SkillLoader {
   const skillDir = path.join(SKILLS_DIR, skillId);
   const skillMdPath = path.join(skillDir, "SKILL.md");
@@ -291,7 +316,7 @@ export function loadSkill(skillId: string): SkillLoader {
     const templatePath = path.join(skillDir, "assets", "template.docx");
     const hasTemplate = fs.existsSync(templatePath);
 
-    const parsedChecks = packFile.checks as unknown as ParsedCheck[];
+    const parsedChecks = packFile.checks.map((c) => toParsedCheck(c as Record<string, unknown>));
 
     return {
       name: skillId,
@@ -367,23 +392,6 @@ export function loadSkill(skillId: string): SkillLoader {
  * Save a SKILL.md to the filesystem at skills/{name}/SKILL.md.
  * Creates the directory if needed. Optionally writes a meta.json with createdBy.
  */
-export function saveSkillToFs(name: string, fullText: string, createdBy?: string): void {
-  const skillDir = path.join(SKILLS_DIR, name);
-  if (!fs.existsSync(skillDir)) {
-    fs.mkdirSync(skillDir, { recursive: true });
-  }
-  fs.writeFileSync(path.join(skillDir, "SKILL.md"), fullText, "utf-8");
-  if (createdBy) {
-    const packPath = path.join(skillDir, "pack.json");
-    let pack = { pack: {} as Record<string, unknown> };
-    if (fs.existsSync(packPath)) {
-      pack = JSON.parse(fs.readFileSync(packPath, "utf-8"));
-    }
-    pack.pack = { ...pack.pack, author: createdBy };
-    fs.writeFileSync(packPath, JSON.stringify(pack, null, 2), "utf-8");
-  }
-}
-
 function getScriptDescription(filePath: string, filename: string): string {
   try {
     const content = fs.readFileSync(filePath, "utf-8");
@@ -420,27 +428,4 @@ function extractLessonsList(content: string): string[] {
     .filter((l) => l && l !== "(System-maintained area, initially empty.)");
 }
 
-/**
- * Write compiled checks + redlines + lessons back to pack.json.
- * Used when saving lessons/redlines at runtime.
- */
-export function saveCompiledPack(
-  skillName: string,
-  data: { checks?: ParsedCheck[]; redlines?: string[]; lessons?: string[] }
-): void {
-  const skillDir = path.join(SKILLS_DIR, skillName);
-  const packPath = path.join(skillDir, "pack.json");
-  let pack: PackFileData = { pack: {} };
-  if (fs.existsSync(packPath)) {
-    pack = JSON.parse(fs.readFileSync(packPath, "utf-8"));
-  }
-  if (!pack.pack) pack.pack = {};
-  if (data.checks) pack.checks = data.checks as unknown as Record<string, unknown>[];
-  if (data.redlines) pack.redlines = data.redlines;
-  if (data.lessons) {
-    const existing = pack.lessons ?? [];
-    const merged = [...new Set([...existing, ...data.lessons])];
-    pack.lessons = merged;
-  }
-  fs.writeFileSync(packPath, JSON.stringify(pack, null, 2), "utf-8");
-}
+

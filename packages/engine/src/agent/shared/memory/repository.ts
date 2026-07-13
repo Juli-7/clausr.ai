@@ -456,6 +456,7 @@ export interface ComplianceSessionData {
   validationChecks: { id: string; title: string; status: string; note: string }[];
   validationScore: number;
   packStates: Record<string, unknown>;
+  documentsFinalized: boolean;
 }
 
 export function getComplianceSession(sessionId: string): ComplianceSessionData | null {
@@ -473,6 +474,7 @@ export function getComplianceSession(sessionId: string): ComplianceSessionData |
     validation_checks: string;
     validation_score: number;
     pack_states: string;
+    documents_finalized: number;
   } | undefined;
   if (!row) return null;
   return {
@@ -488,6 +490,7 @@ export function getComplianceSession(sessionId: string): ComplianceSessionData |
     validationChecks: safeJsonParse(row.validation_checks, []),
     validationScore: row.validation_score ?? 0,
     packStates: safeJsonParse(row.pack_states, {}),
+    documentsFinalized: row.documents_finalized === 1,
   };
 }
 
@@ -519,7 +522,7 @@ export function addComplianceDocField(sessionId: string, field: string, value: D
   setComplianceDocData(sessionId, docData);
 }
 
-export type ComplianceFile = { name: string; size: string; time: string; dataUrl?: string };
+export type ComplianceFile = { name: string; size: string; time: string; dataUrl?: string; _generated?: boolean };
 
 export function addComplianceFile(sessionId: string, file: ComplianceFile): void {
   const db = getDb();
@@ -575,6 +578,10 @@ export function setCompliancePackAuditResult(
 
 export function setComplianceValidation(sessionId: string, checks: { id: string; title: string; status: string; note: string }[], score: number): void {
   getDb().prepare("UPDATE compliance_session SET validation_checks = ?, validation_score = ?, updated_at = ? WHERE session_id = ?").run(JSON.stringify(checks), score, Date.now(), sessionId);
+}
+
+export function setComplianceDocumentsFinalized(sessionId: string, finalized: boolean): void {
+  getDb().prepare("UPDATE compliance_session SET documents_finalized = ?, updated_at = ? WHERE session_id = ?").run(finalized ? 1 : 0, Date.now(), sessionId);
 }
 
 export function setComplianceComments(sessionId: string, commentsJson: string): void {

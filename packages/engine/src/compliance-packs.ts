@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { loadPack, listPacks, SKILLS_DIR } from "./agent/loading/skill/loader";
-import type { SkillPack } from "./agent/loading/skill/loader";
+import type { SkillPack, PackField, DocumentTemplate, PackCheck } from "./agent/loading/skill/loader";
 
 function packLabel(title: string | Record<string, string>): string {
   return typeof title === "string" ? title : (title.en ?? "");
@@ -18,9 +18,14 @@ function buildPackIndex() {
   return { all, regs: [...regsSet].sort(), inds: [...indsSet].sort() };
 }
 
-const _index = buildPackIndex();
+let _index = buildPackIndex();
 
-export const packs: SkillPack[] = _index.all;
+export let packs: SkillPack[] = _index.all;
+
+export function refreshPackIndex(): void {
+  _index = buildPackIndex();
+  packs = _index.all;
+}
 export function searchPacks(filters: { query?: string; regulation?: string; industry?: string }): SkillPack[] {
   let result = [...packs];
   if (filters.query) {
@@ -67,4 +72,93 @@ export function readPackContent(packId: string): { content: string; source: stri
   }
 
   return null;
+}
+
+export interface CreatePackInput {
+  id: string;
+  title: string | Record<string, string>;
+  description: string | Record<string, string>;
+  industries: string[];
+  icon?: string;
+  version?: string;
+  regulation_ids?: string[];
+  fields: PackField[];
+  documents: DocumentTemplate[];
+  checks: PackCheck[];
+  redlines: string[];
+  lessons?: string[];
+  templates?: { docType: string; dataUrl: string }[];
+}
+
+function formatChecksAsMd(checks: PackCheck[]): string {
+  if (!checks.length) return "";
+  const blocks = checks.map((c) => {
+    const lines: string[] = [`### ${c.field}`];
+    let idx = 1;
+    lines.push(`${idx++}. **type**: ${c.type}`);
+    if (c.description) lines.push(`${idx++}. **description**: ${c.description}`);
+    if (c.clause) lines.push(`${idx++}. **clause**: ${c.clause}`);
+    if (c.sample) lines.push(`${idx++}. **sample**: ${c.sample}`);
+    if (c.constraint) lines.push(`${idx++}. **constraint**: ${c.constraint}`);
+    if (c.depends_on?.length) lines.push(`${idx++}. **depends_on**: ${c.depends_on.join(", ")}`);
+    if (c.rounding !== undefined) lines.push(`${idx++}. **rounding**: ${c.rounding}`);
+    return lines.join("\n");
+  });
+  return "## Checks\n\n" + blocks.join("\n\n");
+}
+
+function formatLessonsAsMd(lessons: string[]): string {
+  if (!lessons.length) return "";
+  return "## Lessons Learnt\n\n" + lessons.map((l) => `- ${l}`).join("\n");
+}
+
+export function writePack(data: CreatePackInput): void {
+  const packDir = path.join(SKILLS_DIR, data.id);
+
+  const packJson = {
+    pack: {
+      title: data.title,
+      description: data.description,
+      industries: data.industries,
+      icon: data.icon ?? "📋",
+      version: data.version ?? "1.0.0",
+      regulation_ids: data.regulation_ids ?? [],
+    },
+    fields: data.fields,
+    documents: data.documents,
+    checks: data.checks,
+    redlines: data.redlines,
+    lessons: data.lessons ?? [],
+  };
+
+  fs.mkdirSync(packDir, { recursive: true });
+  fs.writeFileSync(path.join(packDir, "pack.json"), JSON.stringify(packJson, null, 2), "utf-8");
+
+  const mdSections = [
+    formatChecksAsMd(data.checks),
+    ...(data.redlines.length ? [`## Red Lines\n\n${data.redlines.map((r) => `- ❌ ${r}`).join("\n")}`] : []),
+    formatLessonsAsMd(data.lessons ?? []),
+  ].filter(Boolean).join("\n\n");
+  fs.writeFileSync(path.join(packDir, "SKILL.md"), mdSections, "utf-8");
+
+  if (data.templates?.length) {
+    const assetsDir = path.join(packDir, "assets");
+    fs.mkdirSync(assetsDir, { recursive: true });
+    for (const tpl of data.templates) {
+      const b64 = tpl.dataUrl.split(",")[1] ?? tpl.dataUrl;
+      fs.writeFileSync(path.join(assetsDir, `${tpl.docType}.docx`), Buffer.from(b64, "base64"));
+    }
+  }
+
+  refreshPackIndex();
+}
+
+export function appendPackLessons(skillName: string, newLessons: string[]): void {
+  const packPath = path.join(SKILLS_DIR, skillName, "pack.json");
+  if (!fs.existsSync(packPath)) return;
+  const pack = JSON.parse(fs.readFileSync(packPath, "utf-8"));
+  const existing: string[] = pack.lessons ?? [];
+  pack.lessons = [...new Set([...existing, ...newLessons])];
+  fs.writeFileSync(packPath, JSON.stringify(pack, null, 2), "utf-8");
+  refreshPackIndex();
 }

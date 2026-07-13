@@ -20,6 +20,7 @@ export interface ComplianceChatParams {
   systemPrompt?: string;
   packs?: SkillPack[];
   sessionState?: SessionState;
+  disallowedTools?: string[];
 }
 
 export async function* complianceChat(
@@ -49,8 +50,11 @@ export async function* complianceChat(
     return;
   }
 
+  const toolEntries = params.disallowedTools
+    ? Object.entries(TOOL_DEFS).filter(([name]) => !params.disallowedTools!.includes(name))
+    : Object.entries(TOOL_DEFS);
   const allTools = Object.fromEntries(
-    Object.entries(TOOL_DEFS).map(([name, def]) => [
+    toolEntries.map(([name, def]) => [
       name,
       tool({
         description: def.description,

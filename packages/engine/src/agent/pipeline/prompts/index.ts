@@ -81,13 +81,13 @@ const STEP_LABELS: Record<number, string> = {
 const COMMON_INSTRUCTION = `You can call any tool at any time — tools are not restricted by phase. Use the tool descriptions to decide when each tool is appropriate. The following tools are available:
 
 **Scope tools** (use when choosing packs):
-- list_packs, read_pack, set_scope
+- list_packs, read_pack, create_pack, set_scope
 
 **Document tools** (use when collecting data and files):
-- update_doc_field, batch_update_doc_fields, attach_file, get_file_content, search_files, run_validation
+- update_doc_field, batch_update_doc_fields, attach_file, get_file_content, search_files, run_validation, prepare_for_audit
 
 **Audit tools** (use when reviewing results):
-- search_clauses, get_regulation_text, suggest_lesson, export_document
+- search_clauses, get_regulation_text, suggest_lesson, export_document, start_audit
 
 **Navigation & inspection** (use any time):
 - go_to_phase, get_session_state`;
@@ -103,22 +103,28 @@ Typical workflow (not mandatory — use your judgment based on the user's needs)
 1. Ask about their product or use case if they haven't described it
 2. Call list_packs to see what compliance packs are available
 3. Call read_pack to read a pack's full content and assess whether it applies — use your own judgment, don't rely on keyword matching
-4. Call set_scope once the user has decided
-5. Call go_to_phase with phase="documents" when scope is confirmed and the user is ready`,
+4. If no existing pack fits, interview the user (regulations, required documents, check constraints, redlines) and call create_pack to build a new one. Study uploaded DOCX templates via attach_file + get_file_content to design the field schema
+5. Call set_scope once the user has decided
+6. Call go_to_phase with phase="documents" when scope is confirmed and the user is ready`,
 
   2: `You are a questionnaire assistant. **Current phase: ${STEP_LABELS[2]}**.
-  
+
   Your goal is to help the user fill in required questionnaire fields and upload supporting files.
-  
+
   ${COMMON_INSTRUCTION}
-  
+
   Typical workflow (not mandatory — use your judgment based on what's been done):
   1. Use get_session_state to see what fields are already filled
   2. Look at the Questionnaire section below — it lists all required fields grouped by pack
   3. Ask the user for unfilled values — prefer batch_update_doc_fields for multiple fields at once
   4. When the user has supporting files, call attach_file
-  5. Call run_validation to check completeness
-  6. Call go_to_phase with phase="audit" when validation passes and the user is ready`,
+  5. When fields seem complete, call run_validation to check completeness
+  6. Show the validation results to the user and ask: "**Anything else to add or change?**"
+  7. Wait for the user's reply — if they have changes, go back and help them
+  8. When the user confirms they are done, call **prepare_for_audit** to generate documents and finalize
+  9. After prepare_for_audit succeeds, call **start_audit** to begin the compliance audit
+
+  ⚠️ IMPORTANT: Do NOT skip run_validation. Do NOT skip asking the user for confirmation. Always wait for the user's explicit confirmation before calling prepare_for_audit.`,
 
   3: `You are an audit review assistant. **Current phase: ${STEP_LABELS[3]}**.
 
@@ -147,6 +153,7 @@ export interface SessionState {
   validationScore?: number;
   validationChecks?: Array<{ id: string; title: string; status: string; note: string }>;
   uploadedFileCount?: number;
+  documentsFinalized?: boolean;
 }
 
 export function buildComplianceStepPrompt(
@@ -173,6 +180,9 @@ export function buildComplianceStepPrompt(
     }
     if (sessionState.uploadedFileCount !== undefined) {
       lines.push(`- Uploaded files: ${sessionState.uploadedFileCount}`);
+    }
+    if (sessionState.documentsFinalized !== undefined) {
+      lines.push(`- Documents finalized: ${sessionState.documentsFinalized ? "✅ Yes" : "❌ No"}`);
     }
     if (lines.length) {
       sections.push(`\n# Current Session State\n${lines.join("\n")}`);

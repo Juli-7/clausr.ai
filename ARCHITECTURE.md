@@ -88,6 +88,7 @@ Most tools are plain function calls — the LLM invokes them and gets back a res
 | `go_to_phase` | yes | function | Move workflow phase |
 | `list_packs` | no | function | List available packs |
 | `read_pack` | no | function | Read pack content for relevance assessment |
+| `create_pack` | yes | function | Create a new compliance pack with full metadata |
 | `start_audit` | yes | **workflow** | Run predefined audit pipeline (see below) |
 | `poll_audit` | no | function | Check audit status |
 | `get_check_detail` | no | function | Read per-check results |
@@ -147,7 +148,7 @@ searchPacks({query?, regulation?})   → SkillPack[]
 getPack(id)                          → SkillPack | undefined
 loadPack(name)                       → SkillPack | undefined
 listPacks()                          → string[]
-saveSkillToFs(name, content)         → void
+writePack(input)                     → void (create a complete pack)
 buildSession(id)                     → ComplianceSession | undefined
 ```
 
@@ -157,7 +158,7 @@ buildSession(id)                     → ComplianceSession | undefined
 |---|---|
 | **Config** | `setLLMConfig`, `getConfig`, `setRetentionConfig`, `setDb`, `getDb`, `setRegulationApi`, `setDocStore` |
 | **Session** | `getOrCreateSession`, `ensureComplianceSession`, `getComplianceSession`, `deleteSession`, `setComplianceComments`, `getComplianceComments`, `buildSession` |
-| **Packs** | `searchPacks`, `getPack`, `listPacks`, `loadPack`, `saveSkillToFs` |
+| **Packs** | `searchPacks`, `getPack`, `listPacks`, `loadPack`, `writePack` |
 | **Tools** | `TOOL_DEFS`, `ToolSchemas`, `getTool`, `executeComplianceCheck`, `runScript` |
 | **Chat** | `complianceChat` |
 | **Evaluate** | `evaluate`, `computeConfidence` |

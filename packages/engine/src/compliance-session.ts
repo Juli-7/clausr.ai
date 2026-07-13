@@ -40,6 +40,7 @@ export interface ComplianceSession {
   validationChecks?: ValidationCheck[];
   validationScore?: number;
   packStates: Record<string, unknown>;
+  documentsFinalized: boolean;
 }
 
 function buildQuestionnaire(packIds: string[]): Questionnaire | undefined {
@@ -89,5 +90,6 @@ export function buildSession(id: string): ComplianceSession | undefined {
     validationChecks: cs.validationChecks as ValidationCheck[] | undefined,
     validationScore: cs.validationScore,
     packStates: getCompliancePackStates(id),
+    documentsFinalized: cs.documentsFinalized,
   };
 }

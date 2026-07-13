@@ -178,6 +178,42 @@ describe("Compliance tools end-to-end with real DB", () => {
     }
   });
 
+  it("create_pack tool writes a new pack to disk and makes it discoverable", async () => {
+    const testPackId = `e2e-test-pack-${Date.now()}`;
+    const result = await TOOL_DEFS.create_pack.execute("session-ignored", {
+      id: testPackId,
+      title: { en: "E2E Test Pack" },
+      description: { en: "Created during test" },
+      industries: ["testing"],
+      regulation_ids: ["R99"],
+      fields: [{ id: "voltage", label: { en: "Voltage (V)" }, type: "number", required: true }],
+      documents: [{ type: "test-doc", title: { en: "Test Document" }, fields: ["voltage"] }],
+      checks: [{
+        id: "voltage_range", field: "voltage", type: "number",
+        description: "Voltage must be between 100V and 240V",
+        clause: "R99.3.1", constraint: "range(100-240)", sample: "Voltage is 230V, within range.",
+      }],
+      redlines: ["Do not pass without measurement evidence"],
+    });
+
+    expect(result.created).toBe(true);
+    expect(result.packId).toBe(testPackId);
+
+    // Verify pack is discoverable via list_packs
+    const list = await TOOL_DEFS.list_packs.execute("session-ignored", {});
+    const packList = list.packs as Array<{ id: string }>;
+    expect(packList.some((p) => p.id === testPackId)).toBe(true);
+
+    // Verify pack content is readable via read_pack
+    const content = await TOOL_DEFS.read_pack.execute("session-ignored", { packId: testPackId });
+    expect(content).toHaveProperty("content");
+    expect(content.source).toBe("pack.json");
+
+    // Cleanup — remove the test pack from disk
+    const packsDir = path.join(process.cwd(), "packs");
+    try { fs.rmSync(path.join(packsDir, testPackId), { recursive: true, force: true }); } catch { /* ok */ }
+  });
+
   it("suggest_lesson tool saves lesson", async () => {
     const sid = validSessionId("lesson");
     getOrCreateSession(sid, "test-lighting");
