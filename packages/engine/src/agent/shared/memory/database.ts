@@ -14,6 +14,8 @@ export function setDb(instance: Database.Database): void {
   db = instance;
 }
 
+let checkpointTimer: ReturnType<typeof setInterval> | null = null;
+
 export function getDb(): Database.Database {
   if (db) return db;
 
@@ -25,9 +27,21 @@ export function getDb(): Database.Database {
   db = new Database(DB_PATH);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
+  db.pragma("wal_autocheckpoint = 100");
 
   initSchema(db);
   runMigrations(db);
+
+  if (!checkpointTimer) {
+    checkpointTimer = setInterval(() => {
+      try {
+        db?.pragma("wal_checkpoint(PASSIVE)");
+      } catch {
+        // ignore checkpoint errors
+      }
+    }, 300_000);
+    if (checkpointTimer.unref) checkpointTimer.unref();
+  }
 
   return db;
 }
