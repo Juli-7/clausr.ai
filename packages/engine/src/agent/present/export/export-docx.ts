@@ -25,21 +25,32 @@ const DEFAULT_PLACEHOLDER_FALLBACKS: Record<string, string> = {
   "{vehicle-make-model}": "N/A",
   "{certifier-name}": "N/A",
   "{certification-date}": new Date().toISOString().split("T")[0]!,
+  "{generationDate}": new Date().toISOString().split("T")[0]!,
 };
 
 export async function generateDocx(
   response: AgentResponse,
-  skillName?: string
+  templateInput?: string | Buffer
 ): Promise<Blob> {
-  if (skillName) {
+  if (templateInput instanceof Buffer) {
     try {
-      const blob = await fillTemplateDocx(response, skillName);
+      const blob = await fillTemplateFromBuffer(response, templateInput);
+      if (blob) return blob;
+    } catch (err) {
+      console.error("[export-docx] Buffer template fill failed, falling back:", err);
+    }
+    return buildFallbackDocx(response);
+  }
+  if (typeof templateInput === "string") {
+    try {
+      const blob = await fillTemplateDocx(response, templateInput);
       if (blob) return blob;
     } catch (err) {
       console.error("[export-docx] Template fill failed, falling back:", err);
     }
+    return buildFallbackDocx(response, templateInput);
   }
-  return buildFallbackDocx(response, skillName);
+  return buildFallbackDocx(response);
 }
 
 async function fillTemplateDocx(
@@ -52,6 +63,30 @@ async function fillTemplateDocx(
   if (!res.ok) return null;
 
   const zip = await JSZip.loadAsync(await res.arrayBuffer());
+  const docEntry = zip.file("word/document.xml");
+  if (!docEntry) return null;
+
+  let docXml = await docEntry.async("text");
+  docXml = normalizeConsecutiveRuns(docXml);
+
+  const replacements = buildPlaceholderMap(response);
+  for (const [placeholder, value] of Object.entries(replacements)) {
+    const escaped = escapeXml(value);
+    docXml = docXml.replaceAll(placeholder, escaped);
+  }
+
+  zip.file("word/document.xml", docXml);
+  const outBlob = await zip.generateAsync({ type: "blob" });
+  return outBlob;
+}
+
+async function fillTemplateFromBuffer(
+  response: AgentResponse,
+  buffer: Buffer
+): Promise<Blob | null> {
+  const JSZip = (await import("jszip")).default;
+
+  const zip = await JSZip.loadAsync(buffer);
   const docEntry = zip.file("word/document.xml");
   if (!docEntry) return null;
 
