@@ -113,6 +113,7 @@ export async function executeLlmToolStep(
       system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],
       tools: Object.keys(tools).length > 0 ? tools : undefined,
+      maxSteps: 5,
       maxRetries: 3,
       abortSignal: abortController.signal,
       ...(step.temperature !== undefined ? { temperature: step.temperature } : {}),
