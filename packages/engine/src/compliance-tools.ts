@@ -55,16 +55,16 @@ export const ToolSchemas = {
     field: z.string().describe("Field ID, e.g. 'manufacturer'"),
     value: z.object({
       value: z.string().describe("Field value"),
-      sourceCitation: z.array(z.string()).optional().describe("Source chunk IDs this value was derived from, e.g. ['S1.c3']"),
-      citationRef: z.array(z.string()).optional().describe("Regulation clause IDs this value relates to, e.g. ['R48.6.2']"),
+      sourceCitation: z.array(z.string()).optional().describe("Source chunk IDs, e.g. ['S1.c3']"),
+      citationRef: z.array(z.string()).optional().describe("Regulation clause IDs, e.g. ['R48.6.2']"),
     }).describe("Field value with optional evidence provenance"),
   }),
   batch_update_doc_fields: z.object({
     fields: z.record(z.string(), z.object({
       value: z.string().describe("Field value"),
-      sourceCitation: z.array(z.string()).optional().describe("Source chunk IDs this value was derived from, e.g. ['S1.c3']"),
-      citationRef: z.array(z.string()).optional().describe("Regulation clause IDs this value relates to, e.g. ['R48.6.2']"),
-    })).describe("Record of field ID → structured value with provenance"),
+      sourceCitation: z.array(z.string()).optional().describe("Source chunk IDs, e.g. ['S1.c3']"),
+      citationRef: z.array(z.string()).optional().describe("Regulation clause IDs, e.g. ['R48.6.2']"),
+    })).describe("Field ID → structured value map"),
   }),
   attach_file: z.object({
     name: z.string().describe("Original file name"),
@@ -73,26 +73,26 @@ export const ToolSchemas = {
     dataUrl: z.string().describe("Base64-encoded data URL"),
   }),
   detach_file: z.object({
-    name: z.string().describe("Name of the file to detach/remove"),
+    name: z.string().describe("Name of the file to remove"),
   }),
   export_document: z.object({
     docType: z.string().describe("Document type to export"),
   }),
   go_to_phase: z.object({
-    phase: z.enum(["scope", "documents", "audit"]).describe("Target phase. 'scope' to choose packs, 'documents' to collect data/files, 'audit' to review results."),
+    phase: z.enum(["scope", "documents", "audit"]).describe("Target phase: scope (pick packs), documents (collect data), audit (review)"),
   }),
-  list_packs: z.object({}).describe("List all available compliance packs with titles and metadata"),
+  list_packs: z.object({}).describe("List all available compliance packs"),
   read_pack: z.object({
-    packId: z.string().describe("Pack ID to read — returns the pack's full content so you can assess relevance"),
+    packId: z.string().describe("Pack ID to read"),
   }),
   create_pack: z.object({
-    id: z.string().describe("Pack ID / directory name — lowercase, hyphens, e.g. 'ev-battery-r100'"),
-    title: z.union([z.string(), z.record(z.string(), z.string())]).describe("Pack title string or i18n record like { en, cn }"),
-    description: z.union([z.string(), z.record(z.string(), z.string())]).describe("Pack description string or i18n record"),
-    industries: z.array(z.string()).describe("Industries this pack applies to, e.g. ['automotive']"),
-    icon: z.string().optional().describe("Emoji icon for the pack"),
-    version: z.string().optional().describe("Semver version, defaults to 1.0.0"),
-    regulation_ids: z.array(z.string()).optional().describe("Regulation codes e.g. ['R100']"),
+    id: z.string().describe("Pack ID — lowercase, hyphens, e.g. 'ev-battery-r100'"),
+    title: z.union([z.string(), z.record(z.string(), z.string())]).describe("Pack title or i18n record"),
+    description: z.union([z.string(), z.record(z.string(), z.string())]).describe("Pack description or i18n record"),
+    industries: z.array(z.string()).describe("Industries this pack applies to"),
+    icon: z.string().optional().describe("Emoji icon"),
+    version: z.string().optional().describe("Semver, defaults to 1.0.0"),
+    regulation_ids: z.array(z.string()).optional().describe("Regulation codes, e.g. ['R100']"),
     fields: z.array(z.object({
       id: z.string(),
       label: z.union([z.string(), z.record(z.string(), z.string())]),
@@ -107,7 +107,7 @@ export const ToolSchemas = {
     documents: z.array(z.object({
       type: z.string(),
       title: z.union([z.string(), z.record(z.string(), z.string())]),
-      template: z.string().optional().describe("Path to template in assets/, e.g. 'assets/declaration.docx'"),
+      template: z.string().optional().describe("Template path in assets/"),
       fields: z.array(z.string()),
     })).describe("Document templates referencing field IDs"),
     checks: z.array(z.object({
@@ -120,55 +120,55 @@ export const ToolSchemas = {
       rounding: z.number().optional(),
       depends_on: z.array(z.string()).optional(),
       sample: z.string().optional(),
-    })).describe("Compliance checks the LLM will evaluate"),
-    redlines: z.array(z.string()).describe("Rules the LLM must never violate during audit"),
-    lessons: z.array(z.string()).optional().describe("Accumulated knowledge — starts empty"),
+    })).describe("Compliance checks for audit"),
+    redlines: z.array(z.string()).describe("Rules the LLM must never violate"),
+    lessons: z.array(z.string()).optional().describe("Accumulated knowledge (starts empty)"),
     templates: z.array(z.object({
-      docType: z.string().describe("Document type key matching a documents[].type"),
-      dataUrl: z.string().describe("Base64-encoded DOCX file data URL"),
-    })).optional().describe("Uploaded DOCX template files to store in assets/"),
+      docType: z.string().describe("Document type key matching documents[].type"),
+      dataUrl: z.string().describe("Base64-encoded DOCX data URL"),
+    })).optional().describe("Uploaded DOCX template files"),
   }),
   start_audit: z.object({
-    packIds: z.array(z.string()).optional().describe("Optional: specific pack IDs to audit. Defaults to all selected packs."),
-    force: z.boolean().optional().describe("Set true to start audit even if documents are incomplete. Default false."),
+    packIds: z.array(z.string()).optional().describe("Pack IDs to audit (defaults to all selected)"),
+    force: z.boolean().optional().describe("Start even if documents are incomplete"),
   }),
   setup_pack_audit: z.object({
-    packId: z.string().describe("Pack ID to set up for auditing"),
+    packId: z.string().describe("Pack ID to set up"),
   }),
   run_pending_checks: z.object({
     packId: z.string().describe("Pack ID whose ready checks to execute"),
-    maxConcurrency: z.number().optional().describe("Max concurrent check executions (default 20)"),
+    maxConcurrency: z.number().optional().describe("Max concurrent executions (default 20)"),
   }),
   retry_check: z.object({
-    packId: z.string().describe("Pack ID containing the check to retry"),
+    packId: z.string().describe("Pack containing the check"),
     checkId: z.string().describe("Check ID to retry — cascades to all dependents"),
   }),
   get_pack_audit_state: z.object({
     packId: z.string().describe("Pack ID to get audit state for"),
   }),
-  finalize_audit: z.object({}).describe("Finalize the audit — sets auditDone=true, stores final results."),
+  finalize_audit: z.object({}).describe("Finalize the audit — sets auditDone=true"),
   get_session_state: z.object({}),
   get_file_content: z.object({
     fileName: z.string().describe("Name of the uploaded file to read"),
   }),
   run_validation: z.object({}),
-  prepare_for_audit: z.object({}).describe("Generate documents from questionnaire, store them as chunked files, and mark documents as finalized. Must call run_validation first. Must get user confirmation before calling this."),
+  prepare_for_audit: z.object({}).describe("Generate documents from questionnaire, store as chunked files, mark finalized."),
   search_clauses: z.object({
-    keyword: z.string().describe("Keyword to search for across regulation clauses"),
-    regulationCodes: z.array(z.string()).optional().describe("Filter: only search within these regulation codes"),
+    keyword: z.string().describe("Keyword to search for across regulations"),
+    regulationCodes: z.array(z.string()).optional().describe("Filter: only search within these codes"),
   }),
   get_regulation_text: z.object({
     code: z.string().describe("Regulation code, e.g. R48"),
     clauseNumber: z.string().optional().describe("Optional clause number within the regulation"),
   }),
   search_files: z.object({
-    query: z.string().describe("Search query to find relevant file chunks"),
+    query: z.string().describe("Search query for file chunks"),
   }),
   suggest_lesson: z.object({
     skillName: z.string().describe("Name of the skill to add the lesson to"),
-    text: z.string().describe("Lesson text describing what was learned"),
-    sourceCheck: z.string().optional().describe("The check field name this lesson relates to"),
-    applyToSkill: z.boolean().optional().default(false).describe("Set true after user confirms — permanently writes the lesson into SKILL.md"),
+    text: z.string().describe("Lesson text"),
+    sourceCheck: z.string().optional().describe("Check field name this lesson relates to"),
+    applyToSkill: z.boolean().optional().default(false).describe("Set true after user confirms to write to SKILL.md"),
   }),
 } as const;
 
@@ -197,7 +197,7 @@ export interface ToolDef {
 export const TOOL_DEFS: Record<ToolName, ToolDef> = {
   set_scope: {
     name: "set_scope",
-    description: "Select compliance packs to include in the assessment. Call after reading packs via read_pack and the user has chosen which ones apply. Precondition: user has decided on pack(s).",
+    description: "Select packs to include in the assessment.",
     inputSchema: ToolSchemas.set_scope,
     logLabel: "Set compliance scope",
     mutates: true,
@@ -210,7 +210,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   update_doc_field: {
     name: "update_doc_field",
-    description: "Save a value for a single questionnaire field (e.g. manufacturer name). Prefer batch_update_doc_fields when filling multiple fields at once. Call during 'documents' phase after identifying unfilled required fields from session state.",
+    description: "Save a value for a single questionnaire field. Prefer batch_update_doc_fields when filling multiple fields at once.",
     inputSchema: ToolSchemas.update_doc_field,
     logLabel: "Update document field",
     mutates: true,
@@ -224,7 +224,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   batch_update_doc_fields: {
     name: "batch_update_doc_fields",
-    description: "Fill multiple questionnaire fields at once (e.g. manufacturer name, model number). PREFER this over calling update_doc_field repeatedly. Call during 'documents' phase after identifying unfilled required fields. Precondition: user has provided values for the fields.",
+    description: "Fill multiple questionnaire fields at once. PREFER this over calling update_doc_field repeatedly.",
     inputSchema: ToolSchemas.batch_update_doc_fields,
     logLabel: "Batch update document fields",
     mutates: true,
@@ -240,7 +240,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   attach_file: {
     name: "attach_file",
-    description: "Upload a file (manual PDF, DOCX, image, etc.) and attach it to the session. Call during 'documents' phase when the user provides a supporting document. After attaching, use get_session_state to see processed files or get_file_content to read extracted text.",
+    description: "Upload a file (PDF, DOCX, image, etc.) to the session. Use get_file_content to read extracted text after attaching.",
     inputSchema: ToolSchemas.attach_file,
     logLabel: "Attach file",
     mutates: true,
@@ -267,7 +267,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   detach_file: {
     name: "detach_file",
-    description: "Remove a previously attached file by name. Call when the user explicitly asks to remove or delete a file they uploaded.",
+    description: "Remove a previously attached file by name.",
     inputSchema: ToolSchemas.detach_file,
     logLabel: "Detach file",
     mutates: true,
@@ -282,7 +282,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   export_document: {
     name: "export_document",
-    description: "Generate a downloadable file for a completed document. Call during 'audit' phase when the user asks for output. Precondition: document fields have been filled and validation has passed.",
+    description: "Generate a downloadable file for a completed document.",
     inputSchema: ToolSchemas.export_document,
     logLabel: "Export document",
     mutates: false,
@@ -294,7 +294,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   go_to_phase: {
     name: "go_to_phase",
-    description: "Move to a different phase of the compliance workflow. Phases: 'scope' (choose packs), 'documents' (collect data and upload files), 'audit' (review results). Call this when you and the user agree the current phase's work is done and it's time to move forward. Precondition: 'scope' requires packs selected; 'documents' requires scope set; 'audit' requires validation passed.",
+    description: "Move to a different phase. Phases: 'scope' (choose packs), 'documents' (collect data/files), 'audit' (review results).",
     inputSchema: ToolSchemas.go_to_phase,
     logLabel: "Go to phase",
     mutates: true,
@@ -311,7 +311,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   list_packs: {
     name: "list_packs",
-    description: "List available compliance packs with their titles and regulation IDs. Call during 'scope' phase to see what packs exist, then call read_pack to inspect any pack's full content.",
+    description: "List available compliance packs with titles and regulation IDs.",
     inputSchema: ToolSchemas.list_packs,
     logLabel: "List packs",
     mutates: false,
@@ -329,7 +329,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   read_pack: {
     name: "read_pack",
-    description: "Read a compliance pack's full content (from pack.json or SKILL.md) so you can assess whether it applies to the user's product. Use during 'scope' phase after list_packs or when the user mentions a pack. Read it, reason about relevance yourself, then recommend to the user.",
+    description: "Read a compliance pack's full content to assess whether it applies to the user's product.",
     inputSchema: ToolSchemas.read_pack,
     logLabel: "Read pack",
     mutates: false,
@@ -343,7 +343,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   create_pack: {
     name: "create_pack",
-    description: "Create a new compliance pack with full metadata, questionnaire fields, document definitions, checks, and redlines. Call during 'scope' phase when no existing pack fits the user's product. Interview the user first to gather requirements — study existing packs via read_pack as reference. After creation, the new pack is immediately available via list_packs and read_pack. Precondition: you have gathered enough information from the user to define the complete pack.",
+    description: "Create a new compliance pack with metadata, fields, documents, checks, and redlines. Interview the user first — study existing packs via read_pack as reference.",
     inputSchema: ToolSchemas.create_pack,
     logLabel: "Create pack",
     mutates: true,
@@ -359,7 +359,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   start_audit: {
     name: "start_audit",
-    description: "Start the compliance audit for selected packs. Sets up each selected pack, then runs ready checks. Call prepare_for_audit first to generate documents and finalize. Call this once — the audit runs incrementally. Use setup_pack_audit, run_pending_checks, retry_check individually for fine-grained control.",
+    description: "Start the compliance audit for selected packs. Sets up each pack and runs ready checks. Call prepare_for_audit first.",
     inputSchema: ToolSchemas.start_audit,
     logLabel: "Start audit",
     mutates: true,
@@ -435,7 +435,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   setup_pack_audit: {
     name: "setup_pack_audit",
-    description: "Set up a pack for audit — loads its skill, generates check steps, and initializes per-check state. Must be called before run_pending_checks for a pack. Returns the list of checks with their dependency depths.",
+    description: "Set up a pack for audit — loads skill, generates steps, initializes per-check state. Must be called before run_pending_checks.",
     inputSchema: ToolSchemas.setup_pack_audit,
     logLabel: "Setup pack audit",
     mutates: true,
@@ -447,7 +447,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   run_pending_checks: {
     name: "run_pending_checks",
-    description: "Execute all ready checks for a pack (dependencies satisfied, state=pending). Processes one dependency depth level per call. Call repeatedly until allDone=true or blocked=true. Results accumulate in audit state and are pollable via get_pack_audit_state.",
+    description: "Execute ready checks for a pack. Processes one dependency depth level per call. Call repeatedly until allDone or blocked.",
     inputSchema: ToolSchemas.run_pending_checks,
     logLabel: "Run pending checks",
     mutates: true,
@@ -459,7 +459,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   retry_check: {
     name: "retry_check",
-    description: "Retry a specific check that failed. Resets the check and all its transitive dependents to pending state. Call run_pending_checks afterward to re-execute. Does NOT re-execute the check itself.",
+    description: "Retry a failed check. Resets the check and its transitive dependents to pending state. Call run_pending_checks afterward.",
     inputSchema: ToolSchemas.retry_check,
     logLabel: "Retry check",
     mutates: true,
@@ -471,7 +471,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   get_pack_audit_state: {
     name: "get_pack_audit_state",
-    description: "Get the current audit state for a pack — per-check status (pending/ready/running/done/failed), verdicts, reasoning, and errors. Call after run_pending_checks to see results, or during retry_check to see which checks were reset.",
+    description: "Get current audit state for a pack — per-check status, verdicts, reasoning, and errors.",
     inputSchema: ToolSchemas.get_pack_audit_state,
     logLabel: "Get pack audit state",
     mutates: false,
@@ -485,7 +485,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   finalize_audit: {
     name: "finalize_audit",
-    description: "Finalize the compliance audit — stores final results for all packs, sets auditDone=true, and sets auditRunning=false. Call after all packs are done (check via get_pack_audit_state or the auditDone session field). No more checks will be executed after this.",
+    description: "Finalize the compliance audit — stores final results, sets auditDone=true. Call after all packs are done.",
     inputSchema: ToolSchemas.finalize_audit,
     logLabel: "Finalize audit",
     mutates: true,
@@ -498,7 +498,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   get_session_state: {
     name: "get_session_state",
-    description: "Request the full current session — selected packs, filled fields, uploaded files, audit results, validation score and checks. Call at any time to check what's been done and what's outstanding. Useful after run_validation or before deciding the phase is complete.",
+    description: "Get full session state — selected packs, fields, files, audit results, validation.",
     inputSchema: ToolSchemas.get_session_state,
     logLabel: "Get session state",
     mutates: false,
@@ -518,7 +518,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   get_file_content: {
     name: "get_file_content",
-    description: "Read the extracted text from an uploaded file. Call after attach_file when you need to inspect file contents to fill document fields or answer user questions. Precondition: file has been uploaded via attach_file.",
+    description: "Read the extracted text from an uploaded file.",
     inputSchema: ToolSchemas.get_file_content,
     logLabel: "Get file content",
     mutates: false,
@@ -550,7 +550,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   run_validation: {
     name: "run_validation",
-    description: "Check questionnaire completeness — verify all required fields across selected packs are filled. Call during 'documents' phase to confirm everything is ready before moving to audit. Use get_session_state after this to see results.",
+    description: "Check questionnaire completeness — verify all required fields are filled.",
     inputSchema: ToolSchemas.run_validation,
     logLabel: "Run validation",
     mutates: true,
@@ -589,7 +589,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   prepare_for_audit: {
     name: "prepare_for_audit",
-    description: "Generate documents from questionnaire data, store them as chunked files, and mark documents as finalized. Must call run_validation first. Must get the user's explicit confirmation before calling this. After this succeeds, call start_audit.",
+    description: "Generate documents from questionnaire data, store as chunked files, mark finalized. Must call run_validation first. Must get user confirmation before calling.",
     inputSchema: ToolSchemas.prepare_for_audit,
     logLabel: "Prepare for audit",
     mutates: true,
@@ -682,7 +682,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   search_clauses: {
     name: "search_clauses",
-    description: "Search regulation clauses by keyword across available regulations. Call during 'audit' phase when you need to look up specific regulatory requirements. Precondition: you have a keyword or topic to search for.",
+    description: "Search regulation clauses by keyword across available regulations.",
     inputSchema: ToolSchemas.search_clauses,
     logLabel: "Search clauses",
     mutates: false,
@@ -697,7 +697,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   get_regulation_text: {
     name: "get_regulation_text",
-    description: "Get the full text of a regulation or a specific clause. Call during 'audit' phase when you need details on a specific regulation. Precondition: you know the regulation code (e.g. 'R48') from search_clauses or pack details.",
+    description: "Get the full text of a regulation or specific clause.",
     inputSchema: ToolSchemas.get_regulation_text,
     logLabel: "Get regulation text",
     mutates: false,
@@ -717,7 +717,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   search_files: {
     name: "search_files",
-    description: "Search uploaded file content by keyword to find relevant information. Call during 'documents' or 'audit' phase when you need to locate specific data in uploaded documents. Precondition: files have been uploaded via attach_file.",
+    description: "Search uploaded file content by keyword to find relevant information.",
     inputSchema: ToolSchemas.search_files,
     logLabel: "Search files",
     mutates: false,
@@ -740,7 +740,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   suggest_lesson: {
     name: "suggest_lesson",
-    description: "Record a lesson learned from an audit finding. Call during 'audit' phase when you spot a pattern or insight worth saving. On first call, saves as pending; if user confirms, call again with applyToSkill=true to write permanently. Precondition: audit has produced findings worth capturing.",
+    description: "Record a lesson from an audit finding. On first call saves as pending; call again with applyToSkill=true after user confirms.",
     inputSchema: ToolSchemas.suggest_lesson,
     logLabel: "Suggest lesson",
     mutates: true,

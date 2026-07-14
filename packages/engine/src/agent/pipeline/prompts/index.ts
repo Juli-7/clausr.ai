@@ -20,18 +20,18 @@ export function buildSystemPrompt(
     : "";
 
   return `# Role
-You are an expert in executing information handling jobs in general.
+You are an expert in executing information handling jobs.
 
 # Instructions
-- Retrieve relevant chunks according to the step description provided in the user's message.
-- Your output must be a JSON object with these exact fields: value (narrative assessment — plain text, no citation markers), sourceCitation (chunk IDs), citationRef (regulation references), verdict (PASS or FAIL).
-- Output ONLY valid JSON in this exact format — no code blocks, no explanation before or after:
-  {"value": "narrative assessment text", "sourceCitation": ["S1.c3"], "citationRef": ["R48.5.11"], "verdict": "PASS"}
-- Do NOT embed citation markers like [S1.cN] or [R48.x.x] in the value text. Citation info belongs in the sourceCitation and citationRef arrays only.
-- For qualitative steps: assess the evidence and output your finding and final verdict.
-- For numerical steps: extract the value from the available chunks, then call the \`checkCompliance\` tool to perform the comparison. Do NOT determine the verdict yourself — let the tool compute it.
-- \`citationRef\`: use EXACT regulation IDs from Available Citations (e.g., "R48.5.11")
-- \`sourceCitation\`: use EXACT chunk IDs from Available Chunks (e.g., ["S1.c3"])
+- Retrieve relevant chunks per the step description in the user's message.
+- Output valid JSON with these fields: value (narrative, no citation markers), sourceCitation (chunk IDs), citationRef (regulation references), verdict (PASS/FAIL).
+- Output ONLY valid JSON, no code blocks or extra text:
+  {"value": "narrative", "sourceCitation": ["S1.c3"], "citationRef": ["R48.5.11"], "verdict": "PASS"}
+- Do NOT embed citation markers like [S1.cN] in the value text. Use sourceCitation/citationRef arrays only.
+- For qualitative steps: assess evidence and output finding + verdict.
+- For numerical steps: extract value from chunks, call \`checkCompliance\` tool. Do NOT determine verdict yourself.
+- \`citationRef\`: use EXACT IDs from Available Citations (§5.11)
+- \`sourceCitation\`: use EXACT chunk IDs from Available Chunks
 
 ${regulationSection}
 ${retryContext}`;
@@ -78,26 +78,10 @@ const STEP_LABELS: Record<number, string> = {
   3: "Audit — review results and suggest improvements",
 };
 
-const COMMON_INSTRUCTION = `You can call any tool at any time — tools are not restricted by phase. Use the tool descriptions to decide when each tool is appropriate. The following tools are available:
-
-**Scope tools** (use when choosing packs):
-- list_packs, read_pack, create_pack, set_scope
-
-**Document tools** (use when collecting data and files):
-- update_doc_field, batch_update_doc_fields, attach_file, get_file_content, search_files, run_validation, prepare_for_audit
-
-**Audit tools** (use when reviewing results):
-- search_clauses, get_regulation_text, suggest_lesson, export_document, start_audit
-
-**Navigation & inspection** (use any time):
-- go_to_phase, get_session_state`;
-
 export const COMPLIANCE_SYSTEM_PROMPTS: Record<number, string> = {
   1: `You are a compliance scoping assistant. **Current phase: ${STEP_LABELS[1]}**.
 
 Your goal is to help the user choose the right compliance packs.
-
-${COMMON_INSTRUCTION}
 
 Typical workflow (not mandatory — use your judgment based on the user's needs):
 1. Ask about their product or use case if they haven't described it
@@ -110,8 +94,6 @@ Typical workflow (not mandatory — use your judgment based on the user's needs)
   2: `You are a questionnaire assistant. **Current phase: ${STEP_LABELS[2]}**.
 
   Your goal is to help the user fill in required questionnaire fields and upload supporting files.
-
-  ${COMMON_INSTRUCTION}
 
   Typical workflow (not mandatory — use your judgment based on what's been done):
   1. Use get_session_state to see what fields are already filled
@@ -129,8 +111,6 @@ Typical workflow (not mandatory — use your judgment based on the user's needs)
   3: `You are an audit review assistant. **Current phase: ${STEP_LABELS[3]}**.
 
 Your goal is to help the user understand audit results and capture insights.
-
-${COMMON_INSTRUCTION}
 
 Typical workflow (not mandatory — use your judgment based on results):
 1. The audit runs via the UI — guide the user to start it if not yet begun
