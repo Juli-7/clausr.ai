@@ -412,9 +412,13 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
       // Set up each pack and run initial checks
       const results: Record<string, unknown>[] = [];
+      let totalPromptTokens = 0;
+      let totalCompletionTokens = 0;
       for (const packId of auditPackIds) {
         const setupResult = await setupPackAudit(sessionId, packId);
         const runResult = await runPendingChecks(sessionId, packId);
+        totalPromptTokens += runResult.usage.promptTokens;
+        totalCompletionTokens += runResult.usage.completionTokens;
         results.push({ ...setupResult, checksCompleted: runResult.completed, checksFailed: runResult.failed });
       }
 
@@ -424,6 +428,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
         validationPassed: missingFields.length === 0,
         validationHints: missingFields.length > 0 ? missingFields.map((m) => `[${m.pack}] ${m.field}`) : [],
         packResults: results,
+        usage: { promptTokens: totalPromptTokens, completionTokens: totalCompletionTokens },
       };
     },
   },

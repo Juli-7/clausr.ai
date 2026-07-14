@@ -54,6 +54,7 @@ export interface RunChecksResult {
   allDone: boolean
   results: { checkId: string; verdict: string; reasoning: string }[]
   errors: { checkId: string; error: string }[]
+  usage: { promptTokens: number; completionTokens: number }
 }
 
 export interface RetryCheckResult {
@@ -165,6 +166,7 @@ export async function runPendingChecks(
     return {
       completed: 0, failed: 0, blocked, allDone,
       results: results.results, errors: results.errors,
+      usage: { promptTokens: 0, completionTokens: 0 },
     };
   }
 
@@ -199,6 +201,8 @@ export async function runPendingChecks(
 
   const completed: RunChecksResult["results"] = [];
   const errors: RunChecksResult["errors"] = [];
+  let totalPromptTokens = 0;
+  let totalCompletionTokens = 0;
 
   // Run checks in parallel but persist each result as it finishes
   await Promise.all(
@@ -215,6 +219,10 @@ export async function runPendingChecks(
 
       try {
         const result = await executeLlmToolStep(step, ctx);
+        if (result.usage) {
+          totalPromptTokens += result.usage.promptTokens;
+          totalCompletionTokens += result.usage.completionTokens;
+        }
         if (result.success) {
           cs.state = "done";
           const check = packState.setup!.checks.find((c) => c.field === checkId);
@@ -276,6 +284,7 @@ export async function runPendingChecks(
     allDone,
     results: completed,
     errors,
+    usage: { promptTokens: totalPromptTokens, completionTokens: totalCompletionTokens },
   };
 }
 
