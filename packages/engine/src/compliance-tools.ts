@@ -260,7 +260,8 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
         });
       } catch { /* file processing may fail silently */ }
       const session = buildSession(sessionId);
-      return { files: session?.uploadedFiles ?? [] };
+      const files = (session?.uploadedFiles ?? []).map(({ dataUrl: _, ...rest }) => rest);
+      return { files };
     },
   },
 
@@ -274,7 +275,8 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       const { name } = input as { name: string };
       removeComplianceFile(sessionId, name);
       const session = buildSession(sessionId);
-      return { files: session?.uploadedFiles ?? [] };
+      const files = (session?.uploadedFiles ?? []).map(({ dataUrl: _, ...rest }) => rest);
+      return { files };
     },
   },
 
@@ -498,7 +500,14 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     execute: async (sessionId) => {
       const session = buildSession(sessionId);
       if (!session) return { error: "Session not found" };
-      return session as unknown as Record<string, unknown>;
+      const result = session as unknown as Record<string, unknown>;
+      if (Array.isArray(result.uploadedFiles)) {
+        result.uploadedFiles = result.uploadedFiles.map((f: Record<string, unknown>) => {
+          const { dataUrl: _, ...rest } = f;
+          return rest;
+        });
+      }
+      return result;
     },
   },
 
