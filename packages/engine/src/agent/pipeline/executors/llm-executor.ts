@@ -85,7 +85,8 @@ export async function executeLlmToolStep(
     logPipeline(`  [LLM+TOOL] step=${step.number} attentionQuery="${attentionQuery}" fileChunks=${fileChunks.length}chars`);
 
     const dependencyContext = buildDependencyContext(ctx, step.number);
-    const userMessage = buildUserMessage(
+    const chatPrefix = ctx.chatContext ? `${ctx.chatContext}\n\n` : "";
+    const userMessage = chatPrefix + buildUserMessage(
       step.number,
       step.title,
       step.instructions,

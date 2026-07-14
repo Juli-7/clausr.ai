@@ -13,8 +13,9 @@ import {
   setupPackAudit, runPendingChecks, retryCheck,
   getPackAuditState, finalizeAudit,
 } from "./compliance-audit-tools";
-import { getPack, packs, readPackContent, writePack, appendPackLessons } from "./compliance-packs";
+import { getPack, packs, readPackContent, writePack, appendPackLessons, getDraftPack, saveDraftPack, clearDraftPack } from "./compliance-packs";
 import type { CreatePackInput } from "./compliance-packs";
+import type { PackField, DocumentTemplate, PackCheck } from "./agent/loading/skill/loader";
 import { buildSession } from "./compliance-session";
 import { getRegulationApi } from "./agent/knowledge/regulation-api";
 import { getDocStore } from "./agent/user-info/vector-store";
@@ -45,54 +46,63 @@ export type ToolName =
   | "search_clauses"
   | "get_regulation_text"
   | "search_files"
-  | "suggest_lesson";
+  | "suggest_lesson"
+  | "create_pack_shell"
+  | "manage_field"
+  | "manage_document_template"
+  | "manage_check"
+  | "publish_pack"
+  | "preview_pack";
+
+const sourceCitationDesc = "Source chunk IDs, e.g. ['S1.c3']";
+const citationRefDesc = "Regulation clause IDs, e.g. ['R48.6.2']";
 
 export const ToolSchemas = {
   set_scope: z.object({
-    packIds: z.array(z.string()).describe("Pack IDs to select"),
+    packIds: z.array(z.string()),
   }),
   update_doc_field: z.object({
-    field: z.string().describe("Field ID, e.g. 'manufacturer'"),
+    field: z.string(),
     value: z.object({
-      value: z.string().describe("Field value"),
-      sourceCitation: z.array(z.string()).optional().describe("Source chunk IDs, e.g. ['S1.c3']"),
-      citationRef: z.array(z.string()).optional().describe("Regulation clause IDs, e.g. ['R48.6.2']"),
-    }).describe("Field value with optional evidence provenance"),
+      value: z.string(),
+      sourceCitation: z.array(z.string()).optional().describe(sourceCitationDesc),
+      citationRef: z.array(z.string()).optional().describe(citationRefDesc),
+    }),
   }),
   batch_update_doc_fields: z.object({
     fields: z.record(z.string(), z.object({
-      value: z.string().describe("Field value"),
-      sourceCitation: z.array(z.string()).optional().describe("Source chunk IDs, e.g. ['S1.c3']"),
-      citationRef: z.array(z.string()).optional().describe("Regulation clause IDs, e.g. ['R48.6.2']"),
-    })).describe("Field ID → structured value map"),
+      value: z.string(),
+      sourceCitation: z.array(z.string()).optional().describe(sourceCitationDesc),
+      citationRef: z.array(z.string()).optional().describe(citationRefDesc),
+    })),
   }),
   attach_file: z.object({
-    name: z.string().describe("Original file name"),
-    size: z.string().describe("File size in KB"),
-    time: z.string().describe("Upload date"),
+    name: z.string(),
+    size: z.string(),
+    time: z.string(),
     dataUrl: z.string().describe("Base64-encoded data URL"),
   }),
   detach_file: z.object({
-    name: z.string().describe("Name of the file to remove"),
+    name: z.string(),
   }),
   export_document: z.object({
-    docType: z.string().describe("Document type to export"),
+    docType: z.string(),
   }),
   go_to_phase: z.object({
-    phase: z.enum(["scope", "documents", "audit"]).describe("Target phase: scope (pick packs), documents (collect data), audit (review)"),
+    phase: z.enum(["scope", "documents", "audit"]).describe("scope=pick packs, documents=collect data, audit=review"),
   }),
-  list_packs: z.object({}).describe("List all available compliance packs"),
+  list_packs: z.object({}),
   read_pack: z.object({
-    packId: z.string().describe("Pack ID to read"),
+    packId: z.string(),
   }),
   create_pack: z.object({
-    id: z.string().describe("Pack ID — lowercase, hyphens, e.g. 'ev-battery-r100'"),
-    title: z.union([z.string(), z.record(z.string(), z.string())]).describe("Pack title or i18n record"),
-    description: z.union([z.string(), z.record(z.string(), z.string())]).describe("Pack description or i18n record"),
-    industries: z.array(z.string()).describe("Industries this pack applies to"),
-    icon: z.string().optional().describe("Emoji icon"),
-    version: z.string().optional().describe("Semver, defaults to 1.0.0"),
-    regulation_ids: z.array(z.string()).optional().describe("Regulation codes, e.g. ['R100']"),
+    id: z.string().describe("lowercase-hyphens, e.g. 'ev-battery-r100'"),
+    title: z.union([z.string(), z.record(z.string(), z.string())]),
+    description: z.union([z.string(), z.record(z.string(), z.string())]),
+    industries: z.array(z.string()),
+    icon: z.string().optional(),
+    version: z.string().optional(),
+    regulation_ids: z.array(z.string()).optional(),
     fields: z.array(z.object({
       id: z.string(),
       label: z.union([z.string(), z.record(z.string(), z.string())]),
@@ -103,13 +113,13 @@ export const ToolSchemas = {
         label: z.union([z.string(), z.record(z.string(), z.string())]),
       })).optional(),
       validation: z.object({ min: z.number().optional(), max: z.number().optional(), maxLength: z.number().optional() }).optional(),
-    })).describe("Questionnaire fields required from the user"),
+    })),
     documents: z.array(z.object({
       type: z.string(),
       title: z.union([z.string(), z.record(z.string(), z.string())]),
-      template: z.string().optional().describe("Template path in assets/"),
+      template: z.string().optional(),
       fields: z.array(z.string()),
-    })).describe("Document templates referencing field IDs"),
+    })),
     checks: z.array(z.object({
       id: z.string(),
       field: z.string(),
@@ -120,56 +130,98 @@ export const ToolSchemas = {
       rounding: z.number().optional(),
       depends_on: z.array(z.string()).optional(),
       sample: z.string().optional(),
-    })).describe("Compliance checks for audit"),
-    redlines: z.array(z.string()).describe("Rules the LLM must never violate"),
-    lessons: z.array(z.string()).optional().describe("Accumulated knowledge (starts empty)"),
+    })),
+    redlines: z.array(z.string()),
+    lessons: z.array(z.string()).optional(),
     templates: z.array(z.object({
-      docType: z.string().describe("Document type key matching documents[].type"),
+      docType: z.string(),
       dataUrl: z.string().describe("Base64-encoded DOCX data URL"),
-    })).optional().describe("Uploaded DOCX template files"),
+    })).optional(),
   }),
   start_audit: z.object({
-    packIds: z.array(z.string()).optional().describe("Pack IDs to audit (defaults to all selected)"),
-    force: z.boolean().optional().describe("Start even if documents are incomplete"),
+    packIds: z.array(z.string()).optional(),
+    force: z.boolean().optional(),
   }),
   setup_pack_audit: z.object({
-    packId: z.string().describe("Pack ID to set up"),
+    packId: z.string(),
   }),
   run_pending_checks: z.object({
-    packId: z.string().describe("Pack ID whose ready checks to execute"),
-    maxConcurrency: z.number().optional().describe("Max concurrent executions (default 20)"),
+    packId: z.string(),
+    maxConcurrency: z.number().optional().describe("default 20"),
+    context: z.string().optional().describe("Conversation context to inject into check prompts (user answers, specs)"),
   }),
   retry_check: z.object({
-    packId: z.string().describe("Pack containing the check"),
-    checkId: z.string().describe("Check ID to retry — cascades to all dependents"),
+    packId: z.string(),
+    checkId: z.string(),
   }),
   get_pack_audit_state: z.object({
-    packId: z.string().describe("Pack ID to get audit state for"),
+    packId: z.string(),
   }),
-  finalize_audit: z.object({}).describe("Finalize the audit — sets auditDone=true"),
+  finalize_audit: z.object({}),
   get_session_state: z.object({}),
   get_file_content: z.object({
-    fileName: z.string().describe("Name of the uploaded file to read"),
+    fileName: z.string(),
   }),
   run_validation: z.object({}),
-  prepare_for_audit: z.object({}).describe("Generate documents from questionnaire, store as chunked files, mark finalized."),
+  prepare_for_audit: z.object({}),
   search_clauses: z.object({
-    keyword: z.string().describe("Keyword to search for across regulations"),
-    regulationCodes: z.array(z.string()).optional().describe("Filter: only search within these codes"),
+    keyword: z.string(),
+    regulationCodes: z.array(z.string()).optional(),
   }),
   get_regulation_text: z.object({
-    code: z.string().describe("Regulation code, e.g. R48"),
-    clauseNumber: z.string().optional().describe("Optional clause number within the regulation"),
+    code: z.string(),
+    clauseNumber: z.string().optional(),
   }),
   search_files: z.object({
-    query: z.string().describe("Search query for file chunks"),
+    query: z.string(),
   }),
   suggest_lesson: z.object({
-    skillName: z.string().describe("Name of the skill to add the lesson to"),
-    text: z.string().describe("Lesson text"),
-    sourceCheck: z.string().optional().describe("Check field name this lesson relates to"),
-    applyToSkill: z.boolean().optional().default(false).describe("Set true after user confirms to write to SKILL.md"),
+    skillName: z.string(),
+    text: z.string(),
+    sourceCheck: z.string().optional(),
+    applyToSkill: z.boolean().optional().default(false).describe("call with true after user confirms"),
   }),
+  create_pack_shell: z.object({
+    id: z.string().describe("lowercase-hyphens, e.g. 'ev-battery-r100'"),
+    title: z.union([z.string(), z.record(z.string(), z.string())]),
+    description: z.union([z.string(), z.record(z.string(), z.string())]),
+    industries: z.array(z.string()),
+    icon: z.string().optional(),
+    version: z.string().optional(),
+    regulation_ids: z.array(z.string()).optional(),
+  }),
+  manage_field: z.object({
+    action: z.enum(["add", "update", "remove"]),
+    id: z.string(),
+    label: z.union([z.string(), z.record(z.string(), z.string())]).optional(),
+    type: z.enum(["text", "textarea", "number", "boolean", "select", "date"]).optional(),
+    required: z.boolean().optional(),
+    options: z.array(z.object({ value: z.string(), label: z.union([z.string(), z.record(z.string(), z.string())]) })).optional(),
+    validation: z.object({ min: z.number().optional(), max: z.number().optional(), maxLength: z.number().optional() }).optional(),
+  }),
+  manage_document_template: z.object({
+    action: z.enum(["add", "update"]),
+    type: z.string(),
+    title: z.union([z.string(), z.record(z.string(), z.string())]).optional(),
+    template: z.string().optional(),
+    fields: z.array(z.string()).optional(),
+  }),
+  manage_check: z.object({
+    action: z.enum(["add", "update", "remove"]),
+    id: z.string(),
+    field: z.string().optional(),
+    type: z.enum(["number", "boolean", "narrative", "string", "enum"]).optional(),
+    description: z.string().optional(),
+    clause: z.string().optional(),
+    constraint: z.string().optional(),
+    rounding: z.number().optional(),
+    depends_on: z.array(z.string()).optional(),
+    sample: z.string().optional(),
+  }),
+  publish_pack: z.object({
+    id: z.string(),
+  }),
+  preview_pack: z.object({}),
 } as const;
 
 export type ToolInput<T extends ToolName> = z.infer<typeof ToolSchemas[T]>;
@@ -210,7 +262,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   update_doc_field: {
     name: "update_doc_field",
-    description: "Save a value for a single questionnaire field. Prefer batch_update_doc_fields when filling multiple fields at once.",
+    description: "Save a single field value. Prefer batch_update_doc_fields for multiple.",
     inputSchema: ToolSchemas.update_doc_field,
     logLabel: "Update document field",
     mutates: true,
@@ -224,7 +276,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   batch_update_doc_fields: {
     name: "batch_update_doc_fields",
-    description: "Fill multiple questionnaire fields at once. PREFER this over calling update_doc_field repeatedly.",
+    description: "Fill multiple fields at once. PREFER over update_doc_field.",
     inputSchema: ToolSchemas.batch_update_doc_fields,
     logLabel: "Batch update document fields",
     mutates: true,
@@ -240,7 +292,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   attach_file: {
     name: "attach_file",
-    description: "Upload a file (PDF, DOCX, image, etc.) to the session. Use get_file_content to read extracted text after attaching.",
+    description: "Upload a file (PDF, DOCX, image). Use get_file_content to read text.",
     inputSchema: ToolSchemas.attach_file,
     logLabel: "Attach file",
     mutates: true,
@@ -282,7 +334,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   export_document: {
     name: "export_document",
-    description: "Generate a downloadable file for a completed document.",
+    description: "Generate downloadable document file.",
     inputSchema: ToolSchemas.export_document,
     logLabel: "Export document",
     mutates: false,
@@ -294,7 +346,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   go_to_phase: {
     name: "go_to_phase",
-    description: "Move to a different phase. Phases: 'scope' (choose packs), 'documents' (collect data/files), 'audit' (review results).",
+    description: "Move between phases: scope/documents/audit.",
     inputSchema: ToolSchemas.go_to_phase,
     logLabel: "Go to phase",
     mutates: true,
@@ -329,7 +381,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   read_pack: {
     name: "read_pack",
-    description: "Read a compliance pack's full content to assess whether it applies to the user's product.",
+    description: "Read full pack content.",
     inputSchema: ToolSchemas.read_pack,
     logLabel: "Read pack",
     mutates: false,
@@ -343,7 +395,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   create_pack: {
     name: "create_pack",
-    description: "Create a new compliance pack with metadata, fields, documents, checks, and redlines. Interview the user first — study existing packs via read_pack as reference.",
+    description: "Create a full compliance pack. Interview user, use read_pack for reference.",
     inputSchema: ToolSchemas.create_pack,
     logLabel: "Create pack",
     mutates: true,
@@ -357,9 +409,172 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     },
   },
 
+  create_pack_shell: {
+    name: "create_pack_shell",
+    description: "Create draft pack shell. Use manage_field/check/document_template, then publish.",
+    inputSchema: ToolSchemas.create_pack_shell,
+    logLabel: "Create pack shell",
+    mutates: true,
+    execute: async (sessionId, input) => {
+      const i = input as { id: string; title: string | Record<string, string>; description: string | Record<string, string>; industries: string[]; icon?: string; version?: string; regulation_ids?: string[] };
+      const draft: CreatePackInput = {
+        id: i.id,
+        title: i.title,
+        description: i.description,
+        industries: i.industries,
+        icon: i.icon,
+        version: i.version,
+        regulation_ids: i.regulation_ids,
+        fields: [],
+        documents: [],
+        checks: [],
+        redlines: [],
+      };
+      saveDraftPack(sessionId, draft);
+      return { created: true, packId: i.id, message: "Draft pack created. Use add_field, add_check, add_document_template to build it out." };
+    },
+  },
+
+  manage_field: {
+    name: "manage_field",
+    description: "Add/update/remove a questionnaire field.",
+    inputSchema: ToolSchemas.manage_field,
+    logLabel: "Manage field",
+    mutates: true,
+    execute: async (sessionId, input) => {
+      const draft = getDraftPack(sessionId);
+      if (!draft) return { error: "No draft pack. Call create_pack_shell first." };
+      const { action, id, ...rest } = input as { action: string; id: string };
+      if (action === "remove") {
+        const idx = draft.fields.findIndex((f) => f.id === id);
+        if (idx === -1) return { error: `Field "${id}" not found.` };
+        draft.fields.splice(idx, 1);
+        saveDraftPack(sessionId, draft);
+        return { action, fieldId: id };
+      }
+      if (action === "add") {
+        if (draft.fields.find((f) => f.id === id)) return { error: `Field "${id}" already exists.` };
+        draft.fields.push({ id, ...rest } as PackField);
+        saveDraftPack(sessionId, draft);
+        return { action, fieldId: id, totalFields: draft.fields.length };
+      }
+      const idx = draft.fields.findIndex((f) => f.id === id);
+      if (idx === -1) return { error: `Field "${id}" not found.` };
+      draft.fields[idx] = { ...draft.fields[idx], ...rest } as PackField;
+      saveDraftPack(sessionId, draft);
+      return { action, fieldId: id };
+    },
+  },
+
+  manage_document_template: {
+    name: "manage_document_template",
+    description: "Add or update a document template.",
+    inputSchema: ToolSchemas.manage_document_template,
+    logLabel: "Manage document template",
+    mutates: true,
+    execute: async (sessionId, input) => {
+      const draft = getDraftPack(sessionId);
+      if (!draft) return { error: "No draft pack. Call create_pack_shell first." };
+      const { action, type, ...rest } = input as { action: string; type: string };
+      const idx = draft.documents.findIndex((d) => d.type === type);
+      if (action === "add") {
+        if (idx !== -1) return { error: `Document "${type}" already exists.` };
+        draft.documents.push({ type, ...rest } as DocumentTemplate);
+        saveDraftPack(sessionId, draft);
+        return { action, docType: type, totalDocuments: draft.documents.length };
+      }
+      if (idx === -1) return { error: `Document "${type}" not found.` };
+      draft.documents[idx] = { ...draft.documents[idx], ...rest } as DocumentTemplate;
+      saveDraftPack(sessionId, draft);
+      return { action, docType: type };
+    },
+  },
+
+  manage_check: {
+    name: "manage_check",
+    description: "Add/update/remove a compliance check.",
+    inputSchema: ToolSchemas.manage_check,
+    logLabel: "Manage check",
+    mutates: true,
+    execute: async (sessionId, input) => {
+      const draft = getDraftPack(sessionId);
+      if (!draft) return { error: "No draft pack. Call create_pack_shell first." };
+      const { action, id, ...rest } = input as { action: string; id: string };
+      if (action === "remove") {
+        const idx = draft.checks.findIndex((c) => c.id === id);
+        if (idx === -1) return { error: `Check "${id}" not found.` };
+        draft.checks.splice(idx, 1);
+        saveDraftPack(sessionId, draft);
+        return { action, checkId: id };
+      }
+      if (action === "add") {
+        if (draft.checks.find((c) => c.id === id)) return { error: `Check "${id}" already exists.` };
+        draft.checks.push({ id, ...rest } as PackCheck);
+        saveDraftPack(sessionId, draft);
+        return { action, checkId: id, totalChecks: draft.checks.length };
+      }
+      const idx = draft.checks.findIndex((c) => c.id === id);
+      if (idx === -1) return { error: `Check "${id}" not found.` };
+      draft.checks[idx] = { ...draft.checks[idx], ...rest } as PackCheck;
+      saveDraftPack(sessionId, draft);
+      return { action, checkId: id };
+    },
+  },
+
+  preview_pack: {
+    name: "preview_pack",
+    description: "Preview draft pack as JSON.",
+    inputSchema: ToolSchemas.preview_pack,
+    logLabel: "Preview pack",
+    mutates: false,
+    execute: async (sessionId) => {
+      const draft = getDraftPack(sessionId);
+      if (!draft) return { error: "No draft pack. Call create_pack_shell first." };
+      return {
+        packId: draft.id,
+        title: draft.title,
+        description: draft.description,
+        industries: draft.industries,
+        icon: draft.icon,
+        version: draft.version,
+        regulation_ids: draft.regulation_ids,
+        fields: draft.fields,
+        documents: draft.documents,
+        checks: draft.checks,
+        fieldCount: draft.fields.length,
+        documentCount: draft.documents.length,
+        checkCount: draft.checks.length,
+      };
+    },
+  },
+
+  publish_pack: {
+    name: "publish_pack",
+    description: "Write draft pack to disk (validates title/desc/industry).",
+    inputSchema: ToolSchemas.publish_pack,
+    logLabel: "Publish pack",
+    mutates: true,
+    execute: async (sessionId, input) => {
+      const draft = getDraftPack(sessionId);
+      if (!draft) return { error: "No draft pack. Call create_pack_shell first." };
+      const { id } = input as { id: string };
+      if (id !== draft.id) return { error: `Pack ID mismatch: draft is "${draft.id}", got "${id}".` };
+      if (!draft.title || !draft.description || draft.industries.length === 0) {
+        return { error: "Pack must have at least a title, description, and one industry." };
+      }
+      try {
+        writePack(draft);
+        clearDraftPack(sessionId);
+        return { published: true, packId: draft.id, message: "Pack published successfully." };
+      } catch (err) {
+        return { published: false, error: err instanceof Error ? err.message : "Unknown error" };
+      }
+    },
+  },
+
   start_audit: {
     name: "start_audit",
-    description: "Start the compliance audit for selected packs. Sets up each pack and runs ready checks. Call prepare_for_audit first.",
+    description: "Start audit for selected packs. Call prepare_for_audit first.",
     inputSchema: ToolSchemas.start_audit,
     logLabel: "Start audit",
     mutates: true,
@@ -435,7 +650,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   setup_pack_audit: {
     name: "setup_pack_audit",
-    description: "Set up a pack for audit — loads skill, generates steps, initializes per-check state. Must be called before run_pending_checks.",
+    description: "Set up a pack for audit. Must precede run_pending_checks.",
     inputSchema: ToolSchemas.setup_pack_audit,
     logLabel: "Setup pack audit",
     mutates: true,
@@ -447,19 +662,19 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   run_pending_checks: {
     name: "run_pending_checks",
-    description: "Execute ready checks for a pack. Processes one dependency depth level per call. Call repeatedly until allDone or blocked.",
+    description: "Execute ready checks (one depth level per call). Optionally pass conversation context.",
     inputSchema: ToolSchemas.run_pending_checks,
     logLabel: "Run pending checks",
     mutates: true,
     execute: async (sessionId, input) => {
-      const { packId, maxConcurrency } = input as { packId: string; maxConcurrency?: number };
-      return await runPendingChecks(sessionId, packId, maxConcurrency) as unknown as Record<string, unknown>;
+      const { packId, maxConcurrency, context } = input as { packId: string; maxConcurrency?: number; context?: string };
+      return await runPendingChecks(sessionId, packId, maxConcurrency, context) as unknown as Record<string, unknown>;
     },
   },
 
   retry_check: {
     name: "retry_check",
-    description: "Retry a failed check. Resets the check and its transitive dependents to pending state. Call run_pending_checks afterward.",
+    description: "Retry a failed check (resets dependents). Call run_pending_checks after.",
     inputSchema: ToolSchemas.retry_check,
     logLabel: "Retry check",
     mutates: true,
@@ -471,7 +686,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   get_pack_audit_state: {
     name: "get_pack_audit_state",
-    description: "Get current audit state for a pack — per-check status, verdicts, reasoning, and errors.",
+    description: "Get audit state: per-check status/verdicts/reasoning.",
     inputSchema: ToolSchemas.get_pack_audit_state,
     logLabel: "Get pack audit state",
     mutates: false,
@@ -485,7 +700,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   finalize_audit: {
     name: "finalize_audit",
-    description: "Finalize the compliance audit — stores final results, sets auditDone=true. Call after all packs are done.",
+    description: "Finalize audit. Call after all packs done.",
     inputSchema: ToolSchemas.finalize_audit,
     logLabel: "Finalize audit",
     mutates: true,
@@ -498,7 +713,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   get_session_state: {
     name: "get_session_state",
-    description: "Get full session state — selected packs, fields, files, audit results, validation.",
+    description: "Get full session state: packs, fields, files, results.",
     inputSchema: ToolSchemas.get_session_state,
     logLabel: "Get session state",
     mutates: false,
@@ -518,7 +733,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   get_file_content: {
     name: "get_file_content",
-    description: "Read the extracted text from an uploaded file.",
+    description: "Read extracted text from uploaded file.",
     inputSchema: ToolSchemas.get_file_content,
     logLabel: "Get file content",
     mutates: false,
@@ -550,7 +765,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   run_validation: {
     name: "run_validation",
-    description: "Check questionnaire completeness — verify all required fields are filled.",
+    description: "Check all required fields are filled.",
     inputSchema: ToolSchemas.run_validation,
     logLabel: "Run validation",
     mutates: true,
@@ -589,7 +804,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   prepare_for_audit: {
     name: "prepare_for_audit",
-    description: "Generate documents from questionnaire data, store as chunked files, mark finalized. Must call run_validation first. Must get user confirmation before calling.",
+    description: "Generate docs from data, store as files, mark finalized. Need run_validation + user confirm first.",
     inputSchema: ToolSchemas.prepare_for_audit,
     logLabel: "Prepare for audit",
     mutates: true,
@@ -682,7 +897,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   search_clauses: {
     name: "search_clauses",
-    description: "Search regulation clauses by keyword across available regulations.",
+    description: "Search regulation clauses by keyword.",
     inputSchema: ToolSchemas.search_clauses,
     logLabel: "Search clauses",
     mutates: false,
@@ -697,7 +912,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   get_regulation_text: {
     name: "get_regulation_text",
-    description: "Get the full text of a regulation or specific clause.",
+    description: "Get full regulation or clause text.",
     inputSchema: ToolSchemas.get_regulation_text,
     logLabel: "Get regulation text",
     mutates: false,
@@ -717,7 +932,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   search_files: {
     name: "search_files",
-    description: "Search uploaded file content by keyword to find relevant information.",
+    description: "Search uploaded file contents by keyword.",
     inputSchema: ToolSchemas.search_files,
     logLabel: "Search files",
     mutates: false,
@@ -740,7 +955,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   suggest_lesson: {
     name: "suggest_lesson",
-    description: "Record a lesson from an audit finding. On first call saves as pending; call again with applyToSkill=true after user confirms.",
+    description: "Record a lesson. First call=pending; second with applyToSkill=true=permanent.",
     inputSchema: ToolSchemas.suggest_lesson,
     logLabel: "Suggest lesson",
     mutates: true,

@@ -144,9 +144,9 @@ describe("repository (untested functions)", () => {
       const id = sid("resp");
       getOrCreateSession(id, "test-skill");
       expect(getResponseCount(id)).toBe(0);
-      addAssistantResponse(id, { content: "Response 1", reasoning: "", citations: [], verdict: "PASS", round: 1 });
+      addAssistantResponse(id, { content: "Response 1", reasoning: "", citations: [], verdict: "PASS", round: 1, sessionId: id });
       expect(getResponseCount(id)).toBe(1);
-      addAssistantResponse(id, { content: "Response 2", reasoning: "", citations: [], verdict: "FAIL", round: 2 });
+      addAssistantResponse(id, { content: "Response 2", reasoning: "", citations: [], verdict: "FAIL", round: 2, sessionId: id });
       expect(getResponseCount(id)).toBe(2);
     });
   });

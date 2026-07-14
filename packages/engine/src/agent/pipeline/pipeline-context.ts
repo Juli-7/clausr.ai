@@ -79,6 +79,9 @@ export interface PipelineContext {
     ocrConfidence?: number;
     extractorUsed?: string;
   }[];
+
+  /** Optional chat history context injected by compliance audit runner */
+  chatContext?: string;
 }
 
 // ── Factory ──

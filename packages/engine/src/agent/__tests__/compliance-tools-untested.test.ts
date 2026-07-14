@@ -88,7 +88,7 @@ describe("compliance-tools (untested)", () => {
       addComplianceFile(id, { name: "keep.pdf", size: "100", time: "2024-01-01", dataUrl: "data:base64," });
       addComplianceFile(id, { name: "remove.pdf", size: "200", time: "2024-01-01", dataUrl: "data:base64," });
 
-      const result = await TOOL_DEFS.detach_file.execute(id, { name: "remove.pdf" });
+      const result = await TOOL_DEFS.detach_file.execute(id, { name: "remove.pdf" }) as { files: { name: string }[] };
       expect(result.files).toHaveLength(1);
       expect(result.files[0]).toMatchObject({ name: "keep.pdf" });
     });
@@ -123,7 +123,7 @@ describe("compliance-tools (untested)", () => {
   describe("run_validation", () => {
     it("returns 100% score when no packs selected", async () => {
       const id = setupSession("rv-empty");
-      const result = await TOOL_DEFS.run_validation.execute(id);
+      const result = await TOOL_DEFS.run_validation.execute(id, {});
       expect(result.score).toBe(100);
       expect(result.total).toBe(0);
     });

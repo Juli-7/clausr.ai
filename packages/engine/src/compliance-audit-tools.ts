@@ -127,7 +127,8 @@ export async function setupPackAudit(sessionId: string, packId: string): Promise
 export async function runPendingChecks(
   sessionId: string,
   packId: string,
-  maxConcurrency?: number
+  maxConcurrency?: number,
+  context?: string
 ): Promise<RunChecksResult> {
   const limit = maxConcurrency ?? 20;
 
@@ -194,6 +195,11 @@ export async function runPendingChecks(
 
   packState.state = "running";
   setComplianceAuditRunning(sessionId, true);
+
+  if (context) {
+    ctx.chatContext = `# Context from Chat\n\n${context}`;
+    logPipeline(`[AUDIT] injected chat context (${context.length} chars)`);
+  }
 
   // Store initial skeleton agent response (all checks PENDING) so frontend can render the layout immediately
   const skeletonAgentResponse = await buildAgentResponse(packState, sessionId);

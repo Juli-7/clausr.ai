@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 
 type ConfigModule = {
   getConfig: (key: string, fallback: string) => string;

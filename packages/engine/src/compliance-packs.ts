@@ -153,6 +153,29 @@ export function writePack(data: CreatePackInput): void {
   refreshPackIndex();
 }
 
+const DRAFTS_DIR = path.join(process.cwd(), "data", "pack-drafts");
+
+function ensureDraftDir() {
+  if (!fs.existsSync(DRAFTS_DIR)) fs.mkdirSync(DRAFTS_DIR, { recursive: true });
+}
+
+export function getDraftPack(sessionId: string): CreatePackInput | null {
+  ensureDraftDir();
+  const p = path.join(DRAFTS_DIR, `${sessionId}.json`);
+  if (!fs.existsSync(p)) return null;
+  try { return JSON.parse(fs.readFileSync(p, "utf-8")); } catch { return null; }
+}
+
+export function saveDraftPack(sessionId: string, data: CreatePackInput): void {
+  ensureDraftDir();
+  fs.writeFileSync(path.join(DRAFTS_DIR, `${sessionId}.json`), JSON.stringify(data, null, 2), "utf-8");
+}
+
+export function clearDraftPack(sessionId: string): void {
+  const p = path.join(DRAFTS_DIR, `${sessionId}.json`);
+  if (fs.existsSync(p)) fs.unlinkSync(p);
+}
+
 export function appendPackLessons(skillName: string, newLessons: string[]): void {
   const packPath = path.join(SKILLS_DIR, skillName, "pack.json");
   if (!fs.existsSync(packPath)) return;
