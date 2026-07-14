@@ -457,6 +457,7 @@ export interface ComplianceSessionData {
   validationScore: number;
   packStates: Record<string, unknown>;
   documentsFinalized: boolean;
+  comments: string;
 }
 
 export function getComplianceSession(sessionId: string): ComplianceSessionData | null {
@@ -471,6 +472,7 @@ export function getComplianceSession(sessionId: string): ComplianceSessionData |
     audit_done: number;
     precheck_done: number;
     agent_responses: string;
+    comments: string;
     validation_checks: string;
     validation_score: number;
     pack_states: string;
@@ -491,6 +493,7 @@ export function getComplianceSession(sessionId: string): ComplianceSessionData |
     validationScore: row.validation_score ?? 0,
     packStates: safeJsonParse(row.pack_states, {}),
     documentsFinalized: row.documents_finalized === 1,
+    comments: row.comments ?? "[]",
   };
 }
 

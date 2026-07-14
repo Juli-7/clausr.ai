@@ -16,6 +16,7 @@ import {
 } from "./agent/shared/memory/repository";
 import type { ParsedCheck, CheckFieldType } from "./agent/loading/skill/check-parser";
 import type { ExecutableStep, StepResult } from "./agent/pipeline/types";
+import type { ProcessedFile } from "./agent/user-info/vector-store/types";
 
 export interface PackCheckState {
   state: "pending" | "ready" | "running" | "done" | "failed"
@@ -481,6 +482,7 @@ function collectResults(packState: PackAuditState): { results: RunChecksResult["
 export async function resolveCitation(
   sessionId: string,
   ref: string,
+  cachedFiles?: ProcessedFile[],
 ): Promise<{
   ref: string; fileId: string; filename: string; fileUrl?: string;
   extractedText: string; keyExcerpt: string;
@@ -491,9 +493,9 @@ export async function resolveCitation(
   if (!m) return null;
   const fileIdx = parseInt(m[1]!, 10) - 1;
   const chunkIdx = parseInt(m[2]!, 10);
-  let files: { fileId: string; filename: string; dataUrl?: string; pageCount?: number; chunks: { id: string; text: string; bbox?: unknown; wordBoxes?: unknown; pageNumber?: number; pageWidth?: number; pageHeight?: number }[] }[];
+  let files: ProcessedFile[];
   try {
-    files = await getDocStore().getFiles(sessionId);
+    files = cachedFiles ?? await getDocStore().getFiles(sessionId);
   } catch {
     return null;
   }
@@ -533,8 +535,13 @@ async function buildAgentResponse(packState: PackAuditState, sessionId: string):
   )];
   const resolvedMap = new Map<string, Record<string, unknown>>();
   if (allRefs.length > 0) {
+    // Fetch files once and reuse for all resolveCitation calls to avoid O(n²) store reads
+    let cachedFiles: ProcessedFile[] | undefined;
+    try {
+      cachedFiles = await getDocStore().getFiles(sessionId);
+    } catch { /* leave undefined */ }
     const resolved = await Promise.allSettled(
-      allRefs.map((ref) => resolveCitation(sessionId, ref))
+      allRefs.map((ref) => resolveCitation(sessionId, ref, cachedFiles))
     );
     for (let i = 0; i < allRefs.length; i++) {
       const r = resolved[i];

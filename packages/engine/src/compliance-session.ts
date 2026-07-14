@@ -2,8 +2,6 @@ import {
   getComplianceSession,
   getConversationHistory,
   getComplianceFiles,
-  getComplianceComments,
-  getCompliancePackStates,
   type DocFieldValue,
 } from "./agent/shared/memory/repository";
 import { getPack } from "./compliance-packs";
@@ -86,10 +84,10 @@ export function buildSession(id: string): ComplianceSession | undefined {
     auditDone: cs.auditDone,
     auditRunning: cs.auditRunning,
     agentResponses: cs.agentResponses,
-    comments: getComplianceComments(id),
+    comments: cs.comments,
     validationChecks: cs.validationChecks as ValidationCheck[] | undefined,
     validationScore: cs.validationScore,
-    packStates: getCompliancePackStates(id),
+    packStates: cs.packStates,
     documentsFinalized: cs.documentsFinalized,
   };
 }
