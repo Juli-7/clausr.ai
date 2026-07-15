@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
-import sqlite_vec from "sqlite-vec";
+import { getLoadablePath } from "sqlite-vec";
 
 const DB_PATH = process.env.DATABASE_PATH ?? path.join(process.cwd(), "data", "session.db");
 
@@ -31,7 +31,7 @@ export function getDb(): Database.Database {
   db.pragma("wal_autocheckpoint = 100");
 
   try {
-    db.loadExtension(sqlite_vec.getLoadablePath());
+    db.loadExtension(getLoadablePath());
   } catch {
     // sqlite-vec not available (e.g. stackglue / test env)
   }
