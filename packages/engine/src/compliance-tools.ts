@@ -1,7 +1,7 @@
 import { z } from "zod";
 import {
   getComplianceSession, setComplianceScope, setComplianceStep,
-  addComplianceDocField, addComplianceFile, getComplianceFiles, removeComplianceFile,
+  addComplianceDocField, addComplianceFile, removeComplianceFile,
   setComplianceValidation, hasSessionSetup,
   setComplianceAuditRunning, clearComplianceAuditResults,
   setComplianceDocumentsFinalized, getOrCreateSession,
@@ -296,48 +296,61 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     logLabel: "Attach file",
     mutates: true,
     execute: async (sessionId, input) => {
-      const { docType, ...rest } = input as unknown as ComplianceFile;
-      const file: ComplianceFile = { ...rest, docType };
+      const { dataUrl: _, ...file } = input as unknown as ComplianceFile;
       addComplianceFile(sessionId, file);
       const session = buildSession(sessionId);
-      const files = (session?.uploadedFiles ?? []).map(({ dataUrl: _, ...rest }) => rest);
+      const files = (session?.uploadedFiles ?? []).map(({ docType, ...rest }) => rest);
       return { files };
     },
   },
 
   extract_file_content: {
     name: "extract_file_content",
-    description: "Extract text from an uploaded file. Caches result on the file record. After calling this, get_file_content and search_files will work immediately.",
+    description: "Extract text from an uploaded file. Saves to doc store for LLM search. After calling this, get_file_content and search_files will work.",
     inputSchema: ToolSchemas.extract_file_content,
     logLabel: "Extract file content",
     mutates: true,
     execute: async (sessionId, input) => {
       const { fileName } = input as { fileName: string };
-      const files = getComplianceFiles(sessionId);
-      const file = files.find((f) => f.name === fileName);
-      if (!file?.dataUrl) return { error: `File "${fileName}" not found` };
-      if (file.extractedText) return { fileName, cached: true, totalLength: file.extractedText.length };
 
-      const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
-      const textExts = ["txt", "csv", "json", "md", "xml", "yml", "yaml", "log", "ini", "cfg", "env"];
-      if (textExts.includes(ext)) {
-        const b64 = file.dataUrl.split(",")[1] ?? "";
-        const raw = typeof Buffer !== "undefined" ? Buffer.from(b64, "base64").toString("utf-8") : "";
-        addComplianceFile(sessionId, { ...file, extractedText: raw, chunks: [] });
-        getOrCreateSession(sessionId, "compliance");
-        await getDocStore().addEvidenceFile(sessionId, { fileId: fileName, filename: fileName, extractedText: raw, chunks: [] });
-        return { fileName, totalLength: raw.length, preview: raw.slice(0, 2000), source: "raw-base64" };
+      // Check doc store for existing extraction
+      const store = getDocStore();
+      const existing = await store.getFiles(sessionId);
+      const already = existing.find((f) => f.filename === fileName);
+      if (already?.extractedText) {
+        return { fileName, cached: true, totalLength: already.extractedText.length };
       }
 
+      // Read file from disk
+      const { readFileSync, existsSync } = await import("fs");
+      const { join } = await import("path");
+      const DATA_DIR = process.env.DATA_DIR || join(process.cwd(), "data");
+      const filePath = join(DATA_DIR, "uploads", sessionId, fileName);
+      if (!existsSync(filePath)) {
+        return { error: `File "${fileName}" not found on disk at ${filePath}` };
+      }
+      const buffer = readFileSync(filePath);
+      const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+      const mime = ext === "pdf" ? "application/pdf" : `application/${ext}`;
+      const dataUrl = `data:${mime};base64,${buffer.toString("base64")}`;
+
       const { extractFileContent } = await import("./agent/user-info/extractors");
-      const result = await extractFileContent({ name: fileName, type: ext === "pdf" ? "application/pdf" : `application/${ext}`, dataUrl: file.dataUrl });
+      const result = await extractFileContent({ name: fileName, type: mime, dataUrl });
       const text = result.text || "[No text could be extracted from this file]";
-      const chunks = (result.chunks ?? []).map((c) => ({ id: c.id, text: c.text, pageNumber: c.pageNumber, heading: c.heading }));
-      addComplianceFile(sessionId, { ...file, extractedText: text, chunks });
+      const chunks = (result.chunks ?? []).map((c) => ({
+        id: c.id, text: c.text, html: c.html, pageNumber: c.pageNumber,
+        bbox: c.bbox, wordBoxes: c.wordBoxes, pageWidth: c.pageWidth, pageHeight: c.pageHeight,
+        heading: (c as { heading?: string }).heading,
+      }));
+
       getOrCreateSession(sessionId, "compliance");
-      await getDocStore().addEvidenceFile(sessionId, { fileId: fileName, filename: fileName, extractedText: text, chunks, pageCount: result.pageCount, ocrConfidence: result.ocrConfidence, extractorUsed: result.extractorUsed });
-      const index = chunks.map((c) => ({ id: c.id, heading: c.heading, pageNumber: c.pageNumber }));
-      const firstChunks = chunks.slice(0, 3).map((c) => ({ id: c.id, heading: c.heading, pageNumber: c.pageNumber, text: c.text }));
+      await store.addEvidenceFile(sessionId, {
+        fileId: fileName, filename: fileName, extractedText: text, chunks,
+        pageCount: result.pageCount, ocrConfidence: result.ocrConfidence, extractorUsed: result.extractorUsed,
+      });
+
+      const index = chunks.map((c) => ({ id: c.id, pageNumber: c.pageNumber }));
+      const firstChunks = chunks.slice(0, 3).map((c) => ({ id: c.id, pageNumber: c.pageNumber, text: c.text }));
       return { fileName, totalLength: text.length, chunkCount: index.length, chunks: index, firstChunks, preview: text.slice(0, 2000), source: result.extractorUsed ?? "extractor", ocrConfidence: result.ocrConfidence, pageCount: result.pageCount };
     },
   },
@@ -351,8 +364,17 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     execute: async (sessionId, input) => {
       const { name } = input as { name: string };
       removeComplianceFile(sessionId, name);
+      // Clean up doc store chunks
+      const { deleteChunksByFile } = await import("./agent/shared/memory/repository");
+      deleteChunksByFile(sessionId, name);
+      // Delete raw file from disk
+      const { unlinkSync, existsSync } = await import("fs");
+      const { join } = await import("path");
+      const DATA_DIR = process.env.DATA_DIR || join(process.cwd(), "data");
+      const filePath = join(DATA_DIR, "uploads", sessionId, name);
+      try { if (existsSync(filePath)) unlinkSync(filePath); } catch { /* non-fatal */ }
       const session = buildSession(sessionId);
-      const files = (session?.uploadedFiles ?? []).map(({ dataUrl: _, ...rest }) => rest);
+      const files = (session?.uploadedFiles ?? []).map(({ docType, ...rest }) => rest);
       return { files };
     },
   },
@@ -751,57 +773,27 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     execute: async (sessionId) => {
       const session = buildSession(sessionId);
       if (!session) return { error: "Session not found" };
-      const result = session as unknown as Record<string, unknown>;
-      if (Array.isArray(result.uploadedFiles)) {
-        result.uploadedFiles = result.uploadedFiles.map((f: Record<string, unknown>) => {
-          const { dataUrl: _, ...rest } = f;
-          return rest;
-        });
-      }
-      return result;
+      return session as unknown as Record<string, unknown>;
     },
   },
 
   get_file_content: {
     name: "get_file_content",
-    description: "Extract text from an uploaded file, caches the result. Returns: preview (first 2000 chars), full chunk index (headings + IDs), and firstChunks (full text of first 3 chunks). Use search_files to retrieve the remaining chunks by ID or keyword.",
+    description: "Read extracted text from a file. Returns preview, chunk index, and first 3 chunk texts. Use search_files for specific chunks or keywords. If file not extracted yet, returns a hint to call extract_file_content first.",
     inputSchema: ToolSchemas.get_file_content,
     logLabel: "Get file content",
     mutates: false,
     execute: async (sessionId, input) => {
       const { fileName } = input as { fileName: string };
-
-      const files = getComplianceFiles(sessionId);
-      const file = files.find((f) => f.name === fileName);
-      if (!file?.dataUrl) {
-        return { error: `File "${fileName}" not found` };
+      const store = getDocStore();
+      const files = await store.getFiles(sessionId);
+      const file = files.find((f) => f.filename === fileName);
+      if (!file?.extractedText) {
+        return { error: `File "${fileName}" not extracted yet — call extract_file_content first` };
       }
-
-      // Return metadata from cache if already extracted
-      if (file.extractedText) {
-        const chunks = file.chunks ?? [];
-        const index = chunks.map((c) => ({ id: c.id, heading: c.heading, pageNumber: c.pageNumber }));
-        const firstChunks = chunks.slice(0, 3).map((c) => ({ id: c.id, heading: c.heading, pageNumber: c.pageNumber, text: c.text }));
-        return { fileName, totalLength: file.extractedText.length, chunkCount: index.length, chunks: index, firstChunks, preview: file.extractedText.slice(0, 2000), source: "extracted" };
-      }
-
-      const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
-      const textExts = ["txt", "csv", "json", "md", "xml", "yml", "yaml", "log", "ini", "cfg", "env"];
-      if (textExts.includes(ext)) {
-        const b64 = file.dataUrl.split(",")[1] ?? "";
-        const raw = typeof Buffer !== "undefined" ? Buffer.from(b64, "base64").toString("utf-8") : "";
-        return { fileName, extractedText: raw.slice(0, 5000), totalLength: raw.length, preview: raw.slice(0, 2000), source: "raw-base64" };
-      }
-
-      // Binary files — run extractors, then cache the result
-      const { extractFileContent } = await import("./agent/user-info/extractors");
-      const result = await extractFileContent({ name: fileName, type: ext === "pdf" ? "application/pdf" : `application/${ext}`, dataUrl: file.dataUrl });
-      const text = result.text || "[No text could be extracted from this file]";
-      const chunks = (result.chunks ?? []).map((c) => ({ id: c.id, text: c.text, pageNumber: c.pageNumber, heading: c.heading }));
-      addComplianceFile(sessionId, { ...file, extractedText: text, chunks });
-      const index = chunks.map((c) => ({ id: c.id, heading: c.heading, pageNumber: c.pageNumber }));
-      const firstChunks = chunks.slice(0, 3).map((c) => ({ id: c.id, heading: c.heading, pageNumber: c.pageNumber, text: c.text }));
-      return { fileName, totalLength: text.length, chunkCount: index.length, chunks: index, firstChunks, preview: text.slice(0, 2000), source: result.extractorUsed ?? "extractor", ocrConfidence: result.ocrConfidence, pageCount: result.pageCount };
+      const index = file.chunks.map((c) => ({ id: c.id, pageNumber: c.pageNumber }));
+      const firstChunks = file.chunks.slice(0, 3).map((c) => ({ id: c.id, pageNumber: c.pageNumber, text: c.text }));
+      return { fileName, totalLength: file.extractedText.length, chunkCount: file.chunks.length, chunks: index, firstChunks, preview: file.extractedText.slice(0, 2000), source: "extracted" };
     },
   },
 
@@ -905,7 +897,15 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
             const dataUrl = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${base64}`;
             const filename = `_generated/${packId}/${docType}.docx`;
 
-            addComplianceFile(sessionId, { name: filename, size: String(buf.length), time: new Date().toISOString().slice(0, 10), dataUrl, _generated: true });
+            // Write generated file to disk
+            const { writeFileSync, mkdirSync } = await import("fs");
+            const { join } = await import("path");
+            const DATA_DIR = process.env.DATA_DIR || join(process.cwd(), "data");
+            const filePath = join(DATA_DIR, "uploads", sessionId, filename);
+            mkdirSync(join(DATA_DIR, "uploads", sessionId), { recursive: true });
+            writeFileSync(filePath, buf);
+
+            addComplianceFile(sessionId, { name: filename, size: String(buf.length), time: new Date().toISOString().slice(0, 10), _generated: true });
             await processSessionFiles({
               sessionId,
               files: [{
@@ -974,56 +974,37 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   search_files: {
     name: "search_files",
-    description: "Search uploaded file contents. Three modes: (1) query only — cross-file keyword search; (2) fileName only — list all chunks with headings; (3) fileName + chunkIds — retrieve full text of specific chunks.",
+    description: "Search uploaded file contents. Three modes: (1) query only — cross-file FTS5 keyword search; (2) fileName only — list all chunks; (3) fileName + chunkIds — retrieve full chunk texts.",
     inputSchema: ToolSchemas.search_files,
     logLabel: "Search files",
     mutates: false,
     execute: async (sessionId, input) => {
       const { query, fileName, chunkIds } = input as { query?: string; fileName?: string; chunkIds?: string[] };
-      const files = getComplianceFiles(sessionId);
+      const store = getDocStore();
 
       // Mode 3: fileName + chunkIds — return full chunk texts
       if (fileName && chunkIds && chunkIds.length > 0) {
-        const file = files.find((f) => f.name === fileName);
-        if (!file?.chunks) return { error: `File "${fileName}" not extracted yet — call get_file_content first` };
+        const files = await store.getFiles(sessionId);
+        const file = files.find((f) => f.filename === fileName);
+        if (!file) return { error: `File "${fileName}" not found — call extract_file_content first` };
         const matched = file.chunks.filter((c) => chunkIds.includes(c.id));
-        return { results: [{ fileName, chunks: matched.map((c) => ({ id: c.id, text: c.text, pageNumber: c.pageNumber, heading: c.heading })) }] };
+        return { results: [{ fileName, chunks: matched.map((c) => ({ id: c.id, text: c.text, pageNumber: c.pageNumber })) }] };
       }
 
       // Mode 2: fileName only — return chunk index
       if (fileName) {
-        const file = files.find((f) => f.name === fileName);
-        if (!file?.chunks) return { error: `File "${fileName}" not extracted yet — call get_file_content first` };
-        const chunkIndex = file.chunks.map((c) => ({ id: c.id, heading: c.heading, pageNumber: c.pageNumber }));
-        return { fileName, totalLength: file.extractedText?.length ?? 0, chunkCount: chunkIndex.length, chunks: chunkIndex, source: "cached" };
+        const files = await store.getFiles(sessionId);
+        const file = files.find((f) => f.filename === fileName);
+        if (!file) return { error: `File "${fileName}" not extracted yet — call extract_file_content first` };
+        const chunkIndex = file.chunks.map((c) => ({ id: c.id, pageNumber: c.pageNumber }));
+        return { fileName, totalLength: file.extractedText.length, chunkCount: chunkIndex.length, chunks: chunkIndex, source: "extracted" };
       }
 
-      // Mode 1: query only — cross-file keyword search
+      // Mode 1: query only — FTS5 cross-file search
       if (query) {
-        const results: { fileName: string; excerpt: string }[] = [];
-        for (const file of files) {
-          if (!file.extractedText) continue;
-          const idx = file.extractedText.toLowerCase().indexOf(query.toLowerCase());
-          if (idx !== -1) {
-            const start = Math.max(0, idx - 100);
-            const end = Math.min(file.extractedText.length, idx + query.length + 300);
-            results.push({ fileName: file.name, excerpt: file.extractedText.slice(start, end) });
-          }
-        }
-        // Fallback: search v1 doc store files
-        if (results.length === 0) {
-          const store = getDocStore();
-          const storeFiles = await store.getFiles(sessionId);
-          for (const sf of storeFiles) {
-            const idx = sf.extractedText.toLowerCase().indexOf(query.toLowerCase());
-            if (idx !== -1) {
-              const start = Math.max(0, idx - 100);
-              const end = Math.min(sf.extractedText.length, idx + query.length + 300);
-              results.push({ fileName: sf.filename, excerpt: sf.extractedText.slice(start, end) });
-            }
-          }
-        }
-        return { results };
+        const { searchChunksFts5 } = await import("./agent/shared/memory/repository");
+        const results = searchChunksFts5(sessionId, query, 10);
+        return { results: results.map((r) => ({ fileName: r.fileId, excerpt: r.text, rank: r.rank })) };
       }
 
       return { results: [] };

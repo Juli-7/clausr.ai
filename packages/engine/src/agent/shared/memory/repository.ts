@@ -525,7 +525,7 @@ export function addComplianceDocField(sessionId: string, field: string, value: D
   setComplianceDocData(sessionId, docData);
 }
 
-export type ComplianceFile = { name: string; size: string; time: string; dataUrl?: string; _generated?: boolean; docType?: string; extractedText?: string; chunks?: { id: string; text: string; pageNumber?: number; heading?: string }[] };
+export type ComplianceFile = { name: string; size: string; time: string; _generated?: boolean; docType?: string };
 
 export function addComplianceFile(sessionId: string, file: ComplianceFile): void {
   const db = getDb();

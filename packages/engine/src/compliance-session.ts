@@ -27,7 +27,7 @@ export interface ComplianceSession {
   selectedPackIds: string[];
   docData: Record<string, DocFieldValue>;
   questionnaire?: Questionnaire;
-  uploadedFiles: { name: string; size: string; time: string; dataUrl?: string }[];
+  uploadedFiles: { name: string; size: string; time: string; docType?: string }[];
   auditResults: { packId: string; items: { name: string; desc: string; status: "wait" | "run" | "done" | "err"; statusLabel: string; checks: { name: string; pass: boolean }[] }[] }[];
   messages: { role: string; content: string }[];
   precheckDone: boolean;
@@ -68,7 +68,7 @@ export function buildSession(id: string): ComplianceSession | undefined {
     selectedPackIds: cs.selectedPackIds,
     docData: cs.docData,
     questionnaire: questionnaire ? { ...questionnaire, docData: cs.docData } : undefined,
-    uploadedFiles: files.map((f) => ({ name: f.name, size: f.size, time: f.time, dataUrl: f.dataUrl, docType: f.docType })),
+    uploadedFiles: files.map((f) => ({ name: f.name, size: f.size, time: f.time, docType: f.docType })),
     auditResults: cs.auditResults.map((r) => ({
       packId: r.packId,
       items: r.items.map((i) => ({

@@ -110,13 +110,11 @@ describe("compliance-tools (untested)", () => {
       expect(result).toHaveProperty("error");
     });
 
-    it("reads raw base64 content when file exists but no processing setup", async () => {
-      const id = setupSession("gfc-raw");
-      addComplianceFile(id, { name: "notes.txt", size: "50", time: "2024-01-01", dataUrl: "data:text/plain;base64,SGVsbG8gV29ybGQ=" });
-
+    it("returns error when file not extracted yet", async () => {
+      const id = setupSession("gfc-none");
+      addComplianceFile(id, { name: "notes.txt", size: "50", time: "2024-01-01" });
       const result = await TOOL_DEFS.get_file_content.execute(id, { fileName: "notes.txt" });
-      expect(result.extractedText).toContain("Hello World");
-      expect(result.source).toBe("raw-base64");
+      expect(result).toHaveProperty("error");
     });
   });
 
