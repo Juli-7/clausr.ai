@@ -733,7 +733,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   get_file_content: {
     name: "get_file_content",
-    description: "Read extracted text from uploaded file. Only works for text-based files (.txt, .csv, .json, .md). For PDFs/DOCX/images, returns a placeholder — use a different approach to get that content.",
+    description: "Read extracted text from uploaded file. Works for PDF, DOCX, images (OCR), and text-based files.",
     inputSchema: ToolSchemas.get_file_content,
     logLabel: "Get file content",
     mutates: false,
@@ -742,22 +742,25 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
       const files = getComplianceFiles(sessionId);
       const file = files.find((f) => f.name === fileName);
-      if (file?.dataUrl) {
-        const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
-        const binaryExts = ["pdf", "docx", "doc", "xlsx", "xls", "png", "jpg", "jpeg", "gif", "webp", "bmp"];
-        if (binaryExts.includes(ext)) {
-          const hint = ext === "pdf"
-            ? "This PDF may be scanned or image-based. Try uploading a text-based PDF or extracting text client-side."
-            : `Binary file type (.${ext}). Text content cannot be extracted from this format.`;
-          return { fileName, extractedText: `[${hint}]`, source: "binary" };
-        }
+      if (!file?.dataUrl) {
+        return { error: `File "${fileName}" not found` };
+      }
+
+      const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+      const textExts = ["txt", "csv", "json", "md", "xml", "yml", "yaml", "log", "ini", "cfg", "env"];
+      if (textExts.includes(ext)) {
         const b64 = file.dataUrl.split(",")[1] ?? "";
         const raw = typeof Buffer !== "undefined" ? Buffer.from(b64, "base64").toString("utf-8") : "";
         const truncated = raw.length > 5000 ? raw.slice(0, 5000) + "\n...(truncated)" : raw;
         return { fileName, extractedText: truncated, source: "raw-base64" };
       }
 
-      return { error: `File "${fileName}" not found` };
+      // Binary files — run extractors (PDF, DOCX, OCR)
+      const { extractFileContent } = await import("./agent/user-info/extractors");
+      const result = await extractFileContent({ name: fileName, type: ext === "pdf" ? "application/pdf" : `application/${ext}`, dataUrl: file.dataUrl });
+      const text = result.text || "[No text could be extracted from this file]";
+      const truncated = text.length > 10000 ? text.slice(0, 10000) + "\n...(truncated)" : text;
+      return { fileName, extractedText: truncated, source: result.extractorUsed ?? "extractor", ocrConfidence: result.ocrConfidence, pageCount: result.pageCount };
     },
   },
 
