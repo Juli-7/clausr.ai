@@ -746,6 +746,11 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
         return { error: `File "${fileName}" not found` };
       }
 
+      // Return cached result if already extracted
+      if (file.extractedText) {
+        return { fileName, extractedText: file.extractedText, chunks: file.chunks, source: "cached" };
+      }
+
       const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
       const textExts = ["txt", "csv", "json", "md", "xml", "yml", "yaml", "log", "ini", "cfg", "env"];
       if (textExts.includes(ext)) {
@@ -755,12 +760,13 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
         return { fileName, extractedText: truncated, source: "raw-base64" };
       }
 
-      // Binary files — run extractors (PDF, DOCX, OCR)
+      // Binary files — run extractors, then cache the result
       const { extractFileContent } = await import("./agent/user-info/extractors");
       const result = await extractFileContent({ name: fileName, type: ext === "pdf" ? "application/pdf" : `application/${ext}`, dataUrl: file.dataUrl });
       const text = result.text || "[No text could be extracted from this file]";
-      const truncated = text.length > 10000 ? text.slice(0, 10000) + "\n...(truncated)" : text;
-      return { fileName, extractedText: truncated, source: result.extractorUsed ?? "extractor", ocrConfidence: result.ocrConfidence, pageCount: result.pageCount };
+      const chunks = (result.chunks ?? []).map((c) => ({ id: c.id, text: c.text, pageNumber: c.pageNumber, heading: c.heading }));
+      addComplianceFile(sessionId, { ...file, extractedText: text, chunks });
+      return { fileName, extractedText: text, chunks, source: result.extractorUsed ?? "extractor", ocrConfidence: result.ocrConfidence, pageCount: result.pageCount };
     },
   },
 
