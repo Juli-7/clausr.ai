@@ -68,7 +68,7 @@ export function buildSession(id: string): ComplianceSession | undefined {
     selectedPackIds: cs.selectedPackIds,
     docData: cs.docData,
     questionnaire: questionnaire ? { ...questionnaire, docData: cs.docData } : undefined,
-    uploadedFiles: files.map((f) => ({ name: f.name, size: f.size, time: f.time, dataUrl: f.dataUrl })),
+    uploadedFiles: files.map((f) => ({ name: f.name, size: f.size, time: f.time, dataUrl: f.dataUrl, docType: f.docType })),
     auditResults: cs.auditResults.map((r) => ({
       packId: r.packId,
       items: r.items.map((i) => ({

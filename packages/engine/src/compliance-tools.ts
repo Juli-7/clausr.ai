@@ -6,11 +6,11 @@ import {
   setComplianceAuditRunning, clearComplianceAuditResults,
   setComplianceDocumentsFinalized,
 } from "./agent/shared/memory/repository";
-import type { ComplianceFile, DocFieldValue } from "./agent/shared/memory/repository";
+import type { ComplianceFile } from "./agent/shared/memory/repository";
 import { setupSkill, processSessionFiles } from "./agent/loading/loading-orchestrator";
 import { saveLessonOverride, getLessonOverrides } from "./agent/shared/memory/repository";
 import {
-  setupPackAudit, runPendingChecks, retryCheck,
+  setupPackAudit, setupPackAuditAndRun, runPendingChecks, retryCheck,
   getPackAuditState, finalizeAudit,
 } from "./compliance-audit-tools";
 import { getPack, packs, readPackContent, writePack, appendPackLessons, getDraftPack, saveDraftPack, clearDraftPack } from "./compliance-packs";
@@ -63,24 +63,17 @@ export const ToolSchemas = {
   }),
   update_doc_field: z.object({
     field: z.string(),
-    value: z.object({
-      value: z.string(),
-      sourceCitation: z.array(z.string()).optional().describe(sourceCitationDesc),
-      citationRef: z.array(z.string()).optional().describe(citationRefDesc),
-    }),
+    value: z.string().describe("Field value as plain text"),
   }),
   batch_update_doc_fields: z.object({
-    fields: z.record(z.string(), z.object({
-      value: z.string(),
-      sourceCitation: z.array(z.string()).optional().describe(sourceCitationDesc),
-      citationRef: z.array(z.string()).optional().describe(citationRefDesc),
-    })),
+    fields: z.record(z.string(), z.string().describe("Field value as plain text")),
   }),
   attach_file: z.object({
     name: z.string(),
     size: z.string(),
     time: z.string(),
     dataUrl: z.string().describe("Base64-encoded data URL"),
+    docType: z.string().optional().describe("Document type to associate with"),
   }),
   detach_file: z.object({
     name: z.string(),
@@ -267,8 +260,8 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     logLabel: "Update document field",
     mutates: true,
     execute: async (sessionId, input) => {
-      const { field, value } = input as { field: string; value: DocFieldValue };
-      addComplianceDocField(sessionId, field, value);
+      const { field, value } = input as { field: string; value: string };
+      addComplianceDocField(sessionId, field, { value });
       const s = getComplianceSession(sessionId);
       return { docData: s?.docData ?? {} };
     },
@@ -281,9 +274,9 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     logLabel: "Batch update document fields",
     mutates: true,
     execute: async (sessionId, input) => {
-      const { fields } = input as { fields: Record<string, DocFieldValue> };
+      const { fields } = input as { fields: Record<string, string> };
       for (const [field, value] of Object.entries(fields)) {
-        addComplianceDocField(sessionId, field, value);
+        addComplianceDocField(sessionId, field, { value });
       }
       const s = getComplianceSession(sessionId);
       return { docData: s?.docData ?? {} };
@@ -297,7 +290,8 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     logLabel: "Attach file",
     mutates: true,
     execute: async (sessionId, input) => {
-      const file = input as unknown as ComplianceFile;
+      const { docType, ...rest } = input as unknown as ComplianceFile;
+      const file: ComplianceFile = { ...rest, docType };
       addComplianceFile(sessionId, file);
       await ensureSetup(sessionId);
       try {
@@ -625,16 +619,22 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       setComplianceAuditRunning(sessionId, true);
       clearComplianceAuditResults(sessionId);
 
-      // Set up each pack and run initial checks
+      // Phase 1: Set up each pack and immediately persist ALL checks as "wait" in auditResults
+      // This lets the frontend render the full check list + progress bar immediately
+      for (const packId of auditPackIds) {
+        await setupPackAuditAndRun(sessionId, packId);
+      }
+
+      // Phase 2: Run the first batch of ready checks synchronously
+      // runPendingChecks persists results incrementally per-check, so polling picks up progress
       const results: Record<string, unknown>[] = [];
       let totalPromptTokens = 0;
       let totalCompletionTokens = 0;
       for (const packId of auditPackIds) {
-        const setupResult = await setupPackAudit(sessionId, packId);
         const runResult = await runPendingChecks(sessionId, packId);
         totalPromptTokens += runResult.usage.promptTokens;
         totalCompletionTokens += runResult.usage.completionTokens;
-        results.push({ ...setupResult, checksCompleted: runResult.completed, checksFailed: runResult.failed });
+        results.push({ packId, checksCompleted: runResult.completed, checksFailed: runResult.failed });
       }
 
       return {

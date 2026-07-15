@@ -466,7 +466,7 @@ function extractResult(
 
 
 
-function buildAuditItems(packState: PackAuditState): { name: string; desc: string; status: string; statusLabel: string; checks: { name: string; pass: boolean }[] }[] {
+export function buildAuditItems(packState: PackAuditState): { name: string; desc: string; status: string; statusLabel: string; checks: { name: string; pass: boolean }[] }[] {
   return Object.entries(packState.checkStates).map(([checkId, cs]) => ({
     name: cs.title || checkId,
     desc: cs.result?.reasoning ?? "",
@@ -622,6 +622,17 @@ async function buildAgentResponse(packState: PackAuditState, sessionId: string):
     round: 1,
     sessionId,
   };
+}
+
+export async function setupPackAuditAndRun(sessionId: string, packId: string): Promise<SetupPackResult> {
+  const setupResult = await setupPackAudit(sessionId, packId);
+  const all = getCompliancePackStates(sessionId) as Record<string, PackAuditState>;
+  const packState = all[packId];
+  if (packState) {
+    const pendingItems = buildAuditItems(packState);
+    setCompliancePackAuditResult(sessionId, packId, pendingItems);
+  }
+  return setupResult;
 }
 
 
