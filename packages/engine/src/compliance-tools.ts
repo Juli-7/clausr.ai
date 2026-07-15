@@ -733,7 +733,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   get_file_content: {
     name: "get_file_content",
-    description: "Read extracted text from uploaded file.",
+    description: "Read extracted text from uploaded file. Only works for text-based files (.txt, .csv, .json, .md). For PDFs/DOCX/images, returns a placeholder — use a different approach to get that content.",
     inputSchema: ToolSchemas.get_file_content,
     logLabel: "Get file content",
     mutates: false,
@@ -743,6 +743,14 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       const files = getComplianceFiles(sessionId);
       const file = files.find((f) => f.name === fileName);
       if (file?.dataUrl) {
+        const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+        const binaryExts = ["pdf", "docx", "doc", "xlsx", "xls", "png", "jpg", "jpeg", "gif", "webp", "bmp"];
+        if (binaryExts.includes(ext)) {
+          const hint = ext === "pdf"
+            ? "This PDF may be scanned or image-based. Try uploading a text-based PDF or extracting text client-side."
+            : `Binary file type (.${ext}). Text content cannot be extracted from this format.`;
+          return { fileName, extractedText: `[${hint}]`, source: "binary" };
+        }
         const b64 = file.dataUrl.split(",")[1] ?? "";
         const raw = typeof Buffer !== "undefined" ? Buffer.from(b64, "base64").toString("utf-8") : "";
         const truncated = raw.length > 5000 ? raw.slice(0, 5000) + "\n...(truncated)" : raw;
