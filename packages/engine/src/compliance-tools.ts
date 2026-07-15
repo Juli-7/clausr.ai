@@ -4,7 +4,7 @@ import {
   addComplianceDocField, addComplianceFile, getComplianceFiles, removeComplianceFile,
   setComplianceValidation, hasSessionSetup,
   setComplianceAuditRunning, clearComplianceAuditResults,
-  setComplianceDocumentsFinalized,
+  setComplianceDocumentsFinalized, getOrCreateSession,
 } from "./agent/shared/memory/repository";
 import type { ComplianceFile } from "./agent/shared/memory/repository";
 import { setupSkill, processSessionFiles } from "./agent/loading/loading-orchestrator";
@@ -27,6 +27,7 @@ export type ToolName =
   | "update_doc_field"
   | "batch_update_doc_fields"
   | "attach_file"
+  | "extract_file_content"
   | "detach_file"
   | "export_document"
   | "go_to_phase"
@@ -74,6 +75,9 @@ export const ToolSchemas = {
     time: z.string(),
     dataUrl: z.string().describe("Base64-encoded data URL"),
     docType: z.string().optional().describe("Document type to associate with"),
+  }),
+  extract_file_content: z.object({
+    fileName: z.string(),
   }),
   detach_file: z.object({
     name: z.string(),
@@ -287,7 +291,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   attach_file: {
     name: "attach_file",
-    description: "Upload a file (PDF, DOCX, image). Use get_file_content to read text.",
+    description: "Upload a file (PDF, DOCX, image). Use extract_file_content to extract text, then get_file_content/search_files to query it.",
     inputSchema: ToolSchemas.attach_file,
     logLabel: "Attach file",
     mutates: true,
@@ -295,21 +299,46 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       const { docType, ...rest } = input as unknown as ComplianceFile;
       const file: ComplianceFile = { ...rest, docType };
       addComplianceFile(sessionId, file);
-      await ensureSetup(sessionId);
-      try {
-        await processSessionFiles({
-          sessionId,
-          files: [{
-            name: file.name,
-            type: file.dataUrl?.split(";")[0]?.split(":")[1] || "application/octet-stream",
-            size: parseInt(file.size) || 0,
-            dataUrl: file.dataUrl ?? "",
-          }],
-        });
-      } catch { /* file processing may fail silently */ }
       const session = buildSession(sessionId);
       const files = (session?.uploadedFiles ?? []).map(({ dataUrl: _, ...rest }) => rest);
       return { files };
+    },
+  },
+
+  extract_file_content: {
+    name: "extract_file_content",
+    description: "Extract text from an uploaded file. Caches result on the file record. After calling this, get_file_content and search_files will work immediately.",
+    inputSchema: ToolSchemas.extract_file_content,
+    logLabel: "Extract file content",
+    mutates: true,
+    execute: async (sessionId, input) => {
+      const { fileName } = input as { fileName: string };
+      const files = getComplianceFiles(sessionId);
+      const file = files.find((f) => f.name === fileName);
+      if (!file?.dataUrl) return { error: `File "${fileName}" not found` };
+      if (file.extractedText) return { fileName, cached: true, totalLength: file.extractedText.length };
+
+      const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+      const textExts = ["txt", "csv", "json", "md", "xml", "yml", "yaml", "log", "ini", "cfg", "env"];
+      if (textExts.includes(ext)) {
+        const b64 = file.dataUrl.split(",")[1] ?? "";
+        const raw = typeof Buffer !== "undefined" ? Buffer.from(b64, "base64").toString("utf-8") : "";
+        addComplianceFile(sessionId, { ...file, extractedText: raw, chunks: [] });
+        getOrCreateSession(sessionId, "compliance");
+        await getDocStore().addEvidenceFile(sessionId, { fileId: fileName, filename: fileName, extractedText: raw, chunks: [] });
+        return { fileName, totalLength: raw.length, preview: raw.slice(0, 2000), source: "raw-base64" };
+      }
+
+      const { extractFileContent } = await import("./agent/user-info/extractors");
+      const result = await extractFileContent({ name: fileName, type: ext === "pdf" ? "application/pdf" : `application/${ext}`, dataUrl: file.dataUrl });
+      const text = result.text || "[No text could be extracted from this file]";
+      const chunks = (result.chunks ?? []).map((c) => ({ id: c.id, text: c.text, pageNumber: c.pageNumber, heading: c.heading }));
+      addComplianceFile(sessionId, { ...file, extractedText: text, chunks });
+      getOrCreateSession(sessionId, "compliance");
+      await getDocStore().addEvidenceFile(sessionId, { fileId: fileName, filename: fileName, extractedText: text, chunks, pageCount: result.pageCount, ocrConfidence: result.ocrConfidence, extractorUsed: result.extractorUsed });
+      const index = chunks.map((c) => ({ id: c.id, heading: c.heading, pageNumber: c.pageNumber }));
+      const firstChunks = chunks.slice(0, 3).map((c) => ({ id: c.id, heading: c.heading, pageNumber: c.pageNumber, text: c.text }));
+      return { fileName, totalLength: text.length, chunkCount: index.length, chunks: index, firstChunks, preview: text.slice(0, 2000), source: result.extractorUsed ?? "extractor", ocrConfidence: result.ocrConfidence, pageCount: result.pageCount };
     },
   },
 
@@ -735,7 +764,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   get_file_content: {
     name: "get_file_content",
-    description: "Extract text from an uploaded file, caches the result. Returns chunk index (headings + IDs) and a text preview. Use search_files to retrieve specific chunks by ID or keyword.",
+    description: "Extract text from an uploaded file, caches the result. Returns: preview (first 2000 chars), full chunk index (headings + IDs), and firstChunks (full text of first 3 chunks). Use search_files to retrieve the remaining chunks by ID or keyword.",
     inputSchema: ToolSchemas.get_file_content,
     logLabel: "Get file content",
     mutates: false,
@@ -750,8 +779,10 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
       // Return metadata from cache if already extracted
       if (file.extractedText) {
-        const chunkIndex = (file.chunks ?? []).map((c) => ({ id: c.id, heading: c.heading, pageNumber: c.pageNumber }));
-        return { fileName, totalLength: file.extractedText.length, chunkCount: chunkIndex.length, preview: file.extractedText.slice(0, 500), chunks: chunkIndex, source: "cached" };
+        const chunks = file.chunks ?? [];
+        const index = chunks.map((c) => ({ id: c.id, heading: c.heading, pageNumber: c.pageNumber }));
+        const firstChunks = chunks.slice(0, 3).map((c) => ({ id: c.id, heading: c.heading, pageNumber: c.pageNumber, text: c.text }));
+        return { fileName, totalLength: file.extractedText.length, chunkCount: index.length, chunks: index, firstChunks, preview: file.extractedText.slice(0, 2000), source: "extracted" };
       }
 
       const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
@@ -759,7 +790,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       if (textExts.includes(ext)) {
         const b64 = file.dataUrl.split(",")[1] ?? "";
         const raw = typeof Buffer !== "undefined" ? Buffer.from(b64, "base64").toString("utf-8") : "";
-        return { fileName, extractedText: raw.slice(0, 5000), totalLength: raw.length, source: "raw-base64" };
+        return { fileName, extractedText: raw.slice(0, 5000), totalLength: raw.length, preview: raw.slice(0, 2000), source: "raw-base64" };
       }
 
       // Binary files — run extractors, then cache the result
@@ -768,8 +799,9 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       const text = result.text || "[No text could be extracted from this file]";
       const chunks = (result.chunks ?? []).map((c) => ({ id: c.id, text: c.text, pageNumber: c.pageNumber, heading: c.heading }));
       addComplianceFile(sessionId, { ...file, extractedText: text, chunks });
-      const chunkIndex = chunks.map((c) => ({ id: c.id, heading: c.heading, pageNumber: c.pageNumber }));
-      return { fileName, totalLength: text.length, chunkCount: chunkIndex.length, preview: text.slice(0, 500), chunks: chunkIndex, source: result.extractorUsed ?? "extractor", ocrConfidence: result.ocrConfidence, pageCount: result.pageCount };
+      const index = chunks.map((c) => ({ id: c.id, heading: c.heading, pageNumber: c.pageNumber }));
+      const firstChunks = chunks.slice(0, 3).map((c) => ({ id: c.id, heading: c.heading, pageNumber: c.pageNumber, text: c.text }));
+      return { fileName, totalLength: text.length, chunkCount: index.length, chunks: index, firstChunks, preview: text.slice(0, 2000), source: result.extractorUsed ?? "extractor", ocrConfidence: result.ocrConfidence, pageCount: result.pageCount };
     },
   },
 

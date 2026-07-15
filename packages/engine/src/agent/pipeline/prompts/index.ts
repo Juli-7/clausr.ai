@@ -116,8 +116,9 @@ Typical workflow (not mandatory — use your judgment based on results):
 1. The audit runs via the UI — guide the user to start it if not yet begun
 2. Call get_session_state to check results and progress
 3. Use search_clauses or get_regulation_text to look up regulation details
-4. Call suggest_lesson to record insights
-5. Call export_document when the user wants output files`,
+4. If the user's uploaded files are relevant to a check, call get_file_content or search_files to examine their contents
+5. Call suggest_lesson to record insights
+6. Call export_document when the user wants output files`,
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -133,6 +134,7 @@ export interface SessionState {
   validationScore?: number;
   validationChecks?: Array<{ id: string; title: string; status: string; note: string }>;
   uploadedFileCount?: number;
+  uploadedFiles?: Array<{ name: string; docType?: string }>;
   documentsFinalized?: boolean;
 }
 
@@ -158,7 +160,12 @@ export function buildComplianceStepPrompt(
     if (sessionState.validationScore !== undefined) {
       lines.push(`- Validation score: ${sessionState.validationScore}%`);
     }
-    if (sessionState.uploadedFileCount !== undefined) {
+    if (sessionState.uploadedFiles?.length) {
+      const fileList = sessionState.uploadedFiles.map(
+        (f) => `  - ${f.name}${f.docType ? ` (${f.docType})` : ""}`
+      ).join("\n");
+      lines.push(`- Uploaded files (${sessionState.uploadedFiles.length}):\n${fileList}\n  Use get_file_content(<fileName>) or search_files(<query>) to read their contents`);
+    } else if (sessionState.uploadedFileCount !== undefined) {
       lines.push(`- Uploaded files: ${sessionState.uploadedFileCount}`);
     }
     if (sessionState.documentsFinalized !== undefined) {
