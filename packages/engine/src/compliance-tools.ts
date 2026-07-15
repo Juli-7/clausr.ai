@@ -349,6 +349,21 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
         pageCount: result.pageCount, ocrConfidence: result.ocrConfidence, extractorUsed: result.extractorUsed,
       });
 
+      // Save page images for PDF highlight overlays in step 3
+      if (result.pageImages?.length) {
+        const { writeFileSync, mkdirSync } = await import("fs");
+        const { join } = await import("path");
+        const DATA_DIR = process.env.DATA_DIR || join(process.cwd(), "data");
+        const pageDir = join(DATA_DIR, "uploads", sessionId, `${fileName}.pages`);
+        mkdirSync(pageDir, { recursive: true });
+        for (let i = 0; i < result.pageImages.length; i++) {
+          const dataUrl = result.pageImages[i];
+          if (!dataUrl) continue;
+          const base64 = dataUrl.split(",")[1] ?? dataUrl;
+          writeFileSync(join(pageDir, `${i}.png`), Buffer.from(base64, "base64"));
+        }
+      }
+
       const index = chunks.map((c) => ({ id: c.id, pageNumber: c.pageNumber }));
       const firstChunks = chunks.slice(0, 3).map((c) => ({ id: c.id, pageNumber: c.pageNumber, text: c.text }));
       return { fileName, totalLength: text.length, chunkCount: index.length, chunks: index, firstChunks, preview: text.slice(0, 2000), source: result.extractorUsed ?? "extractor", ocrConfidence: result.ocrConfidence, pageCount: result.pageCount };
