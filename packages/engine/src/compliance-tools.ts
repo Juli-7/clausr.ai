@@ -19,6 +19,7 @@ import type { PackField, DocumentTemplate, PackCheck } from "./agent/loading/ski
 import { buildSession } from "./compliance-session";
 import { getRegulationApi } from "./agent/knowledge/regulation-api";
 import { getDocStore } from "./agent/user-info/vector-store";
+import { savePageImages } from "./agent/user-info/vector-store/mock-store";
 import { generateDocx } from "./agent/present/export/export-docx";
 import type { AgentResponse } from "./agent/shared/types";
 
@@ -332,10 +333,16 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       const { extractFileContent } = await import("./agent/user-info/extractors");
       const result = await extractFileContent({ name: fileName, type: ext === "pdf" ? "application/pdf" : `application/${ext}`, dataUrl: file.dataUrl });
       const text = result.text || "[No text could be extracted from this file]";
-      const chunks = (result.chunks ?? []).map((c) => ({ id: c.id, text: c.text, pageNumber: c.pageNumber, heading: c.heading }));
+      const chunks = (result.chunks ?? []).map((c) => ({
+        id: c.id, text: c.text, html: c.html, pageNumber: c.pageNumber,
+        bbox: c.bbox, wordBoxes: c.wordBoxes, pageWidth: c.pageWidth, pageHeight: c.pageHeight,
+      }));
       addComplianceFile(sessionId, { ...file, extractedText: text, chunks });
       getOrCreateSession(sessionId, "compliance");
       await getDocStore().addEvidenceFile(sessionId, { fileId: fileName, filename: fileName, extractedText: text, chunks, pageCount: result.pageCount, ocrConfidence: result.ocrConfidence, extractorUsed: result.extractorUsed });
+      if (result.pageImages?.length) {
+        savePageImages(sessionId, fileName, result.pageImages);
+      }
       const index = chunks.map((c) => ({ id: c.id, heading: c.heading, pageNumber: c.pageNumber }));
       const firstChunks = chunks.slice(0, 3).map((c) => ({ id: c.id, heading: c.heading, pageNumber: c.pageNumber, text: c.text }));
       return { fileName, totalLength: text.length, chunkCount: index.length, chunks: index, firstChunks, preview: text.slice(0, 2000), source: result.extractorUsed ?? "extractor", ocrConfidence: result.ocrConfidence, pageCount: result.pageCount };
