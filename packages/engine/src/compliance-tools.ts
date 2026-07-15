@@ -735,7 +735,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   get_file_content: {
     name: "get_file_content",
-    description: "Extract text from an uploaded file, caches the result. Returns chunk index (headings + IDs). Use search_files to retrieve specific chunks by ID or keyword.",
+    description: "Extract text from an uploaded file, caches the result. Returns chunk index (headings + IDs) and a text preview. Use search_files to retrieve specific chunks by ID or keyword.",
     inputSchema: ToolSchemas.get_file_content,
     logLabel: "Get file content",
     mutates: false,
@@ -751,7 +751,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       // Return metadata from cache if already extracted
       if (file.extractedText) {
         const chunkIndex = (file.chunks ?? []).map((c) => ({ id: c.id, heading: c.heading, pageNumber: c.pageNumber }));
-        return { fileName, totalLength: file.extractedText.length, chunkCount: chunkIndex.length, chunks: chunkIndex, source: "cached" };
+        return { fileName, totalLength: file.extractedText.length, chunkCount: chunkIndex.length, preview: file.extractedText.slice(0, 500), chunks: chunkIndex, source: "cached" };
       }
 
       const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
@@ -769,7 +769,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       const chunks = (result.chunks ?? []).map((c) => ({ id: c.id, text: c.text, pageNumber: c.pageNumber, heading: c.heading }));
       addComplianceFile(sessionId, { ...file, extractedText: text, chunks });
       const chunkIndex = chunks.map((c) => ({ id: c.id, heading: c.heading, pageNumber: c.pageNumber }));
-      return { fileName, totalLength: text.length, chunkCount: chunkIndex.length, chunks: chunkIndex, source: result.extractorUsed ?? "extractor", ocrConfidence: result.ocrConfidence, pageCount: result.pageCount };
+      return { fileName, totalLength: text.length, chunkCount: chunkIndex.length, preview: text.slice(0, 500), chunks: chunkIndex, source: result.extractorUsed ?? "extractor", ocrConfidence: result.ocrConfidence, pageCount: result.pageCount };
     },
   },
 
