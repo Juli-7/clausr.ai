@@ -2,7 +2,7 @@ import { z } from "zod";
 import {
   getComplianceSession, setComplianceScope, setComplianceStep,
   addComplianceDocField, addComplianceFile, getComplianceFiles, removeComplianceFile,
-  setComplianceValidation, hasSessionSetup, loadSessionSetup,
+  setComplianceValidation, hasSessionSetup,
   setComplianceAuditRunning, clearComplianceAuditResults,
   setComplianceDocumentsFinalized,
 } from "./agent/shared/memory/repository";
@@ -740,16 +740,6 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     execute: async (sessionId, input) => {
       const { fileName } = input as { fileName: string };
 
-      // Try processed file registry first
-      const setup = loadSessionSetup(sessionId);
-      if (setup) {
-        const entry = setup.fileRegistry.find((f) => f.filename === fileName);
-        if (entry?.extractedText) {
-          return { fileName, extractedText: entry.extractedText, source: "processed" };
-        }
-      }
-
-      // Fall back to raw base64 from file list
       const files = getComplianceFiles(sessionId);
       const file = files.find((f) => f.name === fileName);
       if (file?.dataUrl) {

@@ -79,16 +79,16 @@ describe("Compliance tools end-to-end with real DB", () => {
 
     await TOOL_DEFS.update_doc_field.execute(sid, {
       field: "manufacturer",
-      value: { value: "Acme Corp", sourceCitation: ["S1.c3"] },
+      value: "Acme Corp",
     });
 
     await TOOL_DEFS.update_doc_field.execute(sid, {
       field: "model",
-      value: { value: "XL-2000" },
+      value: "XL-2000",
     });
 
     const session = getComplianceSession(sid);
-    expect(session!.docData["manufacturer"]).toEqual({ value: "Acme Corp", sourceCitation: ["S1.c3"] });
+    expect(session!.docData["manufacturer"]).toEqual({ value: "Acme Corp" });
     expect(session!.docData["model"]).toEqual({ value: "XL-2000" });
   });
 
@@ -99,9 +99,9 @@ describe("Compliance tools end-to-end with real DB", () => {
 
     const result = await TOOL_DEFS.batch_update_doc_fields.execute(sid, {
       fields: {
-        temperature: { value: "25C" },
-        humidity: { value: "60%" },
-        voltage: { value: "230V" },
+        temperature: "25C",
+        humidity: "60%",
+        voltage: "230V",
       },
     });
 
@@ -240,9 +240,9 @@ describe("Compliance tools end-to-end with real DB", () => {
 
     await TOOL_DEFS.batch_update_doc_fields.execute(sid, {
       fields: {
-        manufacturer: { value: "Acme Corp" },
-        model: { value: "XL-2000" },
-        voltage: { value: "12V" },
+        manufacturer: "Acme Corp",
+        model: "XL-2000",
+        voltage: "12V",
       },
     });
 
