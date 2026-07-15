@@ -73,6 +73,10 @@ export async function* complianceChat(
     stopWhen: ({ steps }) => {
       if (steps.length >= 5) return true;
       if (steps.length < 2) return false;
+      // Check if current step has zero text and only repeats tool calls already seen
+      // This catches the case where the LLM keeps calling the same tool without generating text
+      const cur = steps[steps.length - 1]!;
+      if (cur.text?.trim()) return false; // If LLM generated text, always allow it to be sent
       const prevSteps = steps.slice(0, -1);
       const seen = new Set<string>();
       for (const s of prevSteps) {
@@ -80,10 +84,8 @@ export async function* complianceChat(
           seen.add(tc.toolName);
         }
       }
-      const cur = steps[steps.length - 1]!;
-      for (const tc of cur.toolCalls ?? []) {
-        if (seen.has(tc.toolName)) return true;
-      }
+      const allRepeat = (cur.toolCalls ?? []).every((tc) => seen.has(tc.toolName));
+      if (allRepeat && cur.toolCalls.length > 0) return true;
       return false;
     },
     maxRetries: 3,
