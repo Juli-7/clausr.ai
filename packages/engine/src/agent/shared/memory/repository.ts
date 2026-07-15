@@ -5,6 +5,64 @@ import type { ParsedCheck } from "../../loading/skill/check-parser";
 import type { ExecutableStep } from "../../pipeline/types";
 import type { UploadedFileEntry } from "../../pipeline/slices/file-registry";
 
+const EMBEDDING_MODEL = "text-embedding-3-small";
+
+export async function getEmbedding(text: string): Promise<Float32Array | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  const truncated = text.length > 8000 ? text.slice(0, 8000) : text;
+  try {
+    const res = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ input: truncated, model: EMBEDDING_MODEL }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return new Float32Array(data.data[0].embedding);
+  } catch {
+    return null;
+  }
+}
+
+export async function getEmbeddings(texts: string[]): Promise<(Float32Array | null)[]> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey || texts.length === 0) return texts.map(() => null);
+
+  const batchSize = 20;
+  const results: (Float32Array | null)[] = [];
+
+  for (let i = 0; i < texts.length; i += batchSize) {
+    const batch = texts.slice(i, i + batchSize).map((t) =>
+      t.length > 8000 ? t.slice(0, 8000) : t
+    );
+    try {
+      const res = await fetch("https://api.openai.com/v1/embeddings", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ input: batch, model: EMBEDDING_MODEL }),
+      });
+      if (!res.ok) {
+        results.push(...batch.map(() => null));
+        continue;
+      }
+      const data = await res.json();
+      const sorted = data.data.sort((a: { index: number }, b: { index: number }) => a.index - b.index);
+      results.push(...sorted.map((d: { embedding: number[] }) => new Float32Array(d.embedding)));
+    } catch {
+      results.push(...batch.map(() => null));
+    }
+  }
+  return results;
+}
+
 function safeJsonParse<T>(json: string, fallback?: T): T {
   try {
     return JSON.parse(json) as T;
@@ -25,17 +83,19 @@ export function getOrCreateSession(sessionId: string, skillName: string, tenantI
 export function saveChunks(
   sessionId: string,
   fileId: string,
-  chunks: { id: string; text: string; html?: string; pageNumber?: number; bbox?: unknown; wordBoxes?: unknown; pageWidth?: number; pageHeight?: number }[]
+  chunks: { id: string; text: string; html?: string; pageNumber?: number; bbox?: unknown; wordBoxes?: unknown; pageWidth?: number; pageHeight?: number }[],
+  embeddings?: (Float32Array | null)[]
 ): string[] {
   const db = getDb();
   const stmt = db.prepare(
-    "INSERT OR REPLACE INTO chunk_store (id, session_id, file_id, text, chunk_html, page_number, bbox_json, word_boxes_json, page_width, page_height, ocr_confidence, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    "INSERT OR REPLACE INTO chunk_store (id, session_id, file_id, text, chunk_html, page_number, bbox_json, word_boxes_json, page_width, page_height, ocr_confidence, embedding, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
   );
   const ids: string[] = [];
   const insert = db.transaction(() => {
     for (let i = 0; i < chunks.length; i++) {
       const id = `${sessionId}_${fileId}_${i}`;
       ids.push(id);
+      const emb = embeddings?.[i];
       stmt.run(
         id,
         sessionId,
@@ -48,6 +108,7 @@ export function saveChunks(
         chunks[i]!.pageWidth ?? null,
         chunks[i]!.pageHeight ?? null,
         null,
+        emb instanceof Float32Array ? Buffer.from(emb.buffer) : null,
         Date.now()
       );
       indexChunkFts5(sessionId, fileId, i + 1, chunks[i]!.text);
@@ -148,6 +209,29 @@ export function searchChunksFts5(
       )
       .all(query, sessionId, limit) as { file_id: string; chunk_idx: number; text: string; rank: number }[];
     return rows.map((r) => ({ fileId: r.file_id, chunkIdx: r.chunk_idx, text: r.text, rank: r.rank }));
+  } catch {
+    return [];
+  }
+}
+
+export function searchChunksVec(
+  sessionId: string,
+  queryEmbedding: Float32Array,
+  limit = 10
+): { fileId: string; text: string; distance: number }[] {
+  const db = getDb();
+  try {
+    const buf = Buffer.from(queryEmbedding.buffer);
+    const rows = db
+      .prepare(
+        `SELECT file_id, text, vec_distance_cos(embedding, ?) as distance
+         FROM chunk_store
+         WHERE embedding IS NOT NULL AND session_id = ?
+         ORDER BY distance
+         LIMIT ?`
+      )
+      .all(buf, sessionId, limit) as { file_id: string; text: string; distance: number }[];
+    return rows.map((r) => ({ fileId: r.file_id, text: r.text, distance: r.distance }));
   } catch {
     return [];
   }

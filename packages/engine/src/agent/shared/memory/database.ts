@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
+import sqlite_vec from "sqlite-vec";
 
 const DB_PATH = process.env.DATABASE_PATH ?? path.join(process.cwd(), "data", "session.db");
 
@@ -28,6 +29,12 @@ export function getDb(): Database.Database {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.pragma("wal_autocheckpoint = 100");
+
+  try {
+    db.loadExtension(sqlite_vec.getLoadablePath());
+  } catch {
+    // sqlite-vec not available (e.g. stackglue / test env)
+  }
 
   initSchema(db);
   runMigrations(db);
@@ -164,6 +171,7 @@ function runMigrations(db: Database.Database): void {
   try { db.exec("ALTER TABLE chunk_store ADD COLUMN page_width REAL"); } catch { }
   try { db.exec("ALTER TABLE chunk_store ADD COLUMN page_height REAL"); } catch { }
   try { db.exec("ALTER TABLE chunk_store ADD COLUMN chunk_html TEXT"); } catch { }
+  try { db.exec("ALTER TABLE chunk_store ADD COLUMN embedding BLOB"); } catch { }
   // Migration: upgrade FTS5 to use porter stemmer + prefix indices + tokenchars
   try {
     const fts5Upgraded = db.prepare("SELECT value FROM settings WHERE key = 'fts5_v2'").get() as { value: string } | undefined;

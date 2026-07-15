@@ -6,6 +6,10 @@ import {
   getChunksByIds,
   getFileChunks,
   saveFileChunks,
+  searchChunksVec,
+  searchChunksFts5,
+  getEmbedding,
+  getEmbeddings,
 } from "../../shared/memory/repository";
 import { logPipeline } from "../../pipeline/logger";
 import fs from "fs";
@@ -58,7 +62,9 @@ export class MockDocStore implements IDocStore {
   ): Promise<ProcessFileResult> {
     deleteChunksByFile(sessionId, file.name);
     const extracted = await extractFileContent(file);
-    const chunkIds = saveChunks(sessionId, file.name, extracted.chunks);
+    const texts = extracted.chunks.map((c) => c.text);
+    const embeddings = await getEmbeddings(texts);
+    const chunkIds = saveChunks(sessionId, file.name, extracted.chunks, embeddings);
     if (file.dataUrl) {
       saveRawFile(sessionId, file.name, file.dataUrl);
     }
@@ -97,7 +103,9 @@ export class MockDocStore implements IDocStore {
   async addEvidenceFile(sessionId: string, entry: ProcessedFile): Promise<void> {
     const entryFileId = entry.fileId;
     deleteChunksByFile(sessionId, entryFileId);
-    const chunkIds = saveChunks(sessionId, entryFileId, entry.chunks);
+    const texts = entry.chunks.map((c) => c.text);
+    const embeddings = await getEmbeddings(texts);
+    const chunkIds = saveChunks(sessionId, entryFileId, entry.chunks, embeddings);
     const meta = {
       fileId: entryFileId,
       filename: entry.filename,
@@ -166,5 +174,14 @@ export class MockDocStore implements IDocStore {
         extractorUsed: meta.extractorUsed,
       };
     });
+  }
+
+  async searchChunks(sessionId: string, query: string): Promise<{ fileId: string; text: string; distance: number }[]> {
+    const queryEmbedding = await getEmbedding(query);
+    if (!queryEmbedding) {
+      const fts = searchChunksFts5(sessionId, query, 10);
+      return fts.map((r) => ({ fileId: r.fileId, text: r.text, distance: r.rank }));
+    }
+    return searchChunksVec(sessionId, queryEmbedding, 10);
   }
 }

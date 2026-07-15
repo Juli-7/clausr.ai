@@ -1000,11 +1000,10 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
         return { fileName, totalLength: file.extractedText.length, chunkCount: chunkIndex.length, chunks: chunkIndex, source: "extracted" };
       }
 
-      // Mode 1: query only — FTS5 cross-file search
+      // Mode 1: query only — vector search (falls back to FTS5)
       if (query) {
-        const { searchChunksFts5 } = await import("./agent/shared/memory/repository");
-        const results = searchChunksFts5(sessionId, query, 10);
-        return { results: results.map((r) => ({ fileName: r.fileId, excerpt: r.text, rank: r.rank })) };
+        const results = await store.searchChunks(sessionId, query);
+        return { results: results.map((r) => ({ fileName: r.fileId, excerpt: r.text, rank: r.distance })) };
       }
 
       return { results: [] };

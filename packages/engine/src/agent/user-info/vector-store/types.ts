@@ -44,4 +44,6 @@ export interface IDocStore {
   getFiles(sessionId: string): Promise<ProcessedFile[]>;
 
   addEvidenceFile(sessionId: string, entry: ProcessedFile): Promise<void>;
+
+  searchChunks(sessionId: string, query: string): Promise<{ fileId: string; text: string; distance: number }[]>;
 }
