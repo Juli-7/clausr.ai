@@ -166,8 +166,10 @@ export const ToolSchemas = {
     clauseNumber: z.string().optional(),
   }),
   search_files: z.object({
-    query: z.string(),
-  }),
+    query: z.string().optional().describe("Keyword to search across all files"),
+    fileName: z.string().optional().describe("Scope search to one file"),
+    chunkIds: z.array(z.string()).optional().describe("Retrieve specific chunk texts by ID (requires fileName)"),
+  }).refine((d) => d.query || d.fileName, { message: "Provide query (cross-file) or fileName (file-scoped)" }),
   suggest_lesson: z.object({
     skillName: z.string(),
     text: z.string(),
@@ -733,7 +735,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   get_file_content: {
     name: "get_file_content",
-    description: "Read extracted text from uploaded file. Works for PDF, DOCX, images (OCR), and text-based files.",
+    description: "Extract text from an uploaded file, caches the result. Returns chunk index (headings + IDs). Use search_files to retrieve specific chunks by ID or keyword.",
     inputSchema: ToolSchemas.get_file_content,
     logLabel: "Get file content",
     mutates: false,
@@ -746,9 +748,10 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
         return { error: `File "${fileName}" not found` };
       }
 
-      // Return cached result if already extracted
+      // Return metadata from cache if already extracted
       if (file.extractedText) {
-        return { fileName, extractedText: file.extractedText, chunks: file.chunks, source: "cached" };
+        const chunkIndex = (file.chunks ?? []).map((c) => ({ id: c.id, heading: c.heading, pageNumber: c.pageNumber }));
+        return { fileName, totalLength: file.extractedText.length, chunkCount: chunkIndex.length, chunks: chunkIndex, source: "cached" };
       }
 
       const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
@@ -756,8 +759,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       if (textExts.includes(ext)) {
         const b64 = file.dataUrl.split(",")[1] ?? "";
         const raw = typeof Buffer !== "undefined" ? Buffer.from(b64, "base64").toString("utf-8") : "";
-        const truncated = raw.length > 5000 ? raw.slice(0, 5000) + "\n...(truncated)" : raw;
-        return { fileName, extractedText: truncated, source: "raw-base64" };
+        return { fileName, extractedText: raw.slice(0, 5000), totalLength: raw.length, source: "raw-base64" };
       }
 
       // Binary files — run extractors, then cache the result
@@ -766,7 +768,8 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       const text = result.text || "[No text could be extracted from this file]";
       const chunks = (result.chunks ?? []).map((c) => ({ id: c.id, text: c.text, pageNumber: c.pageNumber, heading: c.heading }));
       addComplianceFile(sessionId, { ...file, extractedText: text, chunks });
-      return { fileName, extractedText: text, chunks, source: result.extractorUsed ?? "extractor", ocrConfidence: result.ocrConfidence, pageCount: result.pageCount };
+      const chunkIndex = chunks.map((c) => ({ id: c.id, heading: c.heading, pageNumber: c.pageNumber }));
+      return { fileName, totalLength: text.length, chunkCount: chunkIndex.length, chunks: chunkIndex, source: result.extractorUsed ?? "extractor", ocrConfidence: result.ocrConfidence, pageCount: result.pageCount };
     },
   },
 
@@ -939,24 +942,59 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   search_files: {
     name: "search_files",
-    description: "Search uploaded file contents by keyword.",
+    description: "Search uploaded file contents. Three modes: (1) query only — cross-file keyword search; (2) fileName only — list all chunks with headings; (3) fileName + chunkIds — retrieve full text of specific chunks.",
     inputSchema: ToolSchemas.search_files,
     logLabel: "Search files",
     mutates: false,
     execute: async (sessionId, input) => {
-      const { query } = input as { query: string };
-      const store = getDocStore();
-      const files = await store.getFiles(sessionId);
-      const results: { filename: string; excerpt: string }[] = [];
-      for (const file of files) {
-        const idx = file.extractedText.toLowerCase().indexOf(query.toLowerCase());
-        if (idx !== -1) {
-          const start = Math.max(0, idx - 100);
-          const end = Math.min(file.extractedText.length, idx + query.length + 300);
-          results.push({ filename: file.filename, excerpt: file.extractedText.slice(start, end) });
-        }
+      const { query, fileName, chunkIds } = input as { query?: string; fileName?: string; chunkIds?: string[] };
+      const files = getComplianceFiles(sessionId);
+
+      // Mode 3: fileName + chunkIds — return full chunk texts
+      if (fileName && chunkIds && chunkIds.length > 0) {
+        const file = files.find((f) => f.name === fileName);
+        if (!file?.chunks) return { error: `File "${fileName}" not extracted yet — call get_file_content first` };
+        const matched = file.chunks.filter((c) => chunkIds.includes(c.id));
+        return { results: [{ fileName, chunks: matched.map((c) => ({ id: c.id, text: c.text, pageNumber: c.pageNumber, heading: c.heading })) }] };
       }
-      return { results };
+
+      // Mode 2: fileName only — return chunk index
+      if (fileName) {
+        const file = files.find((f) => f.name === fileName);
+        if (!file?.chunks) return { error: `File "${fileName}" not extracted yet — call get_file_content first` };
+        const chunkIndex = file.chunks.map((c) => ({ id: c.id, heading: c.heading, pageNumber: c.pageNumber }));
+        return { fileName, totalLength: file.extractedText?.length ?? 0, chunkCount: chunkIndex.length, chunks: chunkIndex, source: "cached" };
+      }
+
+      // Mode 1: query only — cross-file keyword search
+      if (query) {
+        const results: { fileName: string; excerpt: string }[] = [];
+        for (const file of files) {
+          if (!file.extractedText) continue;
+          const idx = file.extractedText.toLowerCase().indexOf(query.toLowerCase());
+          if (idx !== -1) {
+            const start = Math.max(0, idx - 100);
+            const end = Math.min(file.extractedText.length, idx + query.length + 300);
+            results.push({ fileName: file.name, excerpt: file.extractedText.slice(start, end) });
+          }
+        }
+        // Fallback: search v1 doc store files
+        if (results.length === 0) {
+          const store = getDocStore();
+          const storeFiles = await store.getFiles(sessionId);
+          for (const sf of storeFiles) {
+            const idx = sf.extractedText.toLowerCase().indexOf(query.toLowerCase());
+            if (idx !== -1) {
+              const start = Math.max(0, idx - 100);
+              const end = Math.min(sf.extractedText.length, idx + query.length + 300);
+              results.push({ fileName: sf.filename, excerpt: sf.extractedText.slice(start, end) });
+            }
+          }
+        }
+        return { results };
+      }
+
+      return { results: [] };
     },
   },
 
