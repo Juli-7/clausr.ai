@@ -40,7 +40,7 @@ function saveRawFile(sessionId: string, filename: string, dataUrl: string): void
   fs.writeFileSync(path.join(dir, filename), Buffer.from(base64, "base64"));
 }
 
-export function savePageImages(sessionId: string, filename: string, pageImages: string[]): void {
+function savePageImages(sessionId: string, filename: string, pageImages: string[]): void {
   const dir = path.join(UPLOADS_DIR, sessionId, `${filename}.pages`);
   fs.mkdirSync(dir, { recursive: true });
   for (let i = 0; i < pageImages.length; i++) {
