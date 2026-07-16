@@ -729,7 +729,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     mutates: true,
     execute: async (sessionId, input) => {
       const { packId, checkId } = input as { packId: string; checkId: string };
-      const result = await retryCheck(sessionId, packId, checkId) as Record<string, unknown>;
+      const result = await retryCheck(sessionId, packId, checkId) as unknown as Record<string, unknown>;
       runAuditChecksInBackground(sessionId, [packId]);
       return result;
     },
