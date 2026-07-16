@@ -4,6 +4,7 @@ import {
   addComplianceDocField, addComplianceFile, removeComplianceFile,
   setComplianceValidation, hasSessionSetup,
   setComplianceAuditRunning, setComplianceAuditDone,
+  getCompliancePackStates,
   setComplianceDocumentsFinalized, getOrCreateSession,
 } from "./agent/shared/memory/repository";
 import type { ComplianceFile } from "./agent/shared/memory/repository";
@@ -706,13 +707,16 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   run_pending_checks: {
     name: "run_pending_checks",
-    description: "Execute ready checks (one depth level per call). Optionally pass conversation context.",
+    description: "Execute ready checks. Runs in background — frontend polls /audit/status for progressive results.",
     inputSchema: ToolSchemas.run_pending_checks,
     logLabel: "Run pending checks",
     mutates: true,
     execute: async (sessionId, input) => {
-      const { packId, maxConcurrency, context } = input as { packId: string; maxConcurrency?: number; context?: string };
-      return await runPendingChecks(sessionId, packId, maxConcurrency, context) as unknown as Record<string, unknown>;
+      const { packId } = input as { packId: string };
+      const existing = getPackAuditState(sessionId, packId);
+      if (!existing) return { error: `Pack "${packId}" not set up. Call setup_pack_audit first.` };
+      runAuditChecksInBackground(sessionId, [packId]);
+      return { ok: true, packId, message: "Checks running in background — results appear progressively." };
     },
   },
 
@@ -1030,18 +1034,37 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
 };
 
+const backgroundAuditLocks = new Set<string>();
+
+function allSessionPacksDone(sessionId: string): boolean {
+  const states = getCompliancePackStates(sessionId) as Record<string, { state: string }>;
+  const entries = Object.values(states);
+  return entries.length > 0 && entries.every((s) => s.state === "done" || s.state === "failed");
+}
+
 function runAuditChecksInBackground(sessionId: string, packIds: string[]): void {
+  const keys = packIds.map((p) => `${sessionId}:${p}`);
+  const unrun = keys.filter((k) => !backgroundAuditLocks.has(k));
+  if (unrun.length === 0) return;
+  for (const k of unrun) backgroundAuditLocks.add(k);
+
   (async () => {
     try {
       for (const packId of packIds) {
+        const key = `${sessionId}:${packId}`;
+        if (!unrun.includes(key)) continue;
         for (let iter = 0; iter < 50; iter++) {
           const result = await runPendingChecks(sessionId, packId);
           if (result.allDone || result.blocked) break;
         }
       }
-      setComplianceAuditDone(sessionId, true);
+      if (allSessionPacksDone(sessionId)) {
+        setComplianceAuditDone(sessionId, true);
+      }
     } catch (err) {
       console.error("[audit] background check execution failed:", err);
+    } finally {
+      for (const k of unrun) backgroundAuditLocks.delete(k);
     }
   })();
 }
