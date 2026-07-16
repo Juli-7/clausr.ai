@@ -722,13 +722,15 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   retry_check: {
     name: "retry_check",
-    description: "Retry a failed check (resets dependents). Call run_pending_checks after.",
+    description: "Retry a failed check (resets dependents). Resumes background execution automatically.",
     inputSchema: ToolSchemas.retry_check,
     logLabel: "Retry check",
     mutates: true,
     execute: async (sessionId, input) => {
       const { packId, checkId } = input as { packId: string; checkId: string };
-      return await retryCheck(sessionId, packId, checkId) as unknown as Record<string, unknown>;
+      const result = await retryCheck(sessionId, packId, checkId) as Record<string, unknown>;
+      runAuditChecksInBackground(sessionId, [packId]);
+      return result;
     },
   },
 
