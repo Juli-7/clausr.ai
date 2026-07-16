@@ -95,9 +95,14 @@ export async function* complianceChat(
     abortSignal: abortController.signal,
     onStepFinish: ({ text, finishReason, toolCalls, toolResults, stepNumber }) => {
       logInfo(`step=${stepNumber} finish=${finishReason} textLen=${text?.length} toolCalls=${toolCalls?.length} toolResults=${toolResults?.length}`);
-    },
-    onFinish: ({ finishReason, text, usage, steps }) => {
-      logInfo(`finish=${finishReason} textLen=${text?.length} steps=${steps?.length} prompt=${usage?.inputTokens} completion=${usage?.outputTokens}`);
+      if (text?.trim()) {
+        addAssistantMessage(sessionId, text);
+      }
+      for (const tc of toolCalls ?? []) {
+        if (tc.toolName !== "get_session_state") {
+          addToolMessage(sessionId, tc.toolName);
+        }
+      }
     },
     messages,
     tools: allTools,
@@ -112,9 +117,6 @@ export async function* complianceChat(
         fullText += chunk;
         yield { type: "text-delta", text: chunk };
       } else if (event.type === "tool-call") {
-        if (event.toolName !== "get_session_state") {
-          addToolMessage(sessionId, event.toolName);
-        }
         yield { type: "tool-call", toolName: event.toolName, args: event.input };
       } else if (event.type === "tool-result") {
         yield { type: "tool-result", toolName: event.toolName, result: event.output };
@@ -127,9 +129,6 @@ export async function* complianceChat(
     }
 
     finalUsage = await result.usage;
-    if (fullText) {
-      await addAssistantMessage(sessionId, fullText);
-    }
     yield { type: "done", response: fullText, usage: finalUsage };
   } catch (err) {
     const msg = err instanceof Error && err.name === "AbortError" ? "request timed out" : err instanceof Error ? err.message : "Unknown";
