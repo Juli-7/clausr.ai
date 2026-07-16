@@ -110,6 +110,7 @@ export async function* complianceChat(
 
   let fullText = "";
   let finalUsage: { inputTokens?: number; outputTokens?: number } = {};
+  let abortedAfterTool = "";
   try {
     for await (const event of result.fullStream) {
       if (event.type === "text-delta") {
@@ -120,6 +121,11 @@ export async function* complianceChat(
         yield { type: "tool-call", toolName: event.toolName, args: event.input };
       } else if (event.type === "tool-result") {
         yield { type: "tool-result", toolName: event.toolName, result: event.output };
+        if (event.toolName === "start_audit") {
+          abortedAfterTool = event.toolName;
+          abortController.abort();
+          break;
+        }
       } else if (event.type === "finish") {
         yield { type: "finish", finishReason: event.finishReason };
       } else if (event.type === "error") {
@@ -128,11 +134,19 @@ export async function* complianceChat(
       }
     }
 
-    finalUsage = await result.usage;
-    yield { type: "done", response: fullText, usage: finalUsage };
+    if (abortedAfterTool) {
+      yield { type: "done", response: fullText || `Audit ready — ${abortedAfterTool} completed.`, usage: finalUsage };
+    } else {
+      finalUsage = await result.usage;
+      yield { type: "done", response: fullText, usage: finalUsage };
+    }
   } catch (err) {
-    const msg = err instanceof Error && err.name === "AbortError" ? "request timed out" : err instanceof Error ? err.message : "Unknown";
-    yield { type: "error", error: msg };
+    if (abortedAfterTool) {
+      yield { type: "done", response: fullText || `Audit ready — ${abortedAfterTool} completed.`, usage: finalUsage };
+    } else {
+      const msg = err instanceof Error && err.name === "AbortError" ? "request timed out" : err instanceof Error ? err.message : "Unknown";
+      yield { type: "error", error: msg };
+    }
   } finally {
     clearTimeout(llmTimeout);
   }

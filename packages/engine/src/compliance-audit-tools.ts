@@ -631,6 +631,12 @@ export async function setupPackAuditAndRun(sessionId: string, packId: string): P
   if (packState) {
     const pendingItems = buildAuditItems(packState);
     setCompliancePackAuditResult(sessionId, packId, pendingItems);
+    try {
+      const agentResponse = await buildAgentResponse(packState, sessionId);
+      setComplianceAgentResponse(sessionId, packId, JSON.stringify(agentResponse));
+    } catch {
+      // Non-fatal: agent response will be built before first check runs
+    }
   }
   return setupResult;
 }
