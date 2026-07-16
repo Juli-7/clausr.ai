@@ -715,6 +715,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       const { packId } = input as { packId: string };
       const existing = getPackAuditState(sessionId, packId);
       if (!existing) return { error: `Pack "${packId}" not set up. Call setup_pack_audit first.` };
+      setComplianceAuditRunning(sessionId, true);
       runAuditChecksInBackground(sessionId, [packId]);
       return { ok: true, packId, message: "Checks running in background — results appear progressively." };
     },

@@ -121,7 +121,7 @@ export async function* complianceChat(
         yield { type: "tool-call", toolName: event.toolName, args: event.input };
       } else if (event.type === "tool-result") {
         yield { type: "tool-result", toolName: event.toolName, result: event.output };
-        if (event.toolName === "start_audit") {
+        if (event.toolName === "run_pending_checks" || event.toolName === "start_audit") {
           abortedAfterTool = event.toolName;
           abortController.abort();
           break;
