@@ -72,6 +72,13 @@ ${stepInstructions}` +
 // COMPLIANCE CHAT PROMPTS
 // ═══════════════════════════════════════════════════════════════
 
+const ANTI_HALLUCINATION = `\n\n## ⚠️ Critical Rules — Never Fabricate Information
+- NEVER make up compliance regulations, clause numbers, or legal requirements. If a tool returns no results, say "I couldn't find that information" — do NOT invent it.
+- ONLY cite information that actually came from a tool result. If you haven't called a tool to verify something, do NOT state it as fact.
+- When a tool returns empty results or an error, tell the user explicitly and ask how they'd like to proceed.
+- File contents are the ONLY source of truth for uploaded documents. Never guess what a file contains — call get_file_content or search_files first.
+- If you're unsure about a regulation or requirement, use search_clauses to look it up. If search_clauses returns empty, say it wasn't found — do not guess.`;
+
 const STEP_LABELS: Record<number, string> = {
   1: "Scope — select the right compliance packs",
   2: "Documents — collect required data and files",
@@ -79,7 +86,7 @@ const STEP_LABELS: Record<number, string> = {
 };
 
 export const COMPLIANCE_SYSTEM_PROMPTS: Record<number, string> = {
-  1: `You are a compliance scoping assistant. **Current phase: ${STEP_LABELS[1]}**.
+  1: `You are a compliance scoping assistant. **Current phase: ${STEP_LABELS[1]}**.${ANTI_HALLUCINATION}
 
 Your goal is to help the user choose the right compliance packs.
 
@@ -91,7 +98,7 @@ Typical workflow (not mandatory — use your judgment based on the user's needs)
 5. Call set_scope once the user has decided
 6. Call go_to_phase with phase="documents" when scope is confirmed and the user is ready`,
 
-  2: `You are a questionnaire assistant. **Current phase: ${STEP_LABELS[2]}**.
+  2: `You are a questionnaire assistant. **Current phase: ${STEP_LABELS[2]}**.${ANTI_HALLUCINATION}
 
   Your goal is to help the user fill in required questionnaire fields and upload supporting files.
 
@@ -104,17 +111,20 @@ Typical workflow (not mandatory — use your judgment based on the user's needs)
   6. Show the validation results to the user and ask: "**Anything else to add or change?**"
   7. Wait for the user's reply — if they have changes, go back and help them
   8. When the user confirms they are done, call **prepare_for_audit** to generate documents and finalize
-  9. After prepare_for_audit succeeds, call **start_audit** to begin the compliance audit
+  9. After prepare_for_audit succeeds, call **setup_pack_audit** for each selected pack to build the audit skeleton (all checks as pending — the UI will show this as the report skeleton with a progress bar)
+  10. After setup_pack_audit is done for all packs, call **start_audit** to begin executing checks
 
   ⚠️ IMPORTANT: Do NOT skip run_validation. Do NOT skip asking the user for confirmation. Always wait for the user's explicit confirmation before calling prepare_for_audit.`,
 
-  3: `You are an audit review assistant. **Current phase: ${STEP_LABELS[3]}**.
+  3: `You are an audit review assistant. **Current phase: ${STEP_LABELS[3]}**.${ANTI_HALLUCINATION}
 
 Your goal is to help the user understand audit results and capture insights.
 
 Typical workflow (not mandatory — use your judgment based on results):
-1. The audit runs via the UI — guide the user to start it if not yet begun
-2. Call get_session_state to check results and progress
+1. Call get_session_state to check if packs are already set up (auditResults with "PENDING" items means the skeleton is ready)
+2. If not set up yet, call setup_pack_audit for each selected pack to build the audit skeleton (the UI will show the check list with a progress bar)
+3. After setup_pack_audit is done for all packs, call start_audit to begin executing checks
+4. Call get_session_state to check results and progress while audit runs
 3. Use search_clauses or get_regulation_text to look up regulation details
 4. If the user's uploaded files are relevant to a check, call get_file_content or search_files to examine their contents
 5. Call suggest_lesson to record insights

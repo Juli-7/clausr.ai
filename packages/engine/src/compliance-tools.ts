@@ -3,7 +3,7 @@ import {
   getComplianceSession, setComplianceScope, setComplianceStep,
   addComplianceDocField, addComplianceFile, removeComplianceFile,
   setComplianceValidation, hasSessionSetup,
-  setComplianceAuditRunning, clearComplianceAuditResults,
+  setComplianceAuditRunning,
   setComplianceDocumentsFinalized, getOrCreateSession,
 } from "./agent/shared/memory/repository";
 import type { ComplianceFile } from "./agent/shared/memory/repository";
@@ -296,7 +296,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     logLabel: "Attach file",
     mutates: true,
     execute: async (sessionId, input) => {
-      const { dataUrl: _, ...file } = input as unknown as ComplianceFile;
+      const { dataUrl: _, ...file } = input as unknown as ComplianceFile & { dataUrl?: string };
       addComplianceFile(sessionId, file);
       const session = buildSession(sessionId);
       const files = (session?.uploadedFiles ?? []).map(({ docType, ...rest }) => rest);
@@ -348,21 +348,6 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
         fileId: fileName, filename: fileName, extractedText: text, chunks,
         pageCount: result.pageCount, ocrConfidence: result.ocrConfidence, extractorUsed: result.extractorUsed,
       });
-
-      // Save page images for PDF highlight overlays in step 3
-      if (result.pageImages?.length) {
-        const { writeFileSync, mkdirSync } = await import("fs");
-        const { join } = await import("path");
-        const DATA_DIR = process.env.DATA_DIR || join(process.cwd(), "data");
-        const pageDir = join(DATA_DIR, "uploads", sessionId, `${fileName}.pages`);
-        mkdirSync(pageDir, { recursive: true });
-        for (let i = 0; i < result.pageImages.length; i++) {
-          const dataUrl = result.pageImages[i];
-          if (!dataUrl) continue;
-          const base64 = dataUrl.split(",")[1] ?? dataUrl;
-          writeFileSync(join(pageDir, `${i}.png`), Buffer.from(base64, "base64"));
-        }
-      }
 
       const index = chunks.map((c) => ({ id: c.id, pageNumber: c.pageNumber }));
       const firstChunks = chunks.slice(0, 3).map((c) => ({ id: c.id, pageNumber: c.pageNumber, text: c.text }));
@@ -685,12 +670,14 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       }
 
       setComplianceAuditRunning(sessionId, true);
-      clearComplianceAuditResults(sessionId);
 
-      // Phase 1: Set up each pack and immediately persist ALL checks as "wait" in auditResults
-      // This lets the frontend render the full check list + progress bar immediately
+      // Phase 1: Set up each pack if not already set up — persists ALL checks as "wait" in auditResults
+      // If setup_pack_audit was called separately, skip redundant setup
       for (const packId of auditPackIds) {
-        await setupPackAuditAndRun(sessionId, packId);
+        const existing = getPackAuditState(sessionId, packId);
+        if (!existing) {
+          await setupPackAuditAndRun(sessionId, packId);
+        }
       }
 
       // Phase 2: Run the first batch of ready checks synchronously
@@ -718,13 +705,13 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   setup_pack_audit: {
     name: "setup_pack_audit",
-    description: "Set up a pack for audit. Must precede run_pending_checks.",
+    description: "Set up a pack for audit and persist the full check skeleton (all checks as pending). Must precede run_pending_checks.",
     inputSchema: ToolSchemas.setup_pack_audit,
     logLabel: "Setup pack audit",
     mutates: true,
     execute: async (sessionId, input) => {
       const { packId } = input as { packId: string };
-      return await setupPackAudit(sessionId, packId) as unknown as Record<string, unknown>;
+      return await setupPackAuditAndRun(sessionId, packId) as unknown as Record<string, unknown>;
     },
   },
 
@@ -962,8 +949,9 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       const { keyword, regulationCodes } = input as { keyword: string; regulationCodes?: string[] };
       const api = await getRegulationApi();
       const result = await api.searchClauses({ keyword, regulationCodes });
-      if (!result.success || !result.data) return { results: [] };
-      return { results: result.data.map((r) => ({ regulationCode: r.regulationCode, clauseNumber: r.clause.number, title: r.clause.title, text: r.clause.text })) };
+      if (!result.success || !result.data) return { note: `No clauses found for "${keyword}"`, results: [] };
+      const results = result.data.map((r) => ({ regulationCode: r.regulationCode, clauseNumber: r.clause.number, title: r.clause.title, text: r.clause.text }));
+      return { results, count: results.length };
     },
   },
 
@@ -1018,10 +1006,13 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       // Mode 1: query only — vector search (falls back to FTS5)
       if (query) {
         const results = await store.searchChunks(sessionId, query);
-        return { results: results.map((r) => ({ fileName: r.fileId, excerpt: r.text, rank: r.distance })) };
+        return {
+          note: results.length === 0 ? `No matches found for "${query}"` : undefined,
+          results: results.map((r) => ({ fileName: r.fileId, excerpt: r.text, rank: r.distance })),
+        };
       }
 
-      return { results: [] };
+      return { note: "No search parameters provided. Use query for cross-file search or fileName to browse a file.", results: [] };
     },
   },
 

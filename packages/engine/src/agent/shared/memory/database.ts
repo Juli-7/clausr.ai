@@ -235,6 +235,7 @@ function runMigrations(db: Database.Database): void {
   try { db.exec("ALTER TABLE compliance_session ADD COLUMN validation_score INTEGER NOT NULL DEFAULT 0"); } catch { }
   try { db.exec("ALTER TABLE compliance_session ADD COLUMN pack_states TEXT NOT NULL DEFAULT '{}'"); } catch { }
   try { db.exec("ALTER TABLE compliance_session ADD COLUMN documents_finalized INTEGER NOT NULL DEFAULT 0"); } catch { }
+  try { db.exec("ALTER TABLE compliance_session ADD COLUMN tool_calls TEXT NOT NULL DEFAULT '[]'"); } catch { }
 
 }
 

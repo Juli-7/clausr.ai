@@ -291,13 +291,19 @@ export function addAssistantResponse(sessionId: string, response: AgentResponse)
   );
 }
 
+export function addToolMessage(sessionId: string, content: string): void {
+  getDb()
+    .prepare("INSERT INTO messages (session_id, role, content, created_at) VALUES (?, 'tool', ?, ?)")
+    .run(sessionId, content, Date.now());
+}
+
 export function getConversationHistory(
   sessionId: string
-): { role: "user" | "assistant"; content: string }[] {
+): { role: "user" | "assistant" | "tool"; content: string }[] {
   const db = getDb();
   return db
     .prepare("SELECT role, content FROM messages WHERE session_id = ? ORDER BY id ASC")
-    .all(sessionId) as { role: "user" | "assistant"; content: string }[];
+    .all(sessionId) as { role: "user" | "assistant" | "tool"; content: string }[];
 }
 
 export function getResponseCount(sessionId: string): number {
@@ -561,6 +567,7 @@ export function getComplianceSession(sessionId: string): ComplianceSessionData |
     validation_score: number;
     pack_states: string;
     documents_finalized: number;
+    tool_calls: string;
   } | undefined;
   if (!row) return null;
   return {
@@ -584,8 +591,8 @@ export function getComplianceSession(sessionId: string): ComplianceSessionData |
 export function ensureComplianceSession(sessionId: string): void {
   const db = getDb();
   db.prepare(
-    `INSERT OR IGNORE INTO compliance_session (session_id, step, selected_pack_ids, doc_data, audit_results, audit_running, audit_done, precheck_done, pack_states, updated_at)
-     VALUES (?, 1, '[]', '{}', '[]', 0, 0, 0, '{}', ?)`
+    `INSERT OR IGNORE INTO compliance_session (session_id, step, selected_pack_ids, doc_data, audit_results, audit_running, audit_done, precheck_done, pack_states, tool_calls, updated_at)
+     VALUES (?, 1, '[]', '{}', '[]', 0, 0, 0, '{}', '[]', ?)`
   ).run(sessionId, Date.now());
 }
 

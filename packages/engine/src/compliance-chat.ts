@@ -1,10 +1,10 @@
 import { streamText, tool } from "ai";
 import { createModel } from "./agent/llm/factory";
-import { addAssistantMessage, addUserMessage } from "./agent/shared/memory/repository";
+import { addAssistantMessage, addUserMessage, addToolMessage } from "./agent/shared/memory/repository";
 import { logInfo } from "./agent/pipeline/logger";
 import { COMPLIANCE_SYSTEM_PROMPTS, buildComplianceStepPrompt, type SessionState } from "./agent/pipeline/prompts";
 import type { SkillPack } from "./agent/loading/skill/loader";
-import { TOOL_DEFS } from "./compliance-tools";
+import { TOOL_DEFS, type ToolName } from "./compliance-tools";
 
 export type ComplianceChatEvent =
   | { type: "text-delta"; text: string }
@@ -71,12 +71,10 @@ export async function* complianceChat(
     model: llmModel,
     system: systemPrompt,
     stopWhen: ({ steps }) => {
-      if (steps.length >= 5) return true;
+      if (steps.length >= 10) return true;
       if (steps.length < 2) return false;
-      // Check if current step has zero text and only repeats tool calls already seen
-      // This catches the case where the LLM keeps calling the same tool without generating text
       const cur = steps[steps.length - 1]!;
-      if (cur.text?.trim()) return false; // If LLM generated text, always allow it to be sent
+      if (cur.text?.trim()) return false;
       const prevSteps = steps.slice(0, -1);
       const seen = new Set<string>();
       for (const s of prevSteps) {
@@ -84,8 +82,13 @@ export async function* complianceChat(
           seen.add(tc.toolName);
         }
       }
-      const allRepeat = (cur.toolCalls ?? []).every((tc) => seen.has(tc.toolName));
-      if (allRepeat && cur.toolCalls.length > 0) return true;
+      const repeats = (cur.toolCalls ?? []).filter((tc) => seen.has(tc.toolName));
+      if (repeats.length === 0) return false;
+      const allMutating = repeats.every((tc) => {
+        const def = TOOL_DEFS[tc.toolName as ToolName];
+        return def?.mutates;
+      });
+      if (allMutating) return true;
       return false;
     },
     maxRetries: 3,
@@ -109,6 +112,9 @@ export async function* complianceChat(
         fullText += chunk;
         yield { type: "text-delta", text: chunk };
       } else if (event.type === "tool-call") {
+        if (event.toolName !== "get_session_state") {
+          addToolMessage(sessionId, event.toolName);
+        }
         yield { type: "tool-call", toolName: event.toolName, args: event.input };
       } else if (event.type === "tool-result") {
         yield { type: "tool-result", toolName: event.toolName, result: event.output };
