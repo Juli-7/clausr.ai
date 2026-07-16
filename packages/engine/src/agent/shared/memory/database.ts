@@ -236,6 +236,23 @@ function runMigrations(db: Database.Database): void {
   try { db.exec("ALTER TABLE compliance_session ADD COLUMN pack_states TEXT NOT NULL DEFAULT '{}'"); } catch { }
   try { db.exec("ALTER TABLE compliance_session ADD COLUMN documents_finalized INTEGER NOT NULL DEFAULT 0"); } catch { }
   try { db.exec("ALTER TABLE compliance_session ADD COLUMN tool_calls TEXT NOT NULL DEFAULT '[]'"); } catch { }
+  try {
+    const row = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='messages'").get() as { sql: string } | undefined;
+    if (row && !row.sql.includes("'tool'")) {
+      db.exec(`
+        CREATE TABLE messages_v2 (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          session_id TEXT NOT NULL REFERENCES sessions(id),
+          role TEXT NOT NULL CHECK(role IN ('user', 'assistant', 'tool')),
+          content TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        )
+      `);
+      db.exec("INSERT INTO messages_v2 SELECT * FROM messages");
+      db.exec("DROP TABLE messages");
+      db.exec("ALTER TABLE messages_v2 RENAME TO messages");
+    }
+  } catch { /* table doesn't exist yet */ }
 
 }
 
