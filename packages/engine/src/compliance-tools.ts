@@ -3,7 +3,7 @@ import {
   getComplianceSession, setComplianceScope, setComplianceStep,
   addComplianceDocField, addComplianceFile, removeComplianceFile,
   setComplianceValidation, hasSessionSetup,
-  setComplianceAuditRunning,
+  setComplianceAuditRunning, setComplianceAuditDone,
   setComplianceDocumentsFinalized, getOrCreateSession,
 } from "./agent/shared/memory/repository";
 import type { ComplianceFile } from "./agent/shared/memory/repository";
@@ -672,7 +672,6 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       setComplianceAuditRunning(sessionId, true);
 
       // Phase 1: Set up each pack if not already set up — persists ALL checks as "wait" in auditResults
-      // If setup_pack_audit was called separately, skip redundant setup
       for (const packId of auditPackIds) {
         const existing = getPackAuditState(sessionId, packId);
         if (!existing) {
@@ -680,25 +679,15 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
         }
       }
 
-      // Phase 2: Run the first batch of ready checks synchronously
-      // runPendingChecks persists results incrementally per-check, so polling picks up progress
-      const results: Record<string, unknown>[] = [];
-      let totalPromptTokens = 0;
-      let totalCompletionTokens = 0;
-      for (const packId of auditPackIds) {
-        const runResult = await runPendingChecks(sessionId, packId);
-        totalPromptTokens += runResult.usage.promptTokens;
-        totalCompletionTokens += runResult.usage.completionTokens;
-        results.push({ packId, checksCompleted: runResult.completed, checksFailed: runResult.failed });
-      }
+      // Phase 2: Run checks in background — writes results progressively to DB
+      // Frontend polls /audit/status and sees checks appear one by one
+      runAuditChecksInBackground(sessionId, auditPackIds);
 
       return {
         auditStarted: true,
         packIds: auditPackIds,
         validationPassed: missingFields.length === 0,
         validationHints: missingFields.length > 0 ? missingFields.map((m) => `[${m.pack}] ${m.field}`) : [],
-        packResults: results,
-        usage: { promptTokens: totalPromptTokens, completionTokens: totalCompletionTokens },
       };
     },
   },
@@ -1040,6 +1029,22 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
   },
 
 };
+
+function runAuditChecksInBackground(sessionId: string, packIds: string[]): void {
+  (async () => {
+    try {
+      for (const packId of packIds) {
+        for (let iter = 0; iter < 50; iter++) {
+          const result = await runPendingChecks(sessionId, packId);
+          if (result.allDone || result.blocked) break;
+        }
+      }
+      setComplianceAuditDone(sessionId, true);
+    } catch (err) {
+      console.error("[audit] background check execution failed:", err);
+    }
+  })();
+}
 
 export function getTool(name: string) {
   return TOOL_DEFS[name as ToolName];
