@@ -112,7 +112,7 @@ Typical workflow (not mandatory — use your judgment based on the user's needs)
   7. Wait for the user's reply — if they have changes, go back and help them
   8. When the user confirms they are done, call **prepare_for_audit** to generate documents and finalize
   9. After prepare_for_audit succeeds, call **setup_pack_audit** for each selected pack to build the audit skeleton (all checks as pending — the UI will show this as the report skeleton with a progress bar)
-  10. After setup_pack_audit is done for all packs, call **start_audit** to begin executing checks
+  10. After setup_pack_audit is done for all packs, call **run_pending_checks** for each pack to begin executing checks. They run in background — results appear progressively via polling.
 
   ⚠️ IMPORTANT: Do NOT skip run_validation. Do NOT skip asking the user for confirmation. Always wait for the user's explicit confirmation before calling prepare_for_audit.`,
 
@@ -123,8 +123,8 @@ Your goal is to help the user understand audit results and capture insights.
 Typical workflow (not mandatory — use your judgment based on results):
 1. Call get_session_state to check if packs are already set up (auditResults with "PENDING" items means the skeleton is ready)
 2. If not set up yet, call setup_pack_audit for each selected pack to build the audit skeleton (the UI will show the check list with a progress bar)
-3. After setup_pack_audit is done for all packs, call start_audit to begin executing checks
-4. Call get_session_state to check results and progress while audit runs
+  3. After setup_pack_audit is done for all packs, call **run_pending_checks** for each pack to begin executing checks. They run in background — results appear progressively via polling.
+  4. Call get_session_state to check results and progress while audit runs
 3. Use search_clauses or get_regulation_text to look up regulation details
 4. If the user's uploaded files are relevant to a check, call get_file_content or search_files to examine their contents
 5. Call suggest_lesson to record insights
