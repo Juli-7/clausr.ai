@@ -265,33 +265,6 @@ export async function runPendingChecks(
   const finalAgentResponse = await buildAgentResponse(packState, sessionId);
   setComplianceAgentResponse(sessionId, packId, JSON.stringify(finalAgentResponse));
 
-  // Audit: resolve all citation refs from completed checks
-  const doneEntries = Object.entries(packState.checkStates).filter(
-    ([_, cs]) => cs.state === "done" && cs.result?.citationRef?.length,
-  );
-  const allCitationRefs = [...new Set(doneEntries.flatMap(([_, cs]) => cs.result!.citationRef))];
-  if (allCitationRefs.length > 0) {
-    const unresolved: string[] = [];
-    for (const ref of allCitationRefs) {
-      try {
-        const api = await getRegulationApi();
-        const dot = ref.indexOf(".");
-        if (dot === -1) { unresolved.push(ref); continue; }
-        const regCode = ref.substring(0, dot);
-        const clauseNum = ref.substring(dot + 1);
-        const result = await api.getClause({ regulationCode: regCode, clauseNumber: clauseNum });
-        if (!result.success || !result.data) {
-          unresolved.push(ref);
-        }
-      } catch {
-        unresolved.push(ref);
-      }
-    }
-    if (unresolved.length > 0) {
-      logPipeline(`  [AUDIT] ⚠ ${unresolved.length} unresolvable citation(s): ${unresolved.join(", ")} — text unavailable for popover`);
-    }
-  }
-
   const allDone = Object.values(packState.checkStates).every(
     (cs) => cs.state === "done" || cs.state === "failed"
   );
@@ -578,7 +551,6 @@ async function buildAgentResponse(packState: PackAuditState, sessionId: string):
   )];
   const resolvedMap = new Map<string, Record<string, unknown>>();
   if (allRefs.length > 0) {
-    // Fetch files once and reuse for all resolveCitation calls to avoid O(n²) store reads
     let cachedFiles: ProcessedFile[] | undefined;
     try {
       cachedFiles = await getDocStore().getFiles(sessionId);
@@ -592,6 +564,31 @@ async function buildAgentResponse(packState: PackAuditState, sessionId: string):
         resolvedMap.set(allRefs[i]!, r.value);
       }
     }
+  }
+
+  // Resolve regulation citation refs → clauseTexts map
+  const allCitationRefs = [...new Set(
+    allEntries
+      .filter(([_, cs]) => cs.state === "done")
+      .flatMap(([_, cs]) => cs.result?.citationRef ?? [])
+  )];
+  const clauseTexts: Record<string, string> = {};
+  if (allCitationRefs.length > 0) {
+    try {
+      const api = await getRegulationApi();
+      await Promise.allSettled(allCitationRefs.map(async (ref) => {
+        const dot = ref.indexOf(".");
+        if (dot === -1) return;
+        const regCode = ref.substring(0, dot);
+        const clauseNum = ref.substring(dot + 1);
+        const result = await api.getClause({ regulationCode: regCode, clauseNumber: clauseNum });
+        if (result.success && result.data) {
+          clauseTexts[ref] = result.data.title
+            ? `\xA7${result.data.number} ${result.data.title}\n${result.data.text}`
+            : `\xA7${result.data.number}\n${result.data.text}`;
+        }
+      }));
+    } catch { /* clause texts are optional; leave empty */ }
   }
 
   // Build checkResults for ALL entries — PENDING for not-yet-complete checks
@@ -646,7 +643,7 @@ async function buildAgentResponse(packState: PackAuditState, sessionId: string):
     reasoning: "",
     citations: [],
     sourceCitations,
-    clauseTexts: {},
+    clauseTexts: Object.keys(clauseTexts).length > 0 ? clauseTexts : undefined,
     round: 1,
     sessionId,
   };

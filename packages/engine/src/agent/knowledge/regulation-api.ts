@@ -32,10 +32,12 @@ let _instance: IRegulationApi | null = null;
 
 export async function getRegulationApi(): Promise<IRegulationApi> {
   if (!_instance) {
-    const { MockRegulationApi } = await import("./mock-regulation-api");
-    _instance = new MockRegulationApi();
+    throw new Error(
+      "No RegulationApi registered. Call setRegulationApi() before getRegulationApi(). " +
+      "In raipple-saas this is done via syncEngineConfig()."
+    );
   }
-  return _instance as IRegulationApi;
+  return _instance;
 }
 
 export function setRegulationApi(api: IRegulationApi): void {
