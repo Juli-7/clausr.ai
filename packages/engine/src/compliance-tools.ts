@@ -737,7 +737,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   get_pack_audit_state: {
     name: "get_pack_audit_state",
-    description: "Get audit state: per-check status/verdicts/reasoning.",
+    description: "Get audit state: per-check status/verdicts/reasoning. Results appear progressively over 10-30s — poll at most every 15 seconds.",
     inputSchema: ToolSchemas.get_pack_audit_state,
     logLabel: "Get pack audit state",
     mutates: false,
