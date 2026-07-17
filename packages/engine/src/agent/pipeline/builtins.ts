@@ -1,7 +1,6 @@
 import { getRegulationApi } from "../knowledge/regulation-api";
 import type {
   PipelineContext,
-  CitationPaletteEntry,
 } from "./pipeline-context";
 import type { StepResult } from "./types";
 import { logPipeline } from "./logger";
@@ -10,113 +9,89 @@ import { logPipeline } from "./logger";
 
 export async function loadRegulationSummaries(ctx: PipelineContext): Promise<StepResult> {
   try {
-    const regulationIds = ctx.skill.regulationIds;
+    const checks = ctx.skill.checks;
 
-    if (regulationIds.length === 0) {
-      logPipeline(`  [BUILTIN] load-summaries: no regulation IDs, skipping`);
+    // Collect unique clause refs from checks (e.g. "R48.6.2")
+    const clauseRefs = new Set<string>();
+    for (const check of checks) {
+      if (check.clause) clauseRefs.add(check.clause);
+    }
+
+    if (clauseRefs.size === 0) {
+      logPipeline(`  [BUILTIN] load-summaries: no clause refs in checks, skipping`);
       return { success: true };
     }
 
-    logPipeline(`  [BUILTIN] load-summaries: ${regulationIds.join(", ")}`);
+    logPipeline(`  [BUILTIN] load-summaries: ${[...clauseRefs].join(", ")}`);
 
     const api = await getRegulationApi();
-    const regulations = (
-      await Promise.all(
-        regulationIds.map(async (id) => {
-          const resolved = api.resolveCode(id);
-          if (!resolved) return null;
-          const result = await api.getRegulation({ code: resolved });
-          return result.success ? result.data : null;
-        })
-      )
-    ).filter((r): r is NonNullable<typeof r> => r !== null);
 
-    // Tier 1: Build compact summaries (clause numbers + titles only) + full reference texts
+    // Resolve each clause ref into { regulationCode, clauseNumber }
+    const refs: { regulationCode: string; clauseNumber: string }[] = [];
+    const regCodes = new Set<string>();
+    for (const ref of clauseRefs) {
+      const dot = ref.indexOf(".");
+      if (dot === -1) continue;
+      const regCode = ref.substring(0, dot);
+      const clauseNum = ref.substring(dot + 1);
+      const resolved = await api.resolveCode(regCode);
+      if (resolved) {
+        refs.push({ regulationCode: resolved, clauseNumber: clauseNum });
+        regCodes.add(resolved);
+      } else {
+        logPipeline(`  [BUILTIN] ⚠ could not resolve regulation code "${regCode}" from ref "${ref}"`);
+      }
+    }
+
+    // Query clause texts (to get titles) + regulation metadata
+    const clauseResults = await api.getClauses({ refs });
+    if (!clauseResults.success) {
+      return { success: false, error: `Failed to load clauses: ${clauseResults.error}` };
+    }
+
+    // Load regulation metadata for each unique regulation code
+    const metaMap = new Map<string, { title: string; description: string }>();
+    for (const code of regCodes) {
+      const meta = await api.getRegulationMeta({ code });
+      if (meta.success && meta.data) {
+        metaMap.set(code, { title: meta.data.title, description: meta.data.description });
+      }
+    }
+
+    // Build summaries: clauseIndex from clause results + metadata from metaMap
     const summaries: {
       code: string;
       title: string;
       description: string;
       clauseIndex: { number: string; title: string }[];
     }[] = [];
-    const refTexts: string[] = [];
 
-    for (const reg of regulations) {
-      const header = `--- ${reg.code} ---`;
-      const bodyLines: string[] = [];
-      const clauseIndex: { number: string; title: string }[] = [];
+    const summariesByCode = new Map<string, { number: string; title: string }[]>();
+    for (const item of clauseResults.data ?? []) {
+      const code = item.regulationCode;
+      if (!summariesByCode.has(code)) summariesByCode.set(code, []);
+      summariesByCode.get(code)!.push({ number: item.clause.number, title: item.clause.title });
+    }
 
-      for (const clause of reg.clauses) {
-        const clauseText = clause.title
-          ? `\xA7${clause.number} ${clause.title}\n${clause.text}`
-          : `\xA7${clause.number}\n${clause.text}`;
-        bodyLines.push(clauseText);
-        clauseIndex.push({ number: clause.number, title: clause.title });
-      }
-
-      refTexts.push(`${header}\n${bodyLines.join("\n\n")}`);
+    for (const [code, clauseIndex] of summariesByCode) {
+      const meta = metaMap.get(code);
       summaries.push({
-        code: reg.code,
-        title: reg.title,
-        description: reg.description,
+        code,
+        title: meta?.title ?? code,
+        description: meta?.description ?? "",
         clauseIndex,
       });
     }
 
-    logPipeline(`  [BUILTIN] loaded ${summaries.length} regulation summaries`);
-
-    ctx.palette.loadReferences(refTexts.map((rt) => {
-      let code = "unknown.md";
-      const headerStart = rt.indexOf("--- ");
-      if (headerStart !== -1) {
-        const headerEnd = rt.indexOf(" ---\n", headerStart + 4);
-        if (headerEnd !== -1) {
-          code = rt.substring(headerStart + 4, headerEnd);
-        }
-      }
-      return { filename: code, content: rt };
-    }));
+    logPipeline(`  [BUILTIN] loaded ${summaries.length} regulation summaries (${[...clauseRefs].length} clause refs)`);
 
     ctx.palette.loadSummaries(summaries);
 
-    // Tier 2: Eagerly load clause texts for checks' declared clause fields
-    const preloadedEntries: CitationPaletteEntry[] = [];
-    const seen = new Set<string>();
-
-    for (const check of ctx.skill.checks) {
-      if (!check.clause) continue;
-      for (const reg of regulations) {
-        let clauseNumber: string;
-        if (check.clause.startsWith(reg.code + ".")) {
-          clauseNumber = check.clause.substring(reg.code.length + 1);
-        } else {
-          clauseNumber = check.clause;
-        }
-        const clause = reg.clauses.find((c) => c.number === clauseNumber);
-        if (clause) {
-          const ref = `${reg.code}.${clause.number}`;
-          if (!seen.has(ref)) {
-            seen.add(ref);
-            const text = clause.title
-              ? `\xA7${clause.number} ${clause.title}\n${clause.text}`
-              : `\xA7${clause.number}\n${clause.text}`;
-            preloadedEntries.push({
-              id: ref,
-              regulation: reg.code,
-              clause: clause.number,
-              text,
-            });
-          }
-          break;
-        }
-      }
-    }
-
-    ctx.palette.addPaletteEntries(preloadedEntries);
-    logPipeline(`  [BUILTIN] pre-loaded ${preloadedEntries.length} check-related clause(s): ${preloadedEntries.map((e) => e.id).join(", ")}`);
+    // No longer pre-loading full clause texts — LLM fetches them via tools
 
     ctx.steps.setRaw("referenceSummary", {
-      references: ctx.palette.getReferences().map((r) => r.filename),
-      citationCount: preloadedEntries.length,
+      references: summaries.map((s) => s.code),
+      citationCount: summaries.length,
       sourceCount: ctx.files.getFiles().length,
     });
 

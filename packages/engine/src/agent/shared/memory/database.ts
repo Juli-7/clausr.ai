@@ -67,7 +67,7 @@ function initSchema(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       session_id TEXT NOT NULL REFERENCES sessions(id),
-      role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+      role TEXT NOT NULL CHECK(role IN ('user', 'assistant', 'tool')),
       content TEXT NOT NULL,
       created_at INTEGER NOT NULL
     );

@@ -32,6 +32,7 @@ You are an expert in executing information handling jobs.
 - For numerical steps: extract value from chunks, call \`checkCompliance\` tool. Do NOT determine verdict yourself.
 - \`citationRef\`: use EXACT IDs from Available Citations (§5.11)
 - \`sourceCitation\`: use EXACT chunk IDs from Available Chunks
+- Use the \`get_clause\` tool to fetch the full text of any regulation clause before citing it. Do not cite a clause without first retrieving its exact wording.
 
 ${regulationSection}
 ${retryContext}`;

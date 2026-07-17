@@ -4,6 +4,7 @@ import { createModel } from "../../llm/factory";
 import { runScript } from "./script-runner";
 import { ComplianceCheckSchema } from "../../shared/schemas";
 import { executeComplianceCheck } from "../../pipeline/builtins";
+import { getRegulationApi } from "../../knowledge/regulation-api";
 import { buildSystemPrompt, buildUserMessage } from "../../pipeline/prompts";
 import type { ExecutableStep } from "../types";
 import type { PipelineContext, CheckResult, CitationPaletteEntry } from "../pipeline-context";
@@ -59,6 +60,33 @@ export async function executeLlmToolStep(
         },
       });
     }
+
+    // Always available: fetch full clause text from regulation DB
+    tools.get_clause = tool({
+      description: "Get the full text of a regulation clause by its ID (e.g. R48.6.2). Use this before citing a clause to get the exact wording.",
+      inputSchema: z.object({
+        ref: z.string().describe("Clause reference, e.g. R48.6.2"),
+      }),
+      execute: async (input) => {
+        const { ref } = input as { ref: string };
+        logPipeline(`  [TOOL EXEC] get_clause: ${ref}`);
+        const dot = ref.indexOf(".");
+        if (dot === -1) return { error: `Invalid clause ref: ${ref}` };
+        const regCode = ref.substring(0, dot);
+        const clauseNum = ref.substring(dot + 1);
+        const api = await getRegulationApi();
+        const result = await api.getClause({ regulationCode: regCode, clauseNumber: clauseNum });
+        if (!result.success || !result.data) {
+          logPipeline(`  [TOOL EXEC] get_clause: not found`);
+          return { error: `Clause ${ref} not found` };
+        }
+        const text = result.data.title
+          ? `\xA7${result.data.number} ${result.data.title}\n${result.data.text}`
+          : `\xA7${result.data.number}\n${result.data.text}`;
+        logPipeline(`  [TOOL EXEC] get_clause: ${text.slice(0, 120)}...`);
+        return { ref, text };
+      },
+    });
 
     for (const script of scripts) {
       if (script.name === "compliance-check") continue;
@@ -129,6 +157,7 @@ export async function executeLlmToolStep(
         logPipeline(`  [LLM+TOOL] step=${step.number} onStepFinish: toolResults=${event.toolResults?.length ?? 0}`);
         if (!event.toolResults?.length) return;
         for (const tr of event.toolResults) {
+          if (tr.toolName !== "checkCompliance") continue;
           const input = tr.input as { value: number; limit: number | string; operator: string };
           const output = tr.output as { status?: string; comparison?: string; note?: string };
           const status = output.status === "pass" ? "pass" : "fail";
@@ -186,7 +215,7 @@ export async function executeLlmToolStep(
       };
     }
 
-    const checkResult = buildCheckResult({
+    const checkResult = await buildCheckResult({
       finalObject,
       toolCalled,
       perCheckResults,
@@ -332,7 +361,7 @@ interface BuildCheckResultParams {
   fileChunks: string;
 }
 
-function buildCheckResult(params: BuildCheckResultParams): CheckResult {
+async function buildCheckResult(params: BuildCheckResultParams): Promise<CheckResult> {
   const { finalObject, toolCalled, perCheckResults, ctx, step, fileChunks } = params;
   const currentCheck = ctx.skill.checks[step.number - 1];
   const checkDef = ctx.skill.checks[step.number - 1];
@@ -341,7 +370,8 @@ function buildCheckResult(params: BuildCheckResultParams): CheckResult {
   const clause = currentCheck?.clause ?? "";
   const palette = ctx.palette.getCitationPalette();
 
-  const citRef = resolveCitations(finalObject.citationRef, palette, clause);
+  let citRef = resolveCitations(finalObject.citationRef, palette, clause);
+  citRef = await lazyResolveCitations(citRef, ctx);
   const srcCit = resolveSourceCitations(finalObject.sourceCitation, fileChunks);
 
   if (toolCalled && perCheckResults.length > 0) {
@@ -390,6 +420,21 @@ function resolveCitations(
     return [clause];
   }
   return [];
+}
+
+export async function lazyResolveCitations(
+  refs: string[],
+  ctx: PipelineContext,
+): Promise<string[]> {
+  const palette = ctx.palette.getCitationPalette();
+  const missing: string[] = [];
+  for (const ref of refs) {
+    if (!palette.some((e) => e.id === ref)) missing.push(ref);
+  }
+  if (missing.length === 0) return refs;
+
+  await ctx.palette.resolveMissingRefs(missing);
+  return refs;
 }
 
 function resolveSourceCitations(

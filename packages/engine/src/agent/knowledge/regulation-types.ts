@@ -78,6 +78,39 @@ export interface SearchClausesResponse {
   error?: string;
 }
 
+// ── Regulation metadata (lightweight, no clauses/versions) ──
+
+export interface RegulationMeta {
+  id: string;
+  code: string;
+  title: string;
+  description: string;
+  jurisdiction: string;
+  crossReferences?: string[];
+}
+
+export interface GetRegulationMetaRequest {
+  code: string;
+}
+
+export interface GetRegulationMetaResponse {
+  success: boolean;
+  data?: RegulationMeta;
+  error?: string;
+}
+
+// ── Batch clause query ──
+
+export interface GetClausesRequest {
+  refs: { regulationCode: string; clauseNumber: string; version?: string }[];
+}
+
+export interface GetClausesResponse {
+  success: boolean;
+  data?: { clause: Clause; regulationCode: string }[];
+  error?: string;
+}
+
 // ── Validation schemas ──
 
 export const ClauseSchema = z.object({

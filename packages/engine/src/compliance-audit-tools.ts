@@ -4,6 +4,7 @@ import { generateStepsFromChecks } from "./agent/loading/generate-steps";
 import { executeLlmToolStep, parseLlmOutput } from "./agent/pipeline/executors/llm-executor";
 import { generateCorrelationId } from "./agent/pipeline/errors";
 import { getDocStore } from "./agent/user-info/vector-store";
+import { getRegulationApi } from "./agent/knowledge/regulation-api";
 import { logPipeline } from "./agent/pipeline/logger";
 import {
   getComplianceSession,
@@ -263,6 +264,33 @@ export async function runPendingChecks(
   // Ensure agent response is built at batch end (catches failed checks that didn't persist one)
   const finalAgentResponse = await buildAgentResponse(packState, sessionId);
   setComplianceAgentResponse(sessionId, packId, JSON.stringify(finalAgentResponse));
+
+  // Audit: resolve all citation refs from completed checks
+  const doneEntries = Object.entries(packState.checkStates).filter(
+    ([_, cs]) => cs.state === "done" && cs.result?.citationRef?.length,
+  );
+  const allCitationRefs = [...new Set(doneEntries.flatMap(([_, cs]) => cs.result!.citationRef))];
+  if (allCitationRefs.length > 0) {
+    const unresolved: string[] = [];
+    for (const ref of allCitationRefs) {
+      try {
+        const api = await getRegulationApi();
+        const dot = ref.indexOf(".");
+        if (dot === -1) { unresolved.push(ref); continue; }
+        const regCode = ref.substring(0, dot);
+        const clauseNum = ref.substring(dot + 1);
+        const result = await api.getClause({ regulationCode: regCode, clauseNumber: clauseNum });
+        if (!result.success || !result.data) {
+          unresolved.push(ref);
+        }
+      } catch {
+        unresolved.push(ref);
+      }
+    }
+    if (unresolved.length > 0) {
+      logPipeline(`  [AUDIT] ⚠ ${unresolved.length} unresolvable citation(s): ${unresolved.join(", ")} — text unavailable for popover`);
+    }
+  }
 
   const allDone = Object.values(packState.checkStates).every(
     (cs) => cs.state === "done" || cs.state === "failed"

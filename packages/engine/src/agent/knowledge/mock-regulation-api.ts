@@ -7,6 +7,10 @@ import type {
   GetRegulationResponse,
   GetClauseRequest,
   GetClauseResponse,
+  GetClausesRequest,
+  GetClausesResponse,
+  GetRegulationMetaRequest,
+  GetRegulationMetaResponse,
   ListRegulationsRequest,
   ListRegulationsResponse,
   SearchClausesRequest,
@@ -146,15 +150,40 @@ function rowToRegulation(row: Record<string, unknown>, db: Database.Database): R
 }
 
 export class MockRegulationApi implements IRegulationApi {
-  resolveCode(rawCode: string): string | null {
+  async resolveCode(rawCode: string): Promise<string | null> {
     const db = getDb();
     const row = db.prepare("SELECT code FROM code_aliases WHERE alias = ?").get(rawCode) as { code: string } | undefined;
     return row?.code ?? null;
   }
 
+  async getRegulationMeta(req: GetRegulationMetaRequest): Promise<GetRegulationMetaResponse> {
+    try {
+      const code = await this.resolveCode(req.code);
+      if (!code) return { success: false, error: `Unknown regulation code: ${req.code}` };
+
+      const db = getDb();
+      const row = db.prepare("SELECT id, code, title, description, jurisdiction, cross_references FROM regulations WHERE code = ?").get(code) as Record<string, unknown> | undefined;
+      if (!row) return { success: false, error: `Regulation ${code} not found` };
+
+      return {
+        success: true,
+        data: {
+          id: row.id as string,
+          code: row.code as string,
+          title: row.title as string,
+          description: row.description as string,
+          jurisdiction: row.jurisdiction as string,
+          crossReferences: JSON.parse(row.cross_references as string),
+        },
+      };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
+    }
+  }
+
   async getRegulation(req: GetRegulationRequest): Promise<GetRegulationResponse> {
     try {
-      const code = this.resolveCode(req.code);
+      const code = await this.resolveCode(req.code);
       if (!code) return { success: false, error: `Unknown regulation code: ${req.code}` };
 
       const db = getDb();
@@ -176,7 +205,7 @@ export class MockRegulationApi implements IRegulationApi {
 
   async getClause(req: GetClauseRequest): Promise<GetClauseResponse> {
     try {
-      const code = this.resolveCode(req.regulationCode);
+      const code = await this.resolveCode(req.regulationCode);
       if (!code) return { success: false, error: `Unknown regulation code: ${req.regulationCode}` };
 
       const db = getDb();
@@ -184,6 +213,29 @@ export class MockRegulationApi implements IRegulationApi {
       if (!row) return { success: false, error: `Clause ${req.clauseNumber} not found in regulation ${code}` };
 
       return { success: true, data: row, regulationCode: code };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
+    }
+  }
+
+  async getClauses(req: GetClausesRequest): Promise<GetClausesResponse> {
+    try {
+      const db = getDb();
+      const results: { clause: Clause; regulationCode: string }[] = [];
+
+      for (const ref of req.refs) {
+        const code = await this.resolveCode(ref.regulationCode);
+        if (!code) continue;
+        const row = db.prepare("SELECT id, number, title, text, parent_clause_id AS parentClauseId FROM clauses WHERE regulation_code = ? AND number = ?").get(code, ref.clauseNumber) as (Clause & { parent_clause_id?: string }) | undefined;
+        if (row) {
+          results.push({
+            clause: { id: row.id, number: row.number, title: row.title, text: row.text, parentClauseId: row.parentClauseId },
+            regulationCode: code,
+          });
+        }
+      }
+
+      return { success: true, data: results };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
     }
@@ -223,7 +275,7 @@ export class MockRegulationApi implements IRegulationApi {
       const params: unknown[] = [kw, kw, kw];
 
       if (req.regulationCodes && req.regulationCodes.length > 0) {
-        const codes = req.regulationCodes.map((c) => this.resolveCode(c)).filter(Boolean) as string[];
+        const codes = (await Promise.all(req.regulationCodes.map((c) => this.resolveCode(c)))).filter(Boolean) as string[];
         if (codes.length > 0) {
           query += ` AND c.regulation_code IN (${codes.map(() => "?").join(",")})`;
           params.push(...codes);
