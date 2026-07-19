@@ -35,6 +35,7 @@ export interface ComplianceSession {
   auditRunning: boolean;
   agentResponses: Record<string, string>;
   comments: string;
+  toolCalls: { tool: string; result: unknown }[];
   validationChecks?: ValidationCheck[];
   validationScore?: number;
   packStates: Record<string, unknown>;
@@ -85,6 +86,7 @@ export function buildSession(id: string): ComplianceSession | undefined {
     auditRunning: cs.auditRunning,
     agentResponses: cs.agentResponses,
     comments: cs.comments,
+    toolCalls: cs.toolCalls,
     validationChecks: cs.validationChecks as ValidationCheck[] | undefined,
     validationScore: cs.validationScore,
     packStates: cs.packStates,

@@ -548,6 +548,7 @@ export interface ComplianceSessionData {
   packStates: Record<string, unknown>;
   documentsFinalized: boolean;
   comments: string;
+  toolCalls: { tool: string; result: unknown }[];
 }
 
 export function getComplianceSession(sessionId: string): ComplianceSessionData | null {
@@ -585,6 +586,7 @@ export function getComplianceSession(sessionId: string): ComplianceSessionData |
     packStates: safeJsonParse(row.pack_states, {}),
     documentsFinalized: row.documents_finalized === 1,
     comments: row.comments ?? "[]",
+    toolCalls: safeJsonParse(row.tool_calls, []),
   };
 }
 
@@ -702,6 +704,17 @@ export function setCompliancePackStates(sessionId: string, packStates: Record<st
 export function getCompliancePackStates(sessionId: string): Record<string, unknown> {
   const session = getComplianceSession(sessionId);
   return session?.packStates ?? {};
+}
+
+export function setComplianceToolCalls(sessionId: string, toolCallsData: { tool: string; result: unknown }[]): void {
+  getDb().prepare("UPDATE compliance_session SET tool_calls = ?, updated_at = ? WHERE session_id = ?").run(JSON.stringify(toolCallsData), Date.now(), sessionId);
+}
+
+export function getComplianceToolCalls(sessionId: string): { tool: string; result: unknown }[] {
+  const db = getDb();
+  const row = db.prepare("SELECT tool_calls FROM compliance_session WHERE session_id = ?").get(sessionId) as { tool_calls: string } | undefined;
+  if (!row) return [];
+  try { return JSON.parse(row.tool_calls); } catch { return []; }
 }
 
 

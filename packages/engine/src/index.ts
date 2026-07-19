@@ -15,6 +15,8 @@ export {
   getConversationHistory,
   getResponsesForSession,
   getSessionFiles,
+  setComplianceToolCalls,
+  getComplianceToolCalls,
 } from "./agent/shared/memory/repository";
 
 export { buildSession } from "./compliance-session";
