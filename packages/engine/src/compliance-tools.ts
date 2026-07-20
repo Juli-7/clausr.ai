@@ -1085,7 +1085,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       const plans = getComplianceTestPlans(sessionId);
       const idx = plans.findIndex((p) => p.checkId === checkId);
       if (idx < 0) return { error: `No test plan found for check "${checkId}" — call save_test_plan first` };
-      plans[idx] = { checkId, ...plans[idx], status: status as "pending" | "planned" | "submitted" | "pass" | "fail", resultSummary };
+      plans[idx] = { ...plans[idx], checkId, status: status as "pending" | "planned" | "submitted" | "pass" | "fail", resultSummary };
       setComplianceTestPlans(sessionId, plans);
       return { updated: true, checkId, status };
     },
