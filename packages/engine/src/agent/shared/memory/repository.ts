@@ -533,6 +533,14 @@ export interface DocFieldValue {
   citationRef?: string[];
 }
 
+export interface TestPlanEntry {
+  checkId: string;
+  status: "pending" | "planned" | "submitted" | "pass" | "fail";
+  standardProcedure?: string;
+  adaptedProcedure?: string;
+  resultSummary?: string;
+}
+
 export interface ComplianceSessionData {
   id: string;
   step: 1 | 2 | 3;
@@ -549,6 +557,7 @@ export interface ComplianceSessionData {
   documentsFinalized: boolean;
   comments: string;
   toolCalls: { tool: string; result: unknown }[];
+  testPlans: TestPlanEntry[];
 }
 
 export function getComplianceSession(sessionId: string): ComplianceSessionData | null {
@@ -587,6 +596,7 @@ export function getComplianceSession(sessionId: string): ComplianceSessionData |
     documentsFinalized: row.documents_finalized === 1,
     comments: row.comments ?? "[]",
     toolCalls: safeJsonParse(row.tool_calls, []),
+    testPlans: safeJsonParse((row as any).test_plans, []),
   };
 }
 
@@ -596,6 +606,28 @@ export function ensureComplianceSession(sessionId: string): void {
     `INSERT OR IGNORE INTO compliance_session (session_id, step, selected_pack_ids, doc_data, audit_results, audit_running, audit_done, precheck_done, pack_states, tool_calls, updated_at)
      VALUES (?, 1, '[]', '{}', '[]', 0, 0, 0, '{}', '[]', ?)`
   ).run(sessionId, Date.now());
+}
+
+export function setComplianceTestPlans(sessionId: string, testPlans: TestPlanEntry[]): void {
+  getDb().prepare("UPDATE compliance_session SET test_plans = ?, updated_at = ? WHERE session_id = ?")
+    .run(JSON.stringify(testPlans), Date.now(), sessionId);
+}
+
+export function getComplianceTestPlans(sessionId: string): TestPlanEntry[] {
+  const session = getComplianceSession(sessionId);
+  return session?.testPlans ?? [];
+}
+
+export function updateComplianceTestPlan(sessionId: string, checkId: string, update: { status?: TestPlanEntry["status"]; standardProcedure?: string; adaptedProcedure?: string; resultSummary?: string }): void {
+  const plans = getComplianceTestPlans(sessionId);
+  const idx = plans.findIndex((p) => p.checkId === checkId);
+  if (idx >= 0) {
+    const existing = plans[idx]!;
+    plans[idx] = { checkId, status: update.status ?? existing.status, standardProcedure: update.standardProcedure ?? existing.standardProcedure, adaptedProcedure: update.adaptedProcedure ?? existing.adaptedProcedure, resultSummary: update.resultSummary ?? existing.resultSummary };
+  } else {
+    plans.push({ checkId, status: update.status ?? "pending", standardProcedure: update.standardProcedure, adaptedProcedure: update.adaptedProcedure, resultSummary: update.resultSummary });
+  }
+  setComplianceTestPlans(sessionId, plans);
 }
 
 export function setComplianceStep(sessionId: string, step: 1 | 2 | 3): void {

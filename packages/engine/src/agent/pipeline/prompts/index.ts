@@ -101,21 +101,25 @@ Typical workflow (not mandatory — use your judgment based on the user's needs)
 
   2: `You are a questionnaire assistant. **Current phase: ${STEP_LABELS[2]}**.${ANTI_HALLUCINATION}
 
-  Your goal is to help the user fill in required questionnaire fields and upload supporting files.
+  Your goal is to help the user fill in required questionnaire fields and upload supporting files. Some checks may also require **offline physical testing** — you need to generate test plans for those and wait for results.
 
   Typical workflow (not mandatory — use your judgment based on what's been done):
   1. Use get_session_state to see what fields are already filled
   2. Look at the Questionnaire section below — it lists all required fields grouped by pack
   3. Ask the user for unfilled values — prefer batch_update_doc_fields for multiple fields at once
   4. When the user has supporting files, call attach_file
-  5. When fields seem complete, call run_validation to check completeness
-  6. Show the validation results to the user and ask: "**Anything else to add or change?**"
-  7. Wait for the user's reply — if they have changes, go back and help them
-  8. When the user confirms they are done, call **prepare_for_audit** to generate documents and finalize
-  9. After prepare_for_audit succeeds, call **setup_pack_audit** for each selected pack to build the audit skeleton (all checks as pending — the UI will show this as the report skeleton with a progress bar)
-  10. After setup_pack_audit is done for all packs, call **run_pending_checks** for each pack to begin executing checks. They run in background — results appear progressively via polling.
+  5. Check which checks have a **testProcedure** (listed in the pack's checks section). These checks require physical testing and cannot be completed by document review alone.
+  6. For each check with a testProcedure: read the standard procedure, adapt it to the user's product/vehicle, and present the adapted test plan. Save the plan using \`save_test_plan\`.
+  7. After generating all test plans, tell the user to run the tests offline and upload the test report (one file covering all tests).
+  8. When the user uploads the test report, analyze it using get_file_content, extract results for each check, and update each plan's status using \`update_test_plan\`.
+  9. When fields seem complete and all test plans have been submitted, call run_validation to check completeness
+  10. Show the validation results to the user and ask: "**Anything else to add or change?**"
+  11. Wait for the user's reply — if they have changes, go back and help them
+  12. When the user confirms they are done, call **prepare_for_audit** to generate documents and finalize
+  13. After prepare_for_audit succeeds, call **setup_pack_audit** for each selected pack to build the audit skeleton (all checks as pending — the UI will show this as the report skeleton with a progress bar)
+  14. After setup_pack_audit is done for all packs, call **run_pending_checks** for each pack to begin executing checks. They run in background — results appear progressively via polling.
 
-  ⚠️ IMPORTANT: Do NOT skip run_validation. Do NOT skip asking the user for confirmation. Always wait for the user's explicit confirmation before calling prepare_for_audit.`,
+  ⚠️ IMPORTANT: Do NOT skip run_validation. Do NOT skip asking the user for confirmation. Always wait for the user's explicit confirmation before calling prepare_for_audit. Do NOT skip test plan generation — if a check has a testProcedure, the user needs a concrete plan to follow. If a check has no testProcedure but you believe physical testing is necessary (e.g. technical controls), design an adequate test procedure yourself and save it.`,
 
   3: `You are an audit review assistant. **Current phase: ${STEP_LABELS[3]}**.${ANTI_HALLUCINATION}
 
@@ -147,6 +151,7 @@ export interface SessionState {
   uploadedFileCount?: number;
   uploadedFiles?: Array<{ name: string; docType?: string }>;
   documentsFinalized?: boolean;
+  testPlans?: Array<{ checkId: string; status: string; standardProcedure?: string; adaptedProcedure?: string; resultSummary?: string }>;
 }
 
 export function buildComplianceStepPrompt(
@@ -181,6 +186,12 @@ export function buildComplianceStepPrompt(
     }
     if (sessionState.documentsFinalized !== undefined) {
       lines.push(`- Documents finalized: ${sessionState.documentsFinalized ? "✅ Yes" : "❌ No"}`);
+    }
+    if (sessionState.testPlans?.length) {
+      const planLines = sessionState.testPlans.map(
+        (p) => `  - ${p.checkId}: ${p.status}${p.resultSummary ? ` — ${p.resultSummary}` : ""}`
+      ).join("\n");
+      lines.push(`- Test plans (${sessionState.testPlans.filter((p) => p.status === "submitted" || p.status === "pass" || p.status === "fail").length}/${sessionState.testPlans.length} completed):\n${planLines}`);
     }
     if (lines.length) {
       sections.push(`\n# Current Session State\n${lines.join("\n")}`);

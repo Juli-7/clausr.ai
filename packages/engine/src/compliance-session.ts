@@ -40,6 +40,7 @@ export interface ComplianceSession {
   validationScore?: number;
   packStates: Record<string, unknown>;
   documentsFinalized: boolean;
+  testPlans: { checkId: string; status: string; standardProcedure?: string; adaptedProcedure?: string; resultSummary?: string }[];
 }
 
 function buildQuestionnaire(packIds: string[]): Questionnaire | undefined {
@@ -91,5 +92,6 @@ export function buildSession(id: string): ComplianceSession | undefined {
     validationScore: cs.validationScore,
     packStates: cs.packStates,
     documentsFinalized: cs.documentsFinalized,
+    testPlans: cs.testPlans ?? [],
   };
 }

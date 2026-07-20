@@ -236,6 +236,7 @@ function runMigrations(db: Database.Database): void {
   try { db.exec("ALTER TABLE compliance_session ADD COLUMN pack_states TEXT NOT NULL DEFAULT '{}'"); } catch { }
   try { db.exec("ALTER TABLE compliance_session ADD COLUMN documents_finalized INTEGER NOT NULL DEFAULT 0"); } catch { }
   try { db.exec("ALTER TABLE compliance_session ADD COLUMN tool_calls TEXT NOT NULL DEFAULT '[]'"); } catch { }
+  try { db.exec("ALTER TABLE compliance_session ADD COLUMN test_plans TEXT NOT NULL DEFAULT '[]'"); } catch { }
   try {
     const row = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='messages'").get() as { sql: string } | undefined;
     if (row && !row.sql.includes("'tool'")) {

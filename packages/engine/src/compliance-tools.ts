@@ -6,6 +6,7 @@ import {
   setComplianceAuditRunning, setComplianceAuditDone,
   getCompliancePackStates,
   setComplianceDocumentsFinalized, getOrCreateSession,
+  setComplianceTestPlans, getComplianceTestPlans,
 } from "./agent/shared/memory/repository";
 import type { ComplianceFile } from "./agent/shared/memory/repository";
 import { setupSkill, processSessionFiles } from "./agent/loading/loading-orchestrator";
@@ -54,7 +55,9 @@ export type ToolName =
   | "manage_document_template"
   | "manage_check"
   | "publish_pack"
-  | "preview_pack";
+  | "preview_pack"
+  | "save_test_plan"
+  | "update_test_plan";
 
 const sourceCitationDesc = "Source chunk IDs, e.g. ['S1.c3']";
 const citationRefDesc = "Regulation clause IDs, e.g. ['R48.6.2']";
@@ -175,6 +178,16 @@ export const ToolSchemas = {
     fileName: z.string().optional().describe("Scope search to one file"),
     chunkIds: z.array(z.string()).optional().describe("Retrieve specific chunk texts by ID (requires fileName)"),
   }).refine((d) => d.query || d.fileName, { message: "Provide query (cross-file) or fileName (file-scoped)" }),
+  save_test_plan: z.object({
+    checkId: z.string(),
+    adaptedProcedure: z.string().describe("The adapted test plan for this user/product"),
+    standardProcedure: z.string().optional(),
+  }),
+  update_test_plan: z.object({
+    checkId: z.string(),
+    status: z.enum(["pending", "planned", "submitted", "pass", "fail"]),
+    resultSummary: z.string().optional().describe("Summary of test results"),
+  }),
   suggest_lesson: z.object({
     skillName: z.string(),
     text: z.string(),
@@ -1032,6 +1045,49 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       saveLessonOverride(skillName, entry);
       const all = getLessonOverrides(skillName);
       return { saved: true, lesson: entry, pendingCount: all.length, message: "Lesson saved as pending. Ask the user to confirm, then call suggest_lesson again with applyToSkill=true to make it permanent." };
+    },
+  },
+
+  save_test_plan: {
+    name: "save_test_plan",
+    description: "Save an adapted test plan for a check that requires offline physical testing. Call this after adapting the standard testProcedure to the user's specific product/vehicle.",
+    inputSchema: ToolSchemas.save_test_plan,
+    logLabel: "Save test plan",
+    mutates: true,
+    execute: async (sessionId, input) => {
+      const { checkId, adaptedProcedure, standardProcedure } = input as { checkId: string; adaptedProcedure: string; standardProcedure?: string };
+      const existing = getComplianceTestPlans(sessionId);
+      const idx = existing.findIndex((p) => p.checkId === checkId);
+      const plan = {
+        checkId,
+        status: "planned" as const,
+        standardProcedure: standardProcedure ?? existing[idx]?.standardProcedure,
+        adaptedProcedure,
+      };
+      if (idx >= 0) {
+        existing[idx] = { ...existing[idx], ...plan };
+      } else {
+        existing.push(plan);
+      }
+      setComplianceTestPlans(sessionId, existing);
+      return { saved: true, checkId, status: "planned" };
+    },
+  },
+
+  update_test_plan: {
+    name: "update_test_plan",
+    description: "Update test plan status and/or result summary after the user uploads test results.",
+    inputSchema: ToolSchemas.update_test_plan,
+    logLabel: "Update test plan",
+    mutates: true,
+    execute: async (sessionId, input) => {
+      const { checkId, status, resultSummary } = input as { checkId: string; status: string; resultSummary?: string };
+      const plans = getComplianceTestPlans(sessionId);
+      const idx = plans.findIndex((p) => p.checkId === checkId);
+      if (idx < 0) return { error: `No test plan found for check "${checkId}" — call save_test_plan first` };
+      plans[idx] = { checkId, ...plans[idx], status: status as "pending" | "planned" | "submitted" | "pass" | "fail", resultSummary };
+      setComplianceTestPlans(sessionId, plans);
+      return { updated: true, checkId, status };
     },
   },
 
