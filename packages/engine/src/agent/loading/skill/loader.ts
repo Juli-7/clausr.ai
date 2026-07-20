@@ -35,6 +35,7 @@ export interface PackCheck {
   rounding?: number;
   depends_on?: string[];
   sample?: string;
+  testProcedure?: string;
 }
 
 export interface SkillPack {
@@ -146,6 +147,7 @@ function buildSkillmd(checks: ParsedCheck[], redlines: string[], lessons: string
       if (c.dependsOn) lines.push(`${idx++}. **depends_on**: ${c.dependsOn}`);
       if (c.attention) lines.push(`${idx++}. **attention**: ${c.attention}`);
       if (c.rounding) lines.push(`${idx++}. **rounding**: ${c.rounding}`);
+      if (c.testProcedure) lines.push(`${idx++}. **test_procedure**: ${c.testProcedure}`);
       return lines.join("\n");
     });
     sections.push("## Checks\n\n" + checkBlocks.join("\n\n"));
@@ -176,6 +178,7 @@ function loadChecks(checkList: Record<string, unknown>[] | undefined): PackCheck
     rounding: c.rounding as number | undefined,
     depends_on: c.depends_on as string[] | undefined,
     sample: c.sample as string | undefined,
+    testProcedure: c.testProcedure as string | undefined,
   }));
 }
 
@@ -278,6 +281,7 @@ function toParsedCheck(c: Record<string, unknown>): ParsedCheck {
     description: (c.description as string) ?? null,
     sample: (c.sample as string) ?? null,
     rounding: (c.rounding != null ? String(c.rounding) : null) as string | null,
+    testProcedure: (c.testProcedure as string) ?? null,
   };
 }
 
