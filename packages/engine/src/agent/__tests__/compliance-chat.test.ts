@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockAddUserMessage, mockAddAssistantMessage, mockLogInfo } = vi.hoisted(() => ({
+const { mockAddUserMessage, mockAddAssistantMessage, mockAddToolMessage, mockLogInfo } = vi.hoisted(() => ({
   mockAddUserMessage: vi.fn(),
   mockAddAssistantMessage: vi.fn(),
+  mockAddToolMessage: vi.fn(),
   mockLogInfo: vi.fn(),
 }));
 
@@ -22,6 +23,7 @@ vi.mock("../llm/factory", () => ({
 vi.mock("../shared/memory/repository", () => ({
   addUserMessage: mockAddUserMessage,
   addAssistantMessage: mockAddAssistantMessage,
+  addToolMessage: mockAddToolMessage,
 }));
 
 vi.mock("../pipeline/logger", () => ({
@@ -40,9 +42,27 @@ vi.mock("../../orchestration/prompts", () => ({
 import { streamText } from "ai";
 import { complianceChat } from "../../orchestration/chat";
 
-function makeStreamMock(events: unknown[]) {
+function makeStreamMock(events: unknown[], onStepFinish?: Function) {
   const gen = (async function* () {
-    for (const e of events) yield e;
+    for (const e of events) {
+      yield e;
+      if ((e as Record<string, unknown>).type === "finish" && onStepFinish) {
+        const text = events
+          .filter((ev): ev is { type: string; text: string } =>
+            typeof ev === "object" && ev !== null && (ev as Record<string, unknown>).type === "text-delta")
+          .map((ev) => ev.text)
+          .join("");
+        const toolCalls = events
+          .filter((ev): ev is { type: string; toolName: string; input: unknown } =>
+            typeof ev === "object" && ev !== null && (ev as Record<string, unknown>).type === "tool-call")
+          .map((ev) => ({ toolName: ev.toolName, args: ev.input }));
+        const toolResults = events
+          .filter((ev): ev is { type: string; toolName: string } =>
+            typeof ev === "object" && ev !== null && (ev as Record<string, unknown>).type === "tool-result")
+          .map((ev) => ({ toolName: ev.toolName }));
+        onStepFinish({ text, finishReason: "stop", toolCalls, toolResults, stepNumber: 1 });
+      }
+    }
   })();
   return {
     fullStream: gen,
@@ -77,13 +97,16 @@ describe("complianceChat", () => {
   });
 
   it("persists user message and yields events in correct order", async () => {
-    (streamText as unknown as ReturnType<typeof vi.fn>).mockReturnValue(makeStreamMock([
-      { type: "text-delta", text: "Hello" },
-      { type: "text-delta", text: " world" },
-      { type: "tool-call", toolName: "list_packs", input: {} },
-      { type: "tool-result", toolName: "list_packs", output: { packs: [] } },
-      { type: "finish", finishReason: "stop" },
-    ]));
+    const mockEvents = [
+      { type: "text-delta" as const, text: "Hello" },
+      { type: "text-delta" as const, text: " world" },
+      { type: "tool-call" as const, toolName: "list_packs", input: {} },
+      { type: "tool-result" as const, toolName: "list_packs", result: { packs: [] } },
+      { type: "finish" as const, finishReason: "stop" },
+    ];
+    (streamText as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      (config: { onStepFinish?: Function }) => makeStreamMock(mockEvents, config.onStepFinish)
+    );
 
     const gen = complianceChat("session-1", {
       messages: [{ role: "user", content: "list packs" }],

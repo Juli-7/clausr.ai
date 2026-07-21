@@ -10,7 +10,9 @@ beforeAll(() => {
   process.env.DATABASE_PATH = TEST_DB_PATH;
   process.env.LLM_API_KEY = "test-key";
   process.env.LLM_PROVIDER = "deepseek";
+  process.env.DATA_DIR = path.join(TEST_DB_DIR, "data");
   fs.mkdirSync(TEST_DB_DIR, { recursive: true });
+  fs.mkdirSync(path.join(TEST_DB_DIR, "data"), { recursive: true });
 });
 
 afterAll(() => {
@@ -142,9 +144,13 @@ describe("Compliance tools end-to-end with real DB", () => {
     }
   });
 
-  it("create_pack tool writes a new pack to disk and makes it discoverable", async () => {
+  it("create_pack + publish_pack writes a new pack to disk and makes it discoverable", async () => {
     const testPackId = `e2e-test-pack-${Date.now()}`;
-    const result = await TOOL_DEFS.create_pack.execute("session-ignored", {
+    const sid = validSessionId("publish");
+    getOrCreateSession(sid, "test-lighting");
+    ensureComplianceSession(sid);
+
+    const createResult = await TOOL_DEFS.create_pack.execute(sid, {
       id: testPackId,
       title: { en: "E2E Test Pack" },
       description: { en: "Created during test" },
@@ -160,8 +166,12 @@ describe("Compliance tools end-to-end with real DB", () => {
       redlines: ["Do not pass without measurement evidence"],
     });
 
-    expect(result.created).toBe(true);
-    expect(result.packId).toBe(testPackId);
+    expect(createResult.created).toBe(true);
+    expect(createResult.packId).toBe(testPackId);
+
+    // Publish the draft pack to disk
+    const publishResult = await TOOL_DEFS.publish_pack.execute(sid, { id: testPackId });
+    expect(publishResult.published).toBe(true);
 
     // Verify pack is discoverable via list_packs
     const list = await TOOL_DEFS.list_packs.execute("session-ignored", {});
