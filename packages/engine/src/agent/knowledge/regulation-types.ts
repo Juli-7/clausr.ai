@@ -111,6 +111,33 @@ export interface GetClausesResponse {
   error?: string;
 }
 
+// ── Seed regulation ──
+
+export interface SeedClauseInput {
+  number: string;
+  title: string;
+  text: string;
+  parentNumber?: string;
+}
+
+export interface SeedRegulationRequest {
+  code: string;
+  title: string;
+  description: string;
+  jurisdiction: string;
+  versions?: { version: string; effectiveDate: string; isCurrent: boolean; changelog?: string }[];
+  crossReferences?: string[];
+  metadata?: Record<string, string>;
+  clauses: SeedClauseInput[];
+}
+
+export interface SeedRegulationResponse {
+  success: boolean;
+  code?: string;
+  clauseCount?: number;
+  error?: string;
+}
+
 // ── Validation schemas ──
 
 export const ClauseSchema = z.object({

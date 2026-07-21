@@ -36,6 +36,7 @@ export interface PackCheck {
   depends_on?: string[];
   sample?: string;
   testProcedure?: string;
+  regulationNodeId?: string;
 }
 
 export interface SkillPack {
@@ -179,6 +180,7 @@ function loadChecks(checkList: Record<string, unknown>[] | undefined): PackCheck
     depends_on: c.depends_on as string[] | undefined,
     sample: c.sample as string | undefined,
     testProcedure: c.testProcedure as string | undefined,
+    regulationNodeId: c.regulationNodeId as string | undefined,
   }));
 }
 
@@ -282,6 +284,7 @@ function toParsedCheck(c: Record<string, unknown>): ParsedCheck {
     sample: (c.sample as string) ?? null,
     rounding: (c.rounding != null ? String(c.rounding) : null) as string | null,
     testProcedure: (c.testProcedure as string) ?? null,
+    regulationNodeId: (c.regulationNodeId as string) ?? null,
   };
 }
 

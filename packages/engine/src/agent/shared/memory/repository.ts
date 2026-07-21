@@ -22,8 +22,9 @@ export async function getEmbedding(text: string): Promise<Float32Array | null> {
       body: JSON.stringify({ input: truncated, model: EMBEDDING_MODEL }),
     });
     if (!res.ok) return null;
-    const data = await res.json();
-    return new Float32Array(data.data[0].embedding);
+    const data = await res.json() as { data: { embedding: number[] }[] };
+    if (!data.data?.length) return null;
+    return new Float32Array(data.data[0]!.embedding);
   } catch {
     return null;
   }
@@ -53,9 +54,9 @@ export async function getEmbeddings(texts: string[]): Promise<(Float32Array | nu
         results.push(...batch.map(() => null));
         continue;
       }
-      const data = await res.json();
-      const sorted = data.data.sort((a: { index: number }, b: { index: number }) => a.index - b.index);
-      results.push(...sorted.map((d: { embedding: number[] }) => new Float32Array(d.embedding)));
+      const data = await res.json() as { data: { index: number; embedding: number[] }[] };
+      const sorted = data.data.sort((a, b) => a.index - b.index);
+      results.push(...sorted.map((d) => new Float32Array(d.embedding)));
     } catch {
       results.push(...batch.map(() => null));
     }

@@ -11,6 +11,7 @@ export interface ParsedCheck {
   sample: string | null;
   rounding: string | null;
   testProcedure: string | null;
+  regulationNodeId: string | null;
 }
 
 export type CheckFieldType =
@@ -112,6 +113,7 @@ function buildCheck(raw: Record<string, string>): ParsedCheck {
     sample: raw.sample || null,
     rounding: raw.rounding || null,
     testProcedure: raw.test_procedure || raw.testProcedure || null,
+    regulationNodeId: raw.regulation_node_id || raw.regulationNodeId || null,
   };
 }
 

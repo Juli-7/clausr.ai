@@ -35,6 +35,7 @@ export type { ToolDef, ToolName, ToolInput } from "./compliance-tools";
 // ── Tool Implementations ──
 export { executeComplianceCheck } from "./agent/pipeline/builtins";
 export { buildComplianceStepPrompt } from "./agent/pipeline/prompts";
+export type { SessionState, PackAuditItem } from "./agent/pipeline/prompts";
 export { runScript } from "./agent/pipeline/executors/script-runner";
 export { evaluate } from "./agent/evaluation";
 export { computeConfidence } from "./agent/evaluation/confidence";
@@ -52,3 +53,4 @@ export { resolveCitation } from "./compliance-audit-tools";
 // ── Shared Types ──
 export type { AgentResponse } from "./agent/shared/types";
 export type { IRegulationApi } from "./agent/knowledge/regulation-api";
+export type { SeedRegulationRequest, SeedRegulationResponse } from "./agent/knowledge/regulation-types";

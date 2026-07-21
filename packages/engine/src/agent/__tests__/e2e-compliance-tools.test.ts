@@ -72,27 +72,7 @@ describe("Compliance tools end-to-end with real DB", () => {
     expect(session!.step).toBe(3);
   });
 
-  it("update_doc_field tool saves and retrieves field values", async () => {
-    const sid = validSessionId("docfield");
-    getOrCreateSession(sid, "test-lighting");
-    ensureComplianceSession(sid);
-
-    await TOOL_DEFS.update_doc_field.execute(sid, {
-      field: "manufacturer",
-      value: "Acme Corp",
-    });
-
-    await TOOL_DEFS.update_doc_field.execute(sid, {
-      field: "model",
-      value: "XL-2000",
-    });
-
-    const session = getComplianceSession(sid);
-    expect(session!.docData["manufacturer"]).toEqual({ value: "Acme Corp" });
-    expect(session!.docData["model"]).toEqual({ value: "XL-2000" });
-  });
-
-  it("batch_update_doc_fields tool writes multiple fields at once", async () => {
+  it("batch_update_doc_fields tool writes fields", async () => {
     const sid = validSessionId("batch");
     getOrCreateSession(sid, "test-lighting");
     ensureComplianceSession(sid);
@@ -138,22 +118,6 @@ describe("Compliance tools end-to-end with real DB", () => {
     expect(result).toHaveProperty("checks");
     expect(result).toHaveProperty("score");
     expect(Array.isArray(result.checks)).toBe(true);
-  });
-
-  it("get_session_state tool returns full session", async () => {
-    const sid = validSessionId("state");
-    getOrCreateSession(sid, "test-lighting");
-    ensureComplianceSession(sid);
-    setComplianceScope(sid, ["pack-x"]);
-    setComplianceStep(sid, 2);
-    addComplianceDocField(sid, "field1", { value: "val1" });
-
-    const result = await TOOL_DEFS.get_session_state.execute(sid, {});
-    expect(result.step).toBe(2);
-    expect(result.selectedPackIds).toEqual(["pack-x"]);
-    expect(result.docData).toBeDefined();
-    // questionnaire is undefined when pack IDs don't resolve to real packs
-    expect(result.questionnaire).toBeUndefined();
   });
 
   it("list_packs tool returns packs with titles", async () => {

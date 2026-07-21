@@ -76,7 +76,7 @@ describe("compliance-tools (untested)", () => {
   describe("detach_file", () => {
     it("removes a previously attached file", async () => {
       const id = setupSession("detach");
-      addComplianceFile(id, { name: "doc.pdf", size: "100", time: "2024-01-01", dataUrl: "data:base64," });
+      addComplianceFile(id, { name: "doc.pdf", size: "100", time: "2024-01-01" });
 
       const result = await TOOL_DEFS.detach_file.execute(id, { name: "doc.pdf" });
       expect(result.files).toEqual([]);
@@ -85,8 +85,8 @@ describe("compliance-tools (untested)", () => {
 
     it("returns remaining files after removal", async () => {
       const id = setupSession("detach2");
-      addComplianceFile(id, { name: "keep.pdf", size: "100", time: "2024-01-01", dataUrl: "data:base64," });
-      addComplianceFile(id, { name: "remove.pdf", size: "200", time: "2024-01-01", dataUrl: "data:base64," });
+      addComplianceFile(id, { name: "keep.pdf", size: "100", time: "2024-01-01" });
+      addComplianceFile(id, { name: "remove.pdf", size: "200", time: "2024-01-01" });
 
       const result = await TOOL_DEFS.detach_file.execute(id, { name: "remove.pdf" }) as { files: { name: string }[] };
       expect(result.files).toHaveLength(1);
@@ -157,20 +157,6 @@ describe("compliance-tools (untested)", () => {
     });
   });
 
-  describe("start_audit", () => {
-    it("returns error when session not found", async () => {
-      const result = await TOOL_DEFS.start_audit.execute("nonexistent", {});
-      expect(result).toHaveProperty("error");
-    });
-
-    it("returns error when documents not finalized", async () => {
-      const id = setupSession("sa-nodoc");
-      const result = await TOOL_DEFS.start_audit.execute(id, {});
-      expect(result).toHaveProperty("error");
-      expect(result.error).toContain("Documents not finalized");
-    });
-  });
-
   describe("suggest_lesson", () => {
     it("saves a pending lesson without applyToSkill", async () => {
       const id = setupSession("sl-pending");
@@ -203,20 +189,4 @@ describe("compliance-tools (untested)", () => {
     });
   });
 
-  describe("get_pack_audit_state tool wrapper", () => {
-    it("returns error for unset-up pack", async () => {
-      const id = setupSession("gpas");
-      const result = await TOOL_DEFS.get_pack_audit_state.execute(id, { packId: "nonexistent" });
-      expect(result).toHaveProperty("error");
-    });
-  });
-
-  describe("finalize_audit tool wrapper", () => {
-    it("returns auditDone true even with no packs", async () => {
-      const id = setupSession("fa-empty");
-      const result = await TOOL_DEFS.finalize_audit.execute(id, {});
-      expect(result.auditDone).toBe(true);
-      expect(result.packCount).toBe(0);
-    });
-  });
 });

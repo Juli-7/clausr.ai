@@ -11,6 +11,8 @@ import type {
   ListRegulationsResponse,
   SearchClausesRequest,
   SearchClausesResponse,
+  SeedRegulationRequest,
+  SeedRegulationResponse,
 } from "./regulation-types";
 
 export interface IRegulationApi {
@@ -21,6 +23,7 @@ export interface IRegulationApi {
   listRegulations(req: ListRegulationsRequest): Promise<ListRegulationsResponse>;
   searchClauses(req: SearchClausesRequest): Promise<SearchClausesResponse>;
   resolveCode(rawCode: string): Promise<string | null>;
+  seedRegulation(req: SeedRegulationRequest): Promise<SeedRegulationResponse>;
   invalidateCache(): void;
 }
 

@@ -26,7 +26,6 @@ import type { AgentResponse } from "./agent/shared/types";
 
 export type ToolName =
   | "set_scope"
-  | "update_doc_field"
   | "batch_update_doc_fields"
   | "attach_file"
   | "extract_file_content"
@@ -36,26 +35,21 @@ export type ToolName =
   | "list_packs"
   | "read_pack"
   | "create_pack"
-  | "start_audit"
   | "setup_pack_audit"
   | "run_pending_checks"
   | "retry_check"
-  | "get_pack_audit_state"
-  | "finalize_audit"
-  | "get_session_state"
   | "get_file_content"
   | "run_validation"
   | "prepare_for_audit"
   | "search_clauses"
+  | "seed_regulation"
   | "get_regulation_text"
   | "search_files"
   | "suggest_lesson"
-  | "create_pack_shell"
   | "manage_field"
   | "manage_document_template"
   | "manage_check"
   | "publish_pack"
-  | "preview_pack"
   | "save_test_plan"
   | "update_test_plan";
 
@@ -65,10 +59,6 @@ const citationRefDesc = "Regulation clause IDs, e.g. ['R48.6.2']";
 export const ToolSchemas = {
   set_scope: z.object({
     packIds: z.array(z.string()),
-  }),
-  update_doc_field: z.object({
-    field: z.string(),
-    value: z.string().describe("Field value as plain text"),
   }),
   batch_update_doc_fields: z.object({
     fields: z.record(z.string(), z.string().describe("Field value as plain text")),
@@ -131,6 +121,8 @@ export const ToolSchemas = {
       rounding: z.number().optional(),
       depends_on: z.array(z.string()).optional(),
       sample: z.string().optional(),
+      testProcedure: z.string().optional().describe("JSON-encoded test procedure with purpose/method/equipment/steps/passCriteria"),
+      regulationNodeId: z.string().optional().describe("ID of the regulation DB node this check maps to"),
     })),
     redlines: z.array(z.string()),
     lessons: z.array(z.string()).optional(),
@@ -138,10 +130,6 @@ export const ToolSchemas = {
       docType: z.string(),
       dataUrl: z.string().describe("Base64-encoded DOCX data URL"),
     })).optional(),
-  }),
-  start_audit: z.object({
-    packIds: z.array(z.string()).optional(),
-    force: z.boolean().optional(),
   }),
   setup_pack_audit: z.object({
     packId: z.string(),
@@ -155,11 +143,6 @@ export const ToolSchemas = {
     packId: z.string(),
     checkId: z.string(),
   }),
-  get_pack_audit_state: z.object({
-    packId: z.string(),
-  }),
-  finalize_audit: z.object({}),
-  get_session_state: z.object({}),
   get_file_content: z.object({
     fileName: z.string(),
   }),
@@ -168,6 +151,24 @@ export const ToolSchemas = {
   search_clauses: z.object({
     keyword: z.string(),
     regulationCodes: z.array(z.string()).optional(),
+  }),
+  seed_regulation: z.object({
+    code: z.string().describe("Short regulation code, e.g. 'PIPL', 'GB_T_44464'"),
+    title: z.string(),
+    description: z.string(),
+    jurisdiction: z.string(),
+    versions: z.array(z.object({
+      version: z.string(),
+      effectiveDate: z.string(),
+      isCurrent: z.boolean(),
+    })).optional(),
+    crossReferences: z.array(z.string()).optional(),
+    clauses: z.array(z.object({
+      number: z.string().describe("Clause number as in the regulation, e.g. '4.1.1', 'Art. 6'"),
+      title: z.string(),
+      text: z.string().describe("Full clause text"),
+      parentNumber: z.string().optional().describe("Parent clause number for tree hierarchy, e.g. '4.1' for clause '4.1.1'"),
+    })).min(1, "At least one clause required"),
   }),
   get_regulation_text: z.object({
     code: z.string(),
@@ -193,15 +194,6 @@ export const ToolSchemas = {
     text: z.string(),
     sourceCheck: z.string().optional(),
     applyToSkill: z.boolean().optional().default(false).describe("call with true after user confirms"),
-  }),
-  create_pack_shell: z.object({
-    id: z.string().describe("lowercase-hyphens, e.g. 'ev-battery-r100'"),
-    title: z.union([z.string(), z.record(z.string(), z.string())]),
-    description: z.union([z.string(), z.record(z.string(), z.string())]),
-    industries: z.array(z.string()),
-    icon: z.string().optional(),
-    version: z.string().optional(),
-    regulation_ids: z.array(z.string()).optional(),
   }),
   manage_field: z.object({
     action: z.enum(["add", "update", "remove"]),
@@ -230,11 +222,12 @@ export const ToolSchemas = {
     rounding: z.number().optional(),
     depends_on: z.array(z.string()).optional(),
     sample: z.string().optional(),
+    testProcedure: z.string().optional().describe("JSON-encoded test procedure with purpose/method/equipment/steps/passCriteria"),
+    regulationNodeId: z.string().optional().describe("ID of the regulation DB node this check maps to"),
   }),
   publish_pack: z.object({
     id: z.string(),
   }),
-  preview_pack: z.object({}),
 } as const;
 
 export type ToolInput<T extends ToolName> = z.infer<typeof ToolSchemas[T]>;
@@ -273,23 +266,9 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     },
   },
 
-  update_doc_field: {
-    name: "update_doc_field",
-    description: "Save a single field value. Prefer batch_update_doc_fields for multiple.",
-    inputSchema: ToolSchemas.update_doc_field,
-    logLabel: "Update document field",
-    mutates: true,
-    execute: async (sessionId, input) => {
-      const { field, value } = input as { field: string; value: string };
-      addComplianceDocField(sessionId, field, { value });
-      const s = getComplianceSession(sessionId);
-      return { docData: s?.docData ?? {} };
-    },
-  },
-
   batch_update_doc_fields: {
     name: "batch_update_doc_fields",
-    description: "Fill multiple fields at once. PREFER over update_doc_field.",
+    description: "Fill multiple form fields at once.",
     inputSchema: ToolSchemas.batch_update_doc_fields,
     logLabel: "Batch update document fields",
     mutates: true,
@@ -456,43 +435,26 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   create_pack: {
     name: "create_pack",
-    description: "Create a full compliance pack. Interview user, use read_pack for reference.",
+    description: "Create a compliance pack with its fields, checks, and documents in one shot. Designed for LLM-generated pack designs — analyze the regulation first via seed_regulation + get_regulation_text, then call this with your complete design. Review with manage_* tools, then call publish_pack.",
     inputSchema: ToolSchemas.create_pack,
     logLabel: "Create pack",
     mutates: true,
-    execute: async (_sessionId, input) => {
-      try {
-        writePack(input as unknown as CreatePackInput);
-        return { created: true, packId: (input as { id: string }).id, message: "Pack created successfully." };
-      } catch (err) {
-        return { created: false, error: err instanceof Error ? err.message : "Unknown error" };
-      }
-    },
-  },
-
-  create_pack_shell: {
-    name: "create_pack_shell",
-    description: "Create draft pack shell. Use manage_field/check/document_template, then publish.",
-    inputSchema: ToolSchemas.create_pack_shell,
-    logLabel: "Create pack shell",
-    mutates: true,
     execute: async (sessionId, input) => {
-      const i = input as { id: string; title: string | Record<string, string>; description: string | Record<string, string>; industries: string[]; icon?: string; version?: string; regulation_ids?: string[] };
-      const draft: CreatePackInput = {
-        id: i.id,
-        title: i.title,
-        description: i.description,
-        industries: i.industries,
-        icon: i.icon,
-        version: i.version,
-        regulation_ids: i.regulation_ids,
-        fields: [],
-        documents: [],
-        checks: [],
-        redlines: [],
+      const data = input as unknown as CreatePackInput;
+      if (!data.fields?.length && !data.checks?.length && !data.documents?.length) {
+        return { error: "Pack must have at least fields, checks, or documents." };
+      }
+      data.redlines ??= [];
+      data.lessons ??= [];
+      saveDraftPack(sessionId, data);
+      return {
+        created: true,
+        packId: data.id,
+        fieldCount: data.fields.length,
+        checkCount: data.checks.length,
+        documentCount: data.documents.length,
+        message: "Draft pack created. Review with manage_check/manage_field/manage_document_template, then call publish_pack to save to disk.",
       };
-      saveDraftPack(sessionId, draft);
-      return { created: true, packId: i.id, message: "Draft pack created. Use add_field, add_check, add_document_template to build it out." };
     },
   },
 
@@ -504,7 +466,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     mutates: true,
     execute: async (sessionId, input) => {
       const draft = getDraftPack(sessionId);
-      if (!draft) return { error: "No draft pack. Call create_pack_shell first." };
+      if (!draft) return { error: "No draft pack. Call create_pack first." };
       const { action, id, ...rest } = input as { action: string; id: string };
       if (action === "remove") {
         const idx = draft.fields.findIndex((f) => f.id === id);
@@ -535,7 +497,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     mutates: true,
     execute: async (sessionId, input) => {
       const draft = getDraftPack(sessionId);
-      if (!draft) return { error: "No draft pack. Call create_pack_shell first." };
+      if (!draft) return { error: "No draft pack. Call create_pack first." };
       const { action, type, ...rest } = input as { action: string; type: string };
       const idx = draft.documents.findIndex((d) => d.type === type);
       if (action === "add") {
@@ -559,7 +521,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     mutates: true,
     execute: async (sessionId, input) => {
       const draft = getDraftPack(sessionId);
-      if (!draft) return { error: "No draft pack. Call create_pack_shell first." };
+      if (!draft) return { error: "No draft pack. Call create_pack first." };
       const { action, id, ...rest } = input as { action: string; id: string };
       if (action === "remove") {
         const idx = draft.checks.findIndex((c) => c.id === id);
@@ -582,33 +544,6 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     },
   },
 
-  preview_pack: {
-    name: "preview_pack",
-    description: "Preview draft pack as JSON.",
-    inputSchema: ToolSchemas.preview_pack,
-    logLabel: "Preview pack",
-    mutates: false,
-    execute: async (sessionId) => {
-      const draft = getDraftPack(sessionId);
-      if (!draft) return { error: "No draft pack. Call create_pack_shell first." };
-      return {
-        packId: draft.id,
-        title: draft.title,
-        description: draft.description,
-        industries: draft.industries,
-        icon: draft.icon,
-        version: draft.version,
-        regulation_ids: draft.regulation_ids,
-        fields: draft.fields,
-        documents: draft.documents,
-        checks: draft.checks,
-        fieldCount: draft.fields.length,
-        documentCount: draft.documents.length,
-        checkCount: draft.checks.length,
-      };
-    },
-  },
-
   publish_pack: {
     name: "publish_pack",
     description: "Write draft pack to disk (validates title/desc/industry).",
@@ -617,7 +552,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     mutates: true,
     execute: async (sessionId, input) => {
       const draft = getDraftPack(sessionId);
-      if (!draft) return { error: "No draft pack. Call create_pack_shell first." };
+      if (!draft) return { error: "No draft pack. Call create_pack first." };
       const { id } = input as { id: string };
       if (id !== draft.id) return { error: `Pack ID mismatch: draft is "${draft.id}", got "${id}".` };
       if (!draft.title || !draft.description || draft.industries.length === 0) {
@@ -633,78 +568,8 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     },
   },
 
-  start_audit: {
-    name: "start_audit",
-    description: "Start audit for selected packs. Call prepare_for_audit first.",
-    inputSchema: ToolSchemas.start_audit,
-    logLabel: "Start audit",
-    mutates: true,
-    execute: async (sessionId, input) => {
-      const { packIds, force } = input as { packIds?: string[]; force?: boolean };
-      const s = getComplianceSession(sessionId);
-      if (!s) return { error: "Session not found" };
-      if (!s.documentsFinalized) {
-        return { error: "Documents not finalized. Call prepare_for_audit first to generate documents and mark documents as complete." };
-      }
-      const auditPackIds = packIds ?? s.selectedPackIds;
-      if (auditPackIds.length === 0) return { error: "No packs selected for audit" };
 
-      const docData = s.docData;
-      const missingFields: { pack: string; field: string }[] = [];
-      for (const packId of auditPackIds) {
-        const pack = getPack(packId);
-        if (!pack) continue;
-        for (const field of pack.fields) {
-          if (!field.required) continue;
-          const label = typeof field.label === "string" ? field.label : (field.label.en ?? field.id);
-          const value = docData[field.id]?.value?.trim();
-          if (!value) {
-            missingFields.push({ pack: typeof pack.title === "string" ? pack.title : (pack.title.en ?? pack.id), field: label });
-          }
-        }
-      }
 
-      if (missingFields.length > 0) {
-        const checks = missingFields.map((m) => ({
-          id: `${m.pack}:${m.field}`,
-          title: m.field,
-          status: "fail" as const,
-          note: "Required field is empty",
-        }));
-        setComplianceValidation(sessionId, checks, 0);
-
-        if (!force) {
-          return {
-            auditStarted: false,
-            missingFields: missingFields.length,
-            hints: missingFields.map((m) => `[${m.pack}] ${m.field}`),
-            message: `${missingFields.length} required field(s) are empty. Ask the user if they want to fill them first or start the audit anyway.`,
-          };
-        }
-      }
-
-      setComplianceAuditRunning(sessionId, true);
-
-      // Phase 1: Set up each pack if not already set up — persists ALL checks as "wait" in auditResults
-      for (const packId of auditPackIds) {
-        const existing = getPackAuditState(sessionId, packId);
-        if (!existing) {
-          await setupPackAuditAndRun(sessionId, packId);
-        }
-      }
-
-      // Phase 2: Run checks in background — writes results progressively to DB
-      // Frontend polls /audit/status and sees checks appear one by one
-      runAuditChecksInBackground(sessionId, auditPackIds);
-
-      return {
-        auditStarted: true,
-        packIds: auditPackIds,
-        validationPassed: missingFields.length === 0,
-        validationHints: missingFields.length > 0 ? missingFields.map((m) => `[${m.pack}] ${m.field}`) : [],
-      };
-    },
-  },
 
   setup_pack_audit: {
     name: "setup_pack_audit",
@@ -748,45 +613,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     },
   },
 
-  get_pack_audit_state: {
-    name: "get_pack_audit_state",
-    description: "Get audit state: per-check status/verdicts/reasoning. Results appear progressively over 10-30s — poll at most every 15 seconds.",
-    inputSchema: ToolSchemas.get_pack_audit_state,
-    logLabel: "Get pack audit state",
-    mutates: false,
-    execute: async (sessionId, input) => {
-      const { packId } = input as { packId: string };
-      const state = getPackAuditState(sessionId, packId);
-      if (!state) return { error: "Pack not set up" };
-      return state as unknown as Record<string, unknown>;
-    },
-  },
 
-  finalize_audit: {
-    name: "finalize_audit",
-    description: "Finalize audit. Call after all packs done.",
-    inputSchema: ToolSchemas.finalize_audit,
-    logLabel: "Finalize audit",
-    mutates: true,
-    execute: async (sessionId, _input) => {
-      return await finalizeAudit(sessionId) as unknown as Record<string, unknown>;
-    },
-  },
-
-
-
-  get_session_state: {
-    name: "get_session_state",
-    description: "Get full session state: packs, fields, files, results.",
-    inputSchema: ToolSchemas.get_session_state,
-    logLabel: "Get session state",
-    mutates: false,
-    execute: async (sessionId) => {
-      const session = buildSession(sessionId);
-      if (!session) return { error: "Session not found" };
-      return session as unknown as Record<string, unknown>;
-    },
-  },
 
   get_file_content: {
     name: "get_file_content",
@@ -942,7 +769,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
         generatedFiles: generated,
         generatedFileCount: generated.length,
         missingFieldCount: missingCount,
-        warning: missingCount > 0 ? `${missingCount} required field(s) still empty. Review with the user before starting audit, or call start_audit with force: true to proceed anyway.` : undefined,
+        warning: missingCount > 0 ? `${missingCount} required field(s) still empty. Review with the user before asking them to proceed.` : undefined,
         errors: errors.length > 0 ? errors : undefined,
       };
     },
@@ -961,6 +788,30 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       if (!result.success || !result.data) return { note: `No clauses found for "${keyword}"`, results: [] };
       const results = result.data.map((r) => ({ regulationCode: r.regulationCode, clauseNumber: r.clause.number, title: r.clause.title, text: r.clause.text }));
       return { results, count: results.length };
+    },
+  },
+
+  seed_regulation: {
+    name: "seed_regulation",
+    description: "Seed a new regulation into the regulation database with its clause tree. Use when the user uploads a regulation document — first read it via get_file_content, extract clauses, then call this tool before create_pack.",
+    inputSchema: ToolSchemas.seed_regulation,
+    logLabel: "Seed regulation",
+    mutates: true,
+    execute: async (_sessionId, input) => {
+      const { code, title, description, jurisdiction, versions, crossReferences, clauses } = input as {
+        code: string; title: string; description: string; jurisdiction: string;
+        versions?: { version: string; effectiveDate: string; isCurrent: boolean }[];
+        crossReferences?: string[]; clauses: { number: string; title: string; text: string; parentNumber?: string }[];
+      };
+      const api = await getRegulationApi();
+      const result = await api.seedRegulation({ code, title, description, jurisdiction, versions, crossReferences, clauses });
+      if (!result.success) return { error: result.error };
+      return {
+        seeded: true,
+        code: result.code,
+        clauseCount: result.clauseCount,
+        message: `Regulation "${code}" seeded with ${result.clauseCount} clauses. Read it via get_regulation_text, then call create_pack with your pack design.`,
+      };
     },
   },
 

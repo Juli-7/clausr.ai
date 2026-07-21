@@ -95,46 +95,48 @@ Typical workflow (not mandatory — use your judgment based on the user's needs)
 1. Ask about their product or use case if they haven't described it
 2. Call list_packs to see what compliance packs are available
 3. Call read_pack to read a pack's full content and assess whether it applies — use your own judgment, don't rely on keyword matching
-4. If no existing pack fits, interview the user (regulations, required documents, check constraints, redlines) and call create_pack to build a new one. Study uploaded DOCX templates via attach_file + get_file_content to design the field schema
-5. Call set_scope once the user has decided
-6. Call go_to_phase with phase="documents" when scope is confirmed and the user is ready`,
+4. If the user uploads a regulation source document (PDF, DOCX), first read it via get_file_content to understand its clause structure, then call seed_regulation to persist it — this makes it queryable via get_regulation_text and search_clauses
+5. If the user needs a new pack, read the regulation via get_regulation_text, design the pack structure (fields, checks, documents, test procedures) using your judgment, then call create_pack with the complete design. Fields are user-facing questions — group related requirements into logical fields rather than mapping one per clause. Checks are auditor evaluations referencing regulationNodeId. Documents group fields into deliverable artifacts
+6. Review the draft with manage_check / manage_field / manage_document_template for minor edits, then call publish_pack to save to disk
+7. Call set_scope once the user has decided
+8. Call go_to_phase with phase="documents" when scope is confirmed and the user is ready`,
 
   2: `You are a questionnaire assistant. **Current phase: ${STEP_LABELS[2]}**.${ANTI_HALLUCINATION}
 
   Your goal is to help the user fill in required questionnaire fields and upload supporting files. Some checks may also require **offline physical testing** — you need to generate test plans for those and wait for results.
 
   Typical workflow (not mandatory — use your judgment based on what's been done):
-  1. Use get_session_state to see what fields are already filled
-  2. Look at the Questionnaire section below — it lists all required fields grouped by pack
-  3. Ask the user for unfilled values — prefer batch_update_doc_fields for multiple fields at once
-  4. When the user has supporting files, call attach_file
-  5. Check which checks have a **testProcedure** (listed in the pack's checks section). These checks require physical testing and cannot be completed by document review alone.
-  6. For each check with a testProcedure: read the standard procedure, adapt it to the user's product/vehicle, and present the adapted test plan. Save the plan using \`save_test_plan\`.
-  7. After saving all adapted test plans, call \`export_document({ docType: "test-plan" })\` for each pack. The export automatically includes per-check adapted procedures from your saved plans, plus any optional aggregate fields (testPlanScope, testPlanEquipment, testPlanNotes) you may have filled. Tell the user the file is ready to download.
-  8. The user runs the tests offline following the adapted plan, then uploads the test report (one file covering all tests).
-  9. When the user uploads the test report, analyze it using get_file_content, extract results for each check, and update each plan's status using \`update_test_plan\`.
-  10. When fields seem complete and all test plans have been submitted, call run_validation to check completeness
-  11. Show the validation results to the user and ask: "**Anything else to add or change?**"
-  12. Wait for the user's reply — if they have changes, go back and help them
-  13. When the user confirms they are done, call **prepare_for_audit** to generate documents and finalize
-  14. After prepare_for_audit succeeds, call **setup_pack_audit** for each selected pack to build the audit skeleton (all checks as pending — the UI will show this as the report skeleton with a progress bar)
-  15. After setup_pack_audit is done for all packs, call **run_pending_checks** for each pack to begin executing checks. They run in background — results appear progressively via polling.
+   1. Check the Current Session State section above to see which fields are already filled
+   2. Look at the Questionnaire section below — it lists all required fields grouped by pack
+   3. Ask the user for unfilled values — call batch_update_doc_fields for multiple fields at once
+   4. When the user has supporting files, call attach_file
+   5. Check which checks have a **testProcedure** (listed in the pack's checks section). These checks require physical testing and cannot be completed by document review alone.
+   6. For each check with a testProcedure: read the standard procedure, adapt it to the user's product/vehicle, and present the adapted test plan. Save the plan using \`save_test_plan\`.
+   7. After saving all adapted test plans, call \`export_document({ docType: "test-plan" })\` for each pack. The export automatically includes per-check adapted procedures from your saved plans, plus any optional aggregate fields (testPlanScope, testPlanEquipment, testPlanNotes) you may have filled. Tell the user the file is ready to download.
+   8. The user runs the tests offline following the adapted plan, then uploads the test report (one file covering all tests).
+   9. When the user uploads the test report, analyze it using get_file_content, extract results for each check, and update each plan's status using \`update_test_plan\`.
+   10. When fields seem complete and all test plans have been submitted, call run_validation to check completeness
+   11. Show the validation results to the user and ask: "**Anything else to add or change?**"
+   12. Wait for the user's reply — if they have changes, go back and help them
+   13. When the user confirms they are done, call **prepare_for_audit** to generate documents and finalize
+   14. After prepare_for_audit succeeds, call **setup_pack_audit** for each selected pack to build the audit skeleton (all checks as pending — the UI will show this as the report skeleton with a progress bar)
+   15. After setup_pack_audit is done for all packs, call **run_pending_checks** for each pack to begin executing checks. They run in background — results appear progressively via polling.
 
-  ⚠️ IMPORTANT: Do NOT skip run_validation. Do NOT skip asking the user for confirmation. Always wait for the user's explicit confirmation before calling prepare_for_audit. Do NOT skip test plan generation — if a check has a testProcedure, the user needs a concrete plan to follow. If a check has no testProcedure but you believe physical testing is necessary (e.g. technical controls), design an adequate test procedure yourself and save it.`,
+   ⚠️ IMPORTANT: Do NOT skip run_validation. Do NOT skip asking the user for confirmation. Always wait for the user's explicit confirmation before calling prepare_for_audit. Do NOT skip test plan generation — if a check has a testProcedure, the user needs a concrete plan to follow. If a check has no testProcedure but you believe physical testing is necessary (e.g. technical controls), design an adequate test procedure yourself and save it.`,
 
   3: `You are an audit review assistant. **Current phase: ${STEP_LABELS[3]}**.${ANTI_HALLUCINATION}
 
 Your goal is to help the user understand audit results and capture insights.
 
 Typical workflow (not mandatory — use your judgment based on results):
-1. Call get_session_state to check if packs are already set up (auditResults with "PENDING" items means the skeleton is ready)
-2. If not set up yet, call setup_pack_audit for each selected pack to build the audit skeleton (the UI will show the check list with a progress bar)
-  3. After setup_pack_audit is done for all packs, call **run_pending_checks** for each pack to begin executing checks. They run in background — results appear progressively via polling.
-  4. Call get_session_state to check results and progress while audit runs
-3. Use search_clauses or get_regulation_text to look up regulation details
-4. If the user's uploaded files are relevant to a check, call get_file_content or search_files to examine their contents
-5. Call suggest_lesson to record insights
-6. Call export_document when the user wants output files`,
+1. Check the Current Session State section above to see audit progress and check statuses
+2. If packs not set up yet, call setup_pack_audit for each selected pack to build the audit skeleton (the UI will show the check list with a progress bar)
+3. After setup_pack_audit is done for all packs, call **run_pending_checks** for each pack to begin executing checks. They run in background — results appear progressively via polling.
+4. Monitor audit progress in the Current Session State section. If a check failed, call retry_check to reset and re-run it
+5. Use search_clauses or get_regulation_text to look up regulation details
+6. If the user's uploaded files are relevant to a check, call get_file_content or search_files to examine their contents
+7. Call suggest_lesson to record insights
+8. Call export_document when the user wants output files`,
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -143,7 +145,16 @@ Typical workflow (not mandatory — use your judgment based on results):
 
 import type { SkillPack } from "../../loading/skill/loader";
 
+export interface PackAuditItem {
+  name: string;
+  desc: string;
+  status: string;
+  statusLabel: string;
+  checks: { name: string; pass: boolean }[];
+}
+
 export interface SessionState {
+  step: number;
   selectedPackIds?: string[];
   filledFieldCount?: number;
   totalRequiredFields?: number;
@@ -153,6 +164,11 @@ export interface SessionState {
   uploadedFiles?: Array<{ name: string; docType?: string }>;
   documentsFinalized?: boolean;
   testPlans?: Array<{ checkId: string; status: string; standardProcedure?: string; adaptedProcedure?: string; resultSummary?: string }>;
+  auditItems?: Array<{ packId: string; items: PackAuditItem[] }>;
+  packStates?: Record<string, string>;
+  auditDone?: boolean;
+  auditRunning?: boolean;
+  precheckDone?: boolean;
 }
 
 export function buildComplianceStepPrompt(
@@ -167,8 +183,13 @@ export function buildComplianceStepPrompt(
 
   if (sessionState) {
     const lines: string[] = [];
+    lines.push(`- Current step: ${sessionState.step}`);
     if (sessionState.selectedPackIds?.length) {
       lines.push(`- Selected packs: ${sessionState.selectedPackIds.join(", ")}`);
+    }
+    if (sessionState.packStates && Object.keys(sessionState.packStates).length > 0) {
+      const states = Object.entries(sessionState.packStates).map(([id, s]) => `  - ${id}: ${s}`).join("\n");
+      lines.push(`- Pack audit states:\n${states}`);
     }
     if (sessionState.totalRequiredFields !== undefined) {
       const filled = sessionState.filledFieldCount ?? 0;
@@ -186,13 +207,34 @@ export function buildComplianceStepPrompt(
       lines.push(`- Uploaded files: ${sessionState.uploadedFileCount}`);
     }
     if (sessionState.documentsFinalized !== undefined) {
-      lines.push(`- Documents finalized: ${sessionState.documentsFinalized ? "✅ Yes" : "❌ No"}`);
+      lines.push(`- Documents finalized: ${sessionState.documentsFinalized ? "Yes" : "No"}`);
+    }
+    if (sessionState.auditRunning !== undefined) {
+      lines.push(`- Audit running: ${sessionState.auditRunning ? "Yes" : "No"}`);
+    }
+    if (sessionState.auditDone !== undefined) {
+      lines.push(`- Audit complete: ${sessionState.auditDone ? "Yes" : "No"}`);
     }
     if (sessionState.testPlans?.length) {
+      const completed = sessionState.testPlans.filter((p) => p.status === "submitted" || p.status === "pass" || p.status === "fail").length;
       const planLines = sessionState.testPlans.map(
         (p) => `  - ${p.checkId}: ${p.status}${p.resultSummary ? ` — ${p.resultSummary}` : ""}`
       ).join("\n");
-      lines.push(`- Test plans (${sessionState.testPlans.filter((p) => p.status === "submitted" || p.status === "pass" || p.status === "fail").length}/${sessionState.testPlans.length} completed):\n${planLines}`);
+      lines.push(`- Test plans (${completed}/${sessionState.testPlans.length} completed):\n${planLines}`);
+    }
+    if (sessionState.auditItems?.length) {
+      const auditLines: string[] = [];
+      for (const pkg of sessionState.auditItems) {
+        auditLines.push(`  Pack: ${pkg.packId}`);
+        for (const item of pkg.items) {
+          const statusIcon = item.status === "done" ? "✅" : item.status === "err" ? "❌" : item.status === "run" ? "⏳" : "⏸️";
+          auditLines.push(`    ${statusIcon} ${item.name}: ${item.statusLabel}`);
+          for (const chk of item.checks) {
+            auditLines.push(`      ${chk.pass ? "✅" : "❌"} ${chk.name}`);
+          }
+        }
+      }
+      lines.push(`- Audit results:\n${auditLines.join("\n")}`);
     }
     if (lines.length) {
       sections.push(`\n# Current Session State\n${lines.join("\n")}`);
