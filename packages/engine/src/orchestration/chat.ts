@@ -1,10 +1,10 @@
 import { streamText, tool } from "ai";
-import { createModel } from "./agent/llm/factory";
-import { addAssistantMessage, addUserMessage, addToolMessage } from "./agent/shared/memory/repository";
-import { logInfo } from "./agent/pipeline/logger";
-import { COMPLIANCE_SYSTEM_PROMPTS, buildComplianceStepPrompt, type SessionState } from "./agent/pipeline/prompts";
-import type { SkillPack } from "./agent/loading/skill/loader";
-import { TOOL_DEFS, TOP_LEVEL_TOOLS, type ToolName } from "./compliance-tools";
+import { createModel } from "../agent/llm/factory";
+import { addAssistantMessage, addUserMessage, addToolMessage } from "../agent/shared/memory/repository";
+import { logInfo } from "../agent/pipeline/logger";
+import { COMPLIANCE_SYSTEM_PROMPTS, buildComplianceStepPrompt, type SessionState } from "./prompts";
+import type { SkillPack } from "../agent/loading/skill/loader";
+import { TOOL_DEFS, TOP_LEVEL_TOOLS, type ToolName } from "../compliance-tools";
 
 export type ComplianceChatEvent =
   | { type: "text-delta"; text: string }

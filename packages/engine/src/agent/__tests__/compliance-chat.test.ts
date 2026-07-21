@@ -28,7 +28,7 @@ vi.mock("../pipeline/logger", () => ({
   logInfo: mockLogInfo,
 }));
 
-vi.mock("../pipeline/prompts", () => ({
+vi.mock("../../orchestration/prompts", () => ({
   COMPLIANCE_SYSTEM_PROMPTS: {
     1: "Step 1 system prompt",
     2: "Step 2 system prompt",
@@ -38,7 +38,7 @@ vi.mock("../pipeline/prompts", () => ({
 }));
 
 import { streamText } from "ai";
-import { complianceChat } from "../../compliance-chat";
+import { complianceChat } from "../../orchestration/chat";
 
 function makeStreamMock(events: unknown[]) {
   const gen = (async function* () {

@@ -44,7 +44,7 @@ const { mockExecuteLlmToolStep, mockParseLlmOutput } = vi.hoisted(() => ({
   mockExecuteLlmToolStep: vi.fn(),
   mockParseLlmOutput: vi.fn(),
 }));
-vi.mock("../pipeline/executors/llm-executor", () => ({
+vi.mock("../../orchestration/llm-executor", () => ({
   executeLlmToolStep: mockExecuteLlmToolStep,
   parseLlmOutput: mockParseLlmOutput,
 }));
@@ -73,7 +73,7 @@ import {
   getPackAuditState,
   finalizeAudit,
   resolveCitation,
-} from "../../compliance-audit-tools";
+} from "../../orchestration/audit-tools";
 
 function makeSampleCheck(field: string, dependsOn?: string) {
   return {

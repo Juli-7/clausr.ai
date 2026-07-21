@@ -14,7 +14,7 @@ import { saveLessonOverride, getLessonOverrides } from "./agent/shared/memory/re
 import {
   setupPackAudit, setupPackAuditAndRun, runPendingChecks, retryCheck,
   getPackAuditState, finalizeAudit,
-} from "./compliance-audit-tools";
+} from "./orchestration/audit-tools";
 import { getPack, packs, readPackContent, writePack, appendPackLessons, getDraftPack, saveDraftPack, clearDraftPack } from "./compliance-packs";
 import type { CreatePackInput } from "./compliance-packs";
 import type { PackField, DocumentTemplate, PackCheck } from "./agent/loading/skill/loader";

@@ -1,16 +1,16 @@
 import { streamText, tool, type ToolSet } from "ai";
 import { z } from "zod";
-import { createModel } from "../../llm/factory";
-import { runScript } from "./script-runner";
-import { ComplianceCheckSchema } from "../../shared/schemas";
-import { executeComplianceCheck } from "../../pipeline/builtins";
-import { getRegulationApi } from "../../knowledge/regulation-api";
-import { buildSystemPrompt, buildUserMessage } from "../../pipeline/prompts";
-import type { ExecutableStep } from "../types";
-import type { PipelineContext, CheckResult, CitationPaletteEntry } from "../pipeline-context";
-import type { StepResult } from "../types";
-import type { ToolCallRecord } from "../../shared/types";
-import { logPipeline, truncate } from "../logger";
+import { createModel } from "../agent/llm/factory";
+import { runScript } from "../agent/pipeline/executors/script-runner";
+import { ComplianceCheckSchema } from "../agent/shared/schemas";
+import { executeComplianceCheck } from "../agent/pipeline/builtins";
+import { getRegulationApi } from "../agent/knowledge/regulation-api";
+import { buildSystemPrompt, buildUserMessage } from "./prompts";
+import type { ExecutableStep } from "../agent/pipeline/types";
+import type { PipelineContext, CheckResult, CitationPaletteEntry } from "../agent/pipeline/pipeline-context";
+import type { StepResult } from "../agent/pipeline/types";
+import type { ToolCallRecord } from "../agent/shared/types";
+import { logPipeline, truncate } from "../agent/pipeline/logger";
 
 export async function executeLlmToolStep(
   step: ExecutableStep,

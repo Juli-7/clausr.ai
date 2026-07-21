@@ -2,31 +2,7 @@ import { streamText, tool } from "ai";
 import { z } from "zod";
 import { createModel } from "../agent/llm/factory";
 import { TOOL_DEFS, type ToolName } from "../compliance-tools";
-
-const PACK_DESIGNER_PROMPT = `You are a compliance pack designer. Create a complete compliance pack based on the user's request.
-
-Available tools:
-- extract_file_content — read uploaded regulation documents
-- seed_regulation — save regulation clause structure to the DB
-- get_regulation_text — read regulation text or clauses from the DB
-- search_clauses — keyword search across seeded regulations
-- manage_field — add, update, or remove questionnaire fields
-- manage_check — add, update, or remove compliance checks
-- manage_document_template — add, update, or remove document templates
-- publish_pack — save the completed pack to disk
-
-Suggested workflow:
-1. Extract + seed any uploaded regulation documents so they're queryable
-2. Read the regulation text to understand its requirements
-3. Design the pack: fields (user-facing questions), checks (auditor evaluations), documents (output artifacts)
-4. Use manage_* tools to iteratively build the pack
-5. Call publish_pack when the design is complete
-
-Guidelines:
-- Fields should be user-facing questions that collect data needed by checks
-- Checks should reference regulation clauses via get_regulation_text or search_clauses
-- Group related requirements into logical fields rather than 1:1 clause mapping
-- You can review and refine your design with multiple manage_* calls before publishing`;
+import { PACK_DESIGNER_PROMPT } from "./prompts";
 
 const PACK_TOOLS: ToolName[] = [
   "extract_file_content",

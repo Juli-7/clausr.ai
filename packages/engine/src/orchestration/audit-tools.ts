@@ -1,11 +1,11 @@
-import { initSession } from "./agent/loading/phases/init-phase";
-import { createPipelineContext } from "./agent/pipeline/pipeline-context";
-import { generateStepsFromChecks } from "./agent/loading/generate-steps";
-import { executeLlmToolStep, parseLlmOutput } from "./agent/pipeline/executors/llm-executor";
-import { generateCorrelationId } from "./agent/pipeline/errors";
-import { getDocStore } from "./agent/user-info/vector-store";
-import { getRegulationApi } from "./agent/knowledge/regulation-api";
-import { logPipeline } from "./agent/pipeline/logger";
+import { initSession } from "../agent/loading/phases/init-phase";
+import { createPipelineContext } from "../agent/pipeline/pipeline-context";
+import { generateStepsFromChecks } from "../agent/loading/generate-steps";
+import { executeLlmToolStep, parseLlmOutput } from "./llm-executor";
+import { generateCorrelationId } from "../agent/pipeline/errors";
+import { getDocStore } from "../agent/user-info/vector-store";
+import { getRegulationApi } from "../agent/knowledge/regulation-api";
+import { logPipeline } from "../agent/pipeline/logger";
 import {
   getComplianceSession,
   setCompliancePackStates,
@@ -14,10 +14,10 @@ import {
   setComplianceAgentResponse,
   setComplianceAuditDone,
   setComplianceAuditRunning,
-} from "./agent/shared/memory/repository";
-import type { ParsedCheck, CheckFieldType } from "./agent/loading/skill/check-parser";
-import type { ExecutableStep, StepResult } from "./agent/pipeline/types";
-import type { ProcessedFile } from "./agent/user-info/vector-store/types";
+} from "../agent/shared/memory/repository";
+import type { ParsedCheck, CheckFieldType } from "../agent/loading/skill/check-parser";
+import type { ExecutableStep, StepResult } from "../agent/pipeline/types";
+import type { ProcessedFile } from "../agent/user-info/vector-store/types";
 
 export interface PackCheckState {
   state: "pending" | "ready" | "running" | "done" | "failed"

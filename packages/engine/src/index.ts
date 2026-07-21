@@ -34,17 +34,17 @@ export type { ToolDef, ToolName, ToolInput } from "./compliance-tools";
 
 // ── Tool Implementations ──
 export { executeComplianceCheck } from "./agent/pipeline/builtins";
-export { buildComplianceStepPrompt } from "./agent/pipeline/prompts";
-export type { SessionState, PackAuditItem } from "./agent/pipeline/prompts";
+export { buildComplianceStepPrompt } from "./orchestration/prompts";
+export type { SessionState, PackAuditItem } from "./orchestration/prompts";
 export { runScript } from "./agent/pipeline/executors/script-runner";
 
 // ── Export ──
 export { generateDocx } from "./agent/present/export/export-docx";
 
 // ── Chat ──
-export { complianceChat } from "./compliance-chat";
-export type { ComplianceChatEvent, ComplianceChatParams } from "./compliance-chat";
-export { resolveCitation } from "./compliance-audit-tools";
+export { complianceChat } from "./orchestration/chat";
+export type { ComplianceChatEvent, ComplianceChatParams } from "./orchestration/chat";
+export { resolveCitation } from "./orchestration/audit-tools";
 
 // ── Shared Types ──
 export type { AgentResponse } from "./agent/shared/types";
