@@ -35,6 +35,7 @@ export type ToolName =
   | "list_packs"
   | "read_pack"
   | "create_pack"
+  | "design_pack"
   | "setup_pack_audit"
   | "run_pending_checks"
   | "retry_check"
@@ -85,6 +86,11 @@ export const ToolSchemas = {
   list_packs: z.object({}),
   read_pack: z.object({
     packId: z.string(),
+  }),
+  design_pack: z.object({
+    packId: z.string().describe("Desired pack ID, lowercase-hyphens, e.g. 'ev-battery-r100'"),
+    userGoal: z.string().describe("Description of what pack to design, e.g. 'Design a pack based on GB/T 44464-2024 for electric vehicle batteries'"),
+    regulationSourceFileId: z.string().optional().describe("File ID of an uploaded regulation document to extract and seed"),
   }),
   create_pack: z.object({
     id: z.string().describe("lowercase-hyphens, e.g. 'ev-battery-r100'"),
@@ -454,6 +460,25 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
         checkCount: data.checks.length,
         documentCount: data.documents.length,
         message: "Draft pack created. Review with manage_check/manage_field/manage_document_template, then call publish_pack to save to disk.",
+      };
+    },
+  },
+
+  design_pack: {
+    name: "design_pack",
+    description: "Design a complete compliance pack from regulation documents. Launches an AI designer that extracts the regulation, seeds it into the DB, designs fields/checks/documents, and publishes the pack. Returns the published pack ID.",
+    inputSchema: ToolSchemas.design_pack,
+    logLabel: "Design pack",
+    mutates: true,
+    execute: async (sessionId, input) => {
+      const { packId, userGoal } = input as { packId: string; userGoal: string };
+      const { designPackSubOrchestrator: runDesigner } = await import("./orchestration/pack-designer");
+      const result = await runDesigner(sessionId, userGoal);
+      return {
+        packId: result.packId,
+        fieldCount: result.fieldCount,
+        checkCount: result.checkCount,
+        documentCount: result.docCount,
       };
     },
   },
@@ -978,6 +1003,42 @@ function runAuditChecksInBackground(sessionId: string, packIds: string[]): void 
     }
   })();
 }
+
+export const TOP_LEVEL_TOOLS: ToolName[] = [
+  "set_scope",
+  "batch_update_doc_fields",
+  "attach_file",
+  "detach_file",
+  "export_document",
+  "go_to_phase",
+  "list_packs",
+  "read_pack",
+  "design_pack",
+  "setup_pack_audit",
+  "run_pending_checks",
+  "retry_check",
+  "get_file_content",
+  "extract_file_content",
+  "run_validation",
+  "prepare_for_audit",
+  "search_clauses",
+  "get_regulation_text",
+  "search_files",
+  "suggest_lesson",
+  "save_test_plan",
+  "update_test_plan",
+];
+
+export const PACK_DESIGNER_TOOLS: ToolName[] = [
+  "extract_file_content",
+  "seed_regulation",
+  "get_regulation_text",
+  "search_clauses",
+  "manage_field",
+  "manage_document_template",
+  "manage_check",
+  "publish_pack",
+];
 
 export function getTool(name: string) {
   return TOOL_DEFS[name as ToolName];

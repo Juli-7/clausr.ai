@@ -4,7 +4,7 @@ import { addAssistantMessage, addUserMessage, addToolMessage } from "./agent/sha
 import { logInfo } from "./agent/pipeline/logger";
 import { COMPLIANCE_SYSTEM_PROMPTS, buildComplianceStepPrompt, type SessionState } from "./agent/pipeline/prompts";
 import type { SkillPack } from "./agent/loading/skill/loader";
-import { TOOL_DEFS, type ToolName } from "./compliance-tools";
+import { TOOL_DEFS, TOP_LEVEL_TOOLS, type ToolName } from "./compliance-tools";
 
 export type ComplianceChatEvent =
   | { type: "text-delta"; text: string }
@@ -50,9 +50,10 @@ export async function* complianceChat(
     return;
   }
 
-  const toolEntries = params.disallowedTools
-    ? Object.entries(TOOL_DEFS).filter(([name]) => !params.disallowedTools!.includes(name))
-    : Object.entries(TOOL_DEFS);
+  const allowed = (TOP_LEVEL_TOOLS as readonly string[]).filter(
+    (name) => !params.disallowedTools?.includes(name)
+  );
+  const toolEntries = Object.entries(TOOL_DEFS).filter(([name]) => allowed.includes(name));
   const allTools = Object.fromEntries(
     toolEntries.map(([name, def]) => [
       name,

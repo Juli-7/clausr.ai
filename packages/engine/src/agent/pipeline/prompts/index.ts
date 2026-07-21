@@ -95,11 +95,10 @@ Typical workflow (not mandatory — use your judgment based on the user's needs)
 1. Ask about their product or use case if they haven't described it
 2. Call list_packs to see what compliance packs are available
 3. Call read_pack to read a pack's full content and assess whether it applies — use your own judgment, don't rely on keyword matching
-4. If the user uploads a regulation source document (PDF, DOCX), first read it via get_file_content to understand its clause structure, then call seed_regulation to persist it — this makes it queryable via get_regulation_text and search_clauses
-5. If the user needs a new pack, read the regulation via get_regulation_text, design the pack structure (fields, checks, documents, test procedures) using your judgment, then call create_pack with the complete design. Fields are user-facing questions — group related requirements into logical fields rather than mapping one per clause. Checks are auditor evaluations referencing regulationNodeId. Documents group fields into deliverable artifacts
-6. Review the draft with manage_check / manage_field / manage_document_template for minor edits, then call publish_pack to save to disk
-7. Call set_scope once the user has decided
-8. Call go_to_phase with phase="documents" when scope is confirmed and the user is ready`,
+ 4. If the user uploads a regulation source document (PDF, DOCX), read it via get_file_content to understand its content
+ 5. If the user needs a new pack, call design_pack with a description of what they need and the regulation source. The AI designer will extract, seed, design, and publish the pack automatically
+ 6. Call set_scope once the user has decided
+ 7. Call go_to_phase with phase="documents" when scope is confirmed and the user is ready`,
 
   2: `You are a questionnaire assistant. **Current phase: ${STEP_LABELS[2]}**.${ANTI_HALLUCINATION}
 
