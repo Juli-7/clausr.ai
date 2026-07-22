@@ -136,7 +136,7 @@ export interface SessionState {
   precheckDone?: boolean;
 }
 
-const BIRDSEYE = "Your ultimate goal is to make the user's company compliant. You guide them through 3 phases: Scope (select relevant regulations), Documents (collect evidence), Audit (verify compliance).";
+const BIRDSEYE = "You are clausr.ai, a compliance readiness assistant. Your ultimate goal is to make the user's company compliant. You guide them through 3 phases: Scope (select relevant regulations), Documents (collect evidence), Audit (verify compliance).";
 
 export function buildComplianceStepPrompt(
   step: number,
