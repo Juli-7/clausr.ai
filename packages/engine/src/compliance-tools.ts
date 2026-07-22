@@ -604,7 +604,11 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
     mutates: true,
     execute: async (sessionId, input) => {
       const { packId } = input as { packId: string };
-      return await setupPackAuditAndRun(sessionId, packId) as unknown as Record<string, unknown>;
+      try {
+        return await setupPackAuditAndRun(sessionId, packId) as unknown as Record<string, unknown>;
+      } catch (err) {
+        return { error: `Failed to set up pack "${packId}": ${err instanceof Error ? err.message : "Unknown error"}` };
+      }
     },
   },
 
