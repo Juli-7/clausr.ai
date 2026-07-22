@@ -261,7 +261,7 @@ export interface ToolDef {
 export const TOOL_DEFS: Record<ToolName, ToolDef> = {
   set_scope: {
     name: "set_scope",
-    description: "Select packs to include in the assessment.",
+    description: "Select packs to include in the assessment. Call after the user has decided on their pack selection.",
     inputSchema: ToolSchemas.set_scope,
     logLabel: "Set compliance scope",
     mutates: true,
@@ -392,7 +392,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   go_to_phase: {
     name: "go_to_phase",
-    description: "Move between phases: scope/documents/audit.",
+    description: "Move between phases: scope (step 1), documents (step 2), audit (step 3). Call with 'documents' after scope is confirmed. Call with 'audit' after documents are finalized.",
     inputSchema: ToolSchemas.go_to_phase,
     logLabel: "Go to phase",
     mutates: true,
@@ -662,7 +662,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   run_validation: {
     name: "run_validation",
-    description: "Check all required fields are filled.",
+    description: "Check all required fields are filled. Show results and ask user to confirm before calling prepare_for_audit.",
     inputSchema: ToolSchemas.run_validation,
     logLabel: "Run validation",
     mutates: true,

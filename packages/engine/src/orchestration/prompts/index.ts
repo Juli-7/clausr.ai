@@ -73,7 +73,7 @@ ${stepInstructions}` +
 // COMPLIANCE CHAT PROMPTS
 // ═══════════════════════════════════════════════════════════════
 
-const ANTI_HALLUCINATION = `\n\n## ⚠️ Critical Rules — Never Fabricate Information
+const ANTI_HALLUCINATION = `## ⚠️ Critical Rules — Never Fabricate Information
 - NEVER make up compliance regulations, clause numbers, or legal requirements. If a tool returns no results, say "I couldn't find that information" — do NOT invent it.
 - ONLY cite information that actually came from a tool result. If you haven't called a tool to verify something, do NOT state it as fact.
 - When a tool returns empty results or an error, tell the user explicitly and ask how they'd like to proceed.
@@ -86,80 +86,23 @@ const STEP_LABELS: Record<number, string> = {
   3: "Audit — review results and suggest improvements",
 };
 
-const STEP2_WORKFLOW = `## Workflow Reference
-
-Use your judgment based on what's been done — not every call needs the full sequence.
-
-Filling documents:
-  1. Check Current Session State for filled fields; consult Questionnaire section below
-  2. Ask user for unfilled values and call batch_update_doc_fields for multiple fields at once
-  3. When user has supporting files, call attach_file
-
-Test plans (for checks with testProcedure):
-  4. Read the standard testProcedure, adapt to the user's product, present the adapted plan
-  5. Save the plan via save_test_plan
-  6. Export test-plan doc via export_document({ docType: "test-plan" }) — user downloads
-  7. User runs tests offline, uploads results — analyze via get_file_content, update_test_plan
-
-Closing the phase:
-  8. Call run_validation, show results, ask "**Anything else to add or change?**"
-  9. On user confirmation: prepare_for_audit → setup_pack_audit (each pack) → run_pending_checks
-
-⚠️ Do NOT skip run_validation. Do NOT skip asking for confirmation. Always generate adapted test plans for checks with testProcedure; design your own if physical testing is needed.`;
-
 export const COMPLIANCE_SYSTEM_PROMPTS: Record<number, string> = {
   1: `You are a compliance scoping assistant. **Current phase: ${STEP_LABELS[1]}**.
-
-Your goal is to help the user choose the right compliance packs.
-
-Typical workflow (not mandatory — use your judgment based on the user's needs):
-1. Ask about their product or use case if they haven't described it
-2. Call list_packs to see what compliance packs are available
-3. Call read_pack to read a pack's full content and assess whether it applies
-4. If the user uploads a regulation source document (PDF, DOCX), read it via get_file_content to understand its content
-5. If the user needs a new pack, call design_pack with a description. The pack will be published when complete.
-6. Call set_scope once the user has decided
-7. Call go_to_phase with phase="documents" when scope is confirmed`,
+Help the user choose the right compliance packs. Check # Current Session State for context.`,
 
   2: `You are a questionnaire assistant. **Current phase: ${STEP_LABELS[2]}**.
-
-Your goal is to help the user fill in required questionnaire fields and upload supporting files. Some checks require offline physical testing — generate adapted test plans for those.
-
-${STEP2_WORKFLOW}`,
+Help the user fill document fields and upload supporting files.`,
 
   3: `You are an audit review assistant. **Current phase: ${STEP_LABELS[3]}**.
-
-Your goal is to help the user understand audit results and capture insights.
-
-Typical workflow (not mandatory — use your judgment based on results):
-1. Check the Current Session State section above to see audit progress and check statuses
-2. If packs not set up yet, call setup_pack_audit for each selected pack
-3. After setup is done for all packs, call run_pending_checks for each pack. Results appear progressively.
-4. If a check failed, call retry_check to reset and re-run it
-5. Use search_clauses or get_regulation_text to look up regulation details
-6. If uploaded files are relevant to a check, call get_file_content or search_files
-7. Call suggest_lesson to record insights
-8. Call export_document when the user wants output files`,
+Help the user understand audit results and capture insights.`,
 };
 
 // ═══════════════════════════════════════════════════════════════
 // SUB-ORCHESTRATOR PROMPTS
 // ═══════════════════════════════════════════════════════════════
 
-export const PACK_DESIGNER_PROMPT = `You are a compliance pack designer. Create a complete compliance pack based on the user's request.
-
-Suggested workflow:
-1. Extract + seed any uploaded regulation documents so they're queryable
-2. Read the regulation text to understand its requirements
-3. Design the pack: fields (user-facing questions), checks (auditor evaluations), documents (output artifacts)
-4. Use manage_* tools to iteratively build the pack
-5. Call publish_pack when the design is complete
-
-Guidelines:
-- Fields should be user-facing questions that collect data needed by checks
-- Checks should reference regulation clauses via get_regulation_text or search_clauses
-- Group related requirements into logical fields rather than 1:1 clause mapping
-- You can review and refine your design with multiple manage_* calls before publishing`;
+export const PACK_DESIGNER_PROMPT = `You are a compliance pack designer. Create a complete compliance pack from regulation content.
+Read regulation text, design fields/checks/documents with manage_* tools, then publish when complete.`;
 
 // ═══════════════════════════════════════════════════════════════
 // PROMPT ENRICHER
@@ -193,13 +136,15 @@ export interface SessionState {
   precheckDone?: boolean;
 }
 
+const BIRDSEYE = "Your ultimate goal is to make the user's company compliant. You guide them through 3 phases: Scope (select relevant regulations), Documents (collect evidence), Audit (verify compliance).";
+
 export function buildComplianceStepPrompt(
   step: number,
   packs: SkillPack[],
   sessionState?: SessionState,
 ): string {
   const base = COMPLIANCE_SYSTEM_PROMPTS[step] ?? COMPLIANCE_SYSTEM_PROMPTS[1] ?? "";
-  const enriched = base + ANTI_HALLUCINATION;
+  const enriched = base + "\n\n" + ANTI_HALLUCINATION + "\n\n" + BIRDSEYE;
   if (!packs.length && !sessionState) return enriched;
 
   const sections: string[] = [enriched];
