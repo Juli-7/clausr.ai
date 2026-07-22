@@ -188,7 +188,8 @@ export function loadPack(packName: string, options?: LoadPackOptions): SkillPack
   const packsDir = options?.packsDir ?? SKILLS_DIR;
   const packDir = path.join(packsDir, packName);
   const skillPath = path.join(packDir, "SKILL.md");
-  if (!fs.existsSync(skillPath)) return null;
+  const packJsonPath = path.join(packDir, "pack.json");
+  if (!fs.existsSync(skillPath) && !fs.existsSync(packJsonPath)) return null;
 
   const packFile = loadPackFile<PackFileData>(packDir);
   const docPack = packFile?.pack ?? {};
@@ -201,7 +202,7 @@ export function loadPack(packName: string, options?: LoadPackOptions): SkillPack
   const regs: string[] = docPack.regulation_ids ?? packFile?.regulation_ids ?? [];
 
   let fields = loadFields(packFile?.fields);
-  if (fields.length === 0) {
+  if (fields.length === 0 && fs.existsSync(skillPath)) {
     // Backward compat: infer a single field from the legacy checks
     const raw = fs.readFileSync(skillPath, "utf-8");
     const parsed = matter(raw);
@@ -246,7 +247,10 @@ export function listPacks(packsDir?: string): string[] {
   const dir = packsDir ?? SKILLS_DIR;
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && fs.existsSync(path.join(dir, d.name, "SKILL.md")))
+    .filter((d) => d.isDirectory() && (
+      fs.existsSync(path.join(dir, d.name, "pack.json")) ||
+      fs.existsSync(path.join(dir, d.name, "SKILL.md"))
+    ))
     .map((d) => d.name);
 }
 
