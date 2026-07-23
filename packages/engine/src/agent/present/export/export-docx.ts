@@ -12,6 +12,7 @@ import {
   BorderStyle,
 } from "docx";
 import type { AgentResponse } from "../../shared/types";
+interface DocxCustomProperty { readonly name: string; readonly value: string; }
 
 // Maps underscored check field names to hyphenated template placeholder names.
 // A single check can map to multiple template placeholders.
@@ -80,9 +81,57 @@ async function fillTemplateDocx(
     docXml = docXml.replaceAll(placeholder, escaped);
   }
 
+  // Add watermark (invisible paragraph)
+  const insertBefore = '</w:body>';
+  docXml = docXml.replace(insertBefore, buildWatermarkOoxml(response) + insertBefore);
+
   zip.file("word/document.xml", docXml);
+
+  // Inject / update custom properties with 5 metadata elements
+  injectCustomProperties(zip, response, JSZip);
+
   const outBlob = await zip.generateAsync({ type: "blob" });
   return outBlob;
+}
+
+function buildWatermarkOoxml(response: AgentResponse): string {
+  const provider = response.sections?.providerIdentity
+    ? stripMarkdown(response.sections.providerIdentity as string)
+    : "clausr.ai";
+  const contentId = `${response.sessionId ?? "unknown"}-${Date.now()}`;
+  const wm = `AIGen|${provider}|${contentId}|${new Date().toISOString().slice(0, 10)}`;
+  return `<w:p><w:r><w:rPr><w:sz w:val="2"/><w:color w:val="FFFFFF"/><w:vanish/></w:rPr><w:t xml:space="preserve">${escapeXml(wm)}</w:t></w:r></w:p>`;
+}
+
+async function injectCustomProperties(zip: import("jszip"), response: AgentResponse, JSZip: typeof import("jszip")): Promise<void> {
+  const provider = response.sections?.providerIdentity
+    ? stripMarkdown(response.sections.providerIdentity as string)
+    : "clausr.ai";
+  const contentId = `${response.sessionId ?? "unknown"}-${Date.now()}`;
+  const props = [
+    { fmtid: "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}", pid: "2", name: "AIGenLabel", value: "AI生成" },
+    { fmtid: "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}", pid: "3", name: "AIGenProvider", value: provider },
+    { fmtid: "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}", pid: "4", name: "AIGenContentId", value: contentId },
+    { fmtid: "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}", pid: "5", name: "AIGenPropagationProvider", value: provider },
+    { fmtid: "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}", pid: "6", name: "AIGenPropagationContentId", value: `${response.sessionId ?? "unknown"}-p-${Date.now()}` },
+  ];
+
+  const propsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+${props.map((p) => `  <property fmtid="${p.fmtid}" pid="${p.pid}" name="${p.name}"><vt:lpwstr>${escapeXml(p.value)}</vt:lpwstr></property>`).join("\n")}
+</Properties>`;
+
+  zip.file("docProps/custom.xml", propsXml);
+
+  // Ensure [Content_Types].xml includes custom.xml
+  const ctEntry = zip.file("[Content_Types].xml");
+  if (ctEntry) {
+    let ctXml = await ctEntry.async("text");
+    if (!ctXml.includes('docProps/custom.xml')) {
+      ctXml = ctXml.replace('</Types>', `  <Override PartName="/docProps/custom.xml" ContentType="application/vnd.openxmlformats-officedocument.custom-properties+xml"/>\n</Types>`);
+      zip.file("[Content_Types].xml", ctXml);
+    }
+  }
 }
 
 async function fillTemplateFromBuffer(
@@ -104,7 +153,15 @@ async function fillTemplateFromBuffer(
     docXml = docXml.replaceAll(placeholder, escaped);
   }
 
+  // Watermark (invisible paragraph)
+  const insertBefore = '</w:body>';
+  docXml = docXml.replace(insertBefore, buildWatermarkOoxml(response) + insertBefore);
+
   zip.file("word/document.xml", docXml);
+
+  // Inject custom properties with 5 metadata elements
+  await injectCustomProperties(zip, response, JSZip);
+
   const outBlob = await zip.generateAsync({ type: "blob" });
   return outBlob;
 }
@@ -178,6 +235,41 @@ function stripMarkdown(md: string): string {
     .replace(/[#*_~`\[\]()>|]/g, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+// ── GB 45438-2025 §6.1 / 附录E: 5 metadata elements ──
+function buildAppendixEMetadata(response: AgentResponse): DocxCustomProperty[] {
+  const provider = response.sections?.providerIdentity
+    ? stripMarkdown(response.sections.providerIdentity as string)
+    : "clausr.ai";
+  return [
+    { name: "AIGenLabel", value: "AI生成" },
+    { name: "AIGenProvider", value: provider },
+    { name: "AIGenContentId", value: `${response.sessionId ?? "unknown"}-${Date.now()}` },
+    { name: "AIGenPropagationProvider", value: provider },
+    { name: "AIGenPropagationContentId", value: `${response.sessionId ?? "unknown"}-p-${Date.now()}` },
+  ];
+}
+
+// ── GB 45438-2025 §6.2: invisible watermark paragraph ──
+function buildWatermarkParagraph(response: AgentResponse): Paragraph {
+  const provider = response.sections?.providerIdentity
+    ? stripMarkdown(response.sections.providerIdentity as string)
+    : "clausr.ai";
+  const contentId = `${response.sessionId ?? "unknown"}-${Date.now()}`;
+  const watermarkText = `AIGen|${provider}|${contentId}|${new Date().toISOString().slice(0, 10)}`;
+  return new Paragraph({
+    spacing: { before: 0, after: 0, line: 1 },
+    children: [
+      new TextRun({
+        text: watermarkText,
+        size: 1,
+        color: "FFFFFF",
+        font: "Calibri",
+        specVanish: true,
+      }),
+    ],
+  });
 }
 
 function humanizeSlug(slug: string): string {
@@ -356,6 +448,9 @@ function buildFallbackDocx(
   // ── Style override: make heading 3 lines in detail bold ──
   // (handled via the docx library styles)
 
+  // ── Watermark (GB 45438-2025 §6.2) ──
+  children.push(buildWatermarkParagraph(response));
+
   // ── References ──
   if (response.citations.length > 0) {
     children.push(new Paragraph({ text: "", spacing: { before: 400 } }));
@@ -396,6 +491,8 @@ function buildFallbackDocx(
   const doc = new Document({
     title: skillName ? `${skillName} Compliance Report` : "Compliance Report",
     description: "Generated by clausr.ai",
+    creator: "clausr.ai",
+    customProperties: buildAppendixEMetadata(response),
     styles: { default: { document: { run: { font: "Calibri", size: 22 } } } },
     sections: [{ children }],
   });
