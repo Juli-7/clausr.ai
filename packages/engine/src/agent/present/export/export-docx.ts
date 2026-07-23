@@ -5,6 +5,11 @@ import {
   TextRun,
   HeadingLevel,
   AlignmentType,
+  Table,
+  TableRow,
+  TableCell,
+  WidthType,
+  BorderStyle,
 } from "docx";
 import type { AgentResponse } from "../../shared/types";
 
@@ -175,12 +180,19 @@ function stripMarkdown(md: string): string {
     .trim();
 }
 
+function humanizeSlug(slug: string): string {
+  return slug
+    .replace(/[-_.]/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function buildFallbackDocx(
   response: AgentResponse,
   skillName?: string
 ): Promise<Blob> {
-  const children: (Paragraph)[] = [];
+  const children: (Paragraph | Table)[] = [];
 
+  // ── Title ──
   children.push(
     new Paragraph({
       text: skillName ? `${skillName} Compliance Report` : "Compliance Report",
@@ -190,21 +202,117 @@ function buildFallbackDocx(
     })
   );
 
+  // ── Meta line ──
+  const metaParts = [
+    new TextRun({ text: "Date: ", bold: true, size: 20 }),
+    new TextRun({ text: `${new Date().toISOString().slice(0, 10)}`, size: 20 }),
+    new TextRun({ text: "     ", size: 20 }),
+    new TextRun({ text: "Ref: ", bold: true, size: 20 }),
+    new TextRun({ text: `${(response.sessionId ?? "unknown").slice(-8)}`, size: 20 }),
+  ];
+  children.push(new Paragraph({ spacing: { after: 100 }, children: metaParts }));
+
+  // ── Executive Summary ──
+  children.push(new Paragraph({ text: "", spacing: { before: 300 } }));
   children.push(
     new Paragraph({
-      spacing: { after: 400 },
+      text: "Executive Summary",
+      heading: HeadingLevel.HEADING_2,
+      spacing: { before: 200, after: 200 },
+    })
+  );
+
+  const verdict = response.verdict === "PASS" ? "PASS" : "FAIL";
+  const verdictColor = response.verdict === "PASS" ? "2ea043" : "f85149";
+  children.push(
+    new Paragraph({
+      spacing: { after: 200 },
       children: [
-        new TextRun({ text: `Verdict: `, bold: true }),
-        new TextRun({
-          text: response.verdict === "PASS" ? "PASS" : "FAIL",
-          color: response.verdict === "PASS" ? "2ea043" : "f85149",
-          bold: true,
-        }),
-        new TextRun({
-          text: `     Round: ${response.round ?? "?"}     Session: ${(response.sessionId ?? "unknown").slice(-8)}`,
-          italics: true,
-        }),
+        new TextRun({ text: "Overall Verdict: ", bold: true, size: 24 }),
+        new TextRun({ text: verdict, color: verdictColor, bold: true, size: 24 }),
       ],
+    })
+  );
+
+  // ── Findings table ──
+  const checkResults = response.checkResults as Array<Record<string, unknown>> | undefined;
+  if (checkResults && checkResults.length > 0) {
+    const passed = checkResults.filter((c) => c.verdict === "PASS").length;
+    const failed = checkResults.filter((c) => c.verdict === "FAIL").length;
+    const total = passed + failed;
+    const pending = checkResults.filter((c) => c.verdict === "PENDING").length;
+
+    const headerBg = "F0F0F0";
+    const border = { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" };
+
+    const tableRows: TableRow[] = [
+      new TableRow({
+        tableHeader: true,
+        children: [
+          new TableCell({
+            width: { size: 7000, type: WidthType.DXA },
+            shading: { fill: headerBg },
+            children: [new Paragraph({ text: "Finding", spacing: { after: 0 }, children: [new TextRun({ text: "Finding", bold: true, size: 20 })] })],
+          }),
+          new TableCell({
+            width: { size: 2000, type: WidthType.DXA },
+            shading: { fill: headerBg },
+            children: [new Paragraph({ text: "Verdict", spacing: { after: 0 }, children: [new TextRun({ text: "Verdict", bold: true, size: 20 })] })],
+          }),
+        ],
+      }),
+    ];
+
+    for (const cr of checkResults) {
+      const v = cr.verdict as string;
+      const pass = v === "PASS";
+      const vColor = pass ? "2ea043" : "f85149";
+      tableRows.push(
+        new TableRow({
+          children: [
+            new TableCell({
+              width: { size: 7000, type: WidthType.DXA },
+              children: [new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: humanizeSlug(cr.name as string), size: 20 })] })],
+            }),
+            new TableCell({
+              width: { size: 2000, type: WidthType.DXA },
+              children: [new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: pass ? `PASS` : `FAIL`, color: vColor, bold: true, size: 20 })] })],
+            }),
+          ],
+        })
+      );
+    }
+
+    children.push(
+      new Table({
+        rows: tableRows,
+        width: { size: 9000, type: WidthType.DXA },
+      })
+    );
+
+    const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+    children.push(
+      new Paragraph({
+        spacing: { before: 200, after: 300 },
+        children: [
+          new TextRun({ text: `Pass Rate: `, bold: true, size: 20 }),
+          new TextRun({ text: `${passed}/${total} (${passRate}%)`, size: 20 }),
+          ...(pending > 0
+            ? [new TextRun({ text: `     Pending: ${pending}`, size: 20, italics: true, color: "888888" })]
+            : []),
+        ],
+      })
+    );
+  }
+
+  // ── Detailed Findings ──
+  const divider = "─".repeat(60);
+  children.push(new Paragraph({ text: divider, spacing: { before: 200, after: 100 }, alignment: AlignmentType.CENTER }));
+  children.push(
+    new Paragraph({
+      text: "Detailed Findings",
+      heading: HeadingLevel.HEADING_2,
+      spacing: { before: 100, after: 200 },
     })
   );
 
@@ -216,7 +324,15 @@ function buildFallbackDocx(
       children.push(new Paragraph({ spacing: { after: 100 } }));
       continue;
     }
-    if (trimmed.startsWith("## ")) {
+    if (trimmed.startsWith("### ")) {
+      children.push(
+        new Paragraph({
+          text: trimmed.replace(/^###\s+/, ""),
+          heading: HeadingLevel.HEADING_3,
+          spacing: { before: 200 },
+        })
+      );
+    } else if (trimmed.startsWith("## ")) {
       children.push(
         new Paragraph({
           text: trimmed.replace(/^##\s+/, ""),
@@ -237,6 +353,10 @@ function buildFallbackDocx(
     }
   }
 
+  // ── Style override: make heading 3 lines in detail bold ──
+  // (handled via the docx library styles)
+
+  // ── References ──
   if (response.citations.length > 0) {
     children.push(new Paragraph({ text: "", spacing: { before: 400 } }));
     children.push(
@@ -251,13 +371,27 @@ function buildFallbackDocx(
         new Paragraph({
           spacing: { after: 60 },
           children: [
-            new TextRun({ text: `[${c.ref}] `, bold: true }),
-            new TextRun({ text: `${c.regulation} §${c.clause}` }),
+            new TextRun({ text: `[${c.ref}] `, bold: true, size: 20 }),
+            new TextRun({ text: `${c.regulation} §${c.clause}`, size: 20 }),
           ],
         })
       );
     }
   }
+
+  // ── Footer ──
+  children.push(new Paragraph({ text: "", spacing: { before: 400 } }));
+  children.push(
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 100 },
+      border: { top: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC", space: 8 } },
+      children: [
+        new TextRun({ text: "Generated by ", size: 22, color: "999999", italics: true }),
+        new TextRun({ text: "clausr.ai", size: 22, color: "6366f1", italics: true, bold: true }),
+      ],
+    })
+  );
 
   const doc = new Document({
     title: skillName ? `${skillName} Compliance Report` : "Compliance Report",
