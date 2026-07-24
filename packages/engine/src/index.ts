@@ -12,6 +12,7 @@ export {
   deleteSession,
   setComplianceComments,
   getComplianceComments,
+  addAssistantMessage,
   getConversationHistory,
   getResponsesForSession,
   getSessionFiles,
