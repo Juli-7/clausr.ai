@@ -5,7 +5,7 @@ import { SkillLoadError } from "../../pipeline/errors";
 import { parseChecks } from "../../loading/skill/check-parser";
 import type { ParsedCheck, CheckFieldType } from "../../loading/skill/check-parser";
 
-export const SKILLS_DIR = path.join(process.cwd(), "packs");
+export const SKILLS_DIR = process.env.PACKS_DIR ?? path.join(process.cwd(), "packs");
 
 // ── Shared types ──
 
