@@ -202,8 +202,10 @@ export async function runPendingChecks(
     logPipeline(`[AUDIT] injected chat context (${context.length} chars)`);
   }
 
+  const clauseTextsCache = new Map<string, string>();
+
   // Store initial skeleton agent response (all checks PENDING) so frontend can render the layout immediately
-  const skeletonAgentResponse = await buildAgentResponse(packState, sessionId, storedFiles);
+  const skeletonAgentResponse = await buildAgentResponse(packState, sessionId, storedFiles, clauseTextsCache);
   setComplianceAgentResponse(sessionId, packId, JSON.stringify(skeletonAgentResponse));
 
   const completed: RunChecksResult["results"] = [];
@@ -250,10 +252,17 @@ export async function runPendingChecks(
     const packItems = buildAuditItems(packState);
     setCompliancePackAuditResult(sessionId, packId, packItems);
     setCompliancePackStates(sessionId, all);
+    // Incremental agent response so frontend PackReport renders per-check results
+    try {
+      const agentResponse = await buildAgentResponse(packState, sessionId, storedFiles, clauseTextsCache);
+      setComplianceAgentResponse(sessionId, packId, JSON.stringify(agentResponse));
+    } catch {
+      // Non-fatal: agent response will be rebuilt at batch end
+    }
   }, limit);
 
-  // Build agent response once after all checks in this batch complete
-  const finalAgentResponse = await buildAgentResponse(packState, sessionId, storedFiles);
+  // Final agent response at batch end
+  const finalAgentResponse = await buildAgentResponse(packState, sessionId, storedFiles, clauseTextsCache);
   setComplianceAgentResponse(sessionId, packId, JSON.stringify(finalAgentResponse));
 
   const allDone = Object.values(packState.checkStates).every(
@@ -553,7 +562,12 @@ export async function resolveCitation(
   };
 }
 
-async function buildAgentResponse(packState: PackAuditState, sessionId: string, cachedFiles?: ProcessedFile[]): Promise<Record<string, unknown>> {
+async function buildAgentResponse(
+  packState: PackAuditState,
+  sessionId: string,
+  cachedFiles?: ProcessedFile[],
+  clauseTextsCache?: Map<string, string>,
+): Promise<Record<string, unknown>> {
   const allEntries = Object.entries(packState.checkStates);
 
   // Pre-resolve all unique source citation refs from DONE entries only
@@ -581,7 +595,7 @@ async function buildAgentResponse(packState: PackAuditState, sessionId: string, 
     }
   }
 
-  // Resolve regulation citation refs → clauseTexts map
+  // Resolve regulation citation refs → clauseTexts map (use cache to avoid duplicate HTTP calls)
   const allCitationRefs = [...new Set(
     allEntries
       .filter(([_, cs]) => cs.state === "done")
@@ -589,21 +603,30 @@ async function buildAgentResponse(packState: PackAuditState, sessionId: string, 
   )];
   const clauseTexts: Record<string, string> = {};
   if (allCitationRefs.length > 0) {
-    try {
-      const api = await getRegulationApi();
-      await Promise.allSettled(allCitationRefs.map(async (ref) => {
-        const dot = ref.indexOf(".");
-        if (dot === -1) return;
-        const regCode = ref.substring(0, dot);
-        const clauseNum = ref.substring(dot + 1);
-        const result = await api.getClause({ regulationCode: regCode, clauseNumber: clauseNum });
-        if (result.success && result.data) {
-          clauseTexts[ref] = result.data.title
-            ? `\xA7${result.data.number} ${result.data.title}\n${result.data.text}`
-            : `\xA7${result.data.number}\n${result.data.text}`;
-        }
-      }));
-    } catch { /* clause texts are optional; leave empty */ }
+    const uncached = allCitationRefs.filter((ref) => !clauseTextsCache?.has(ref));
+    if (uncached.length > 0) {
+      try {
+        const api = await getRegulationApi();
+        await Promise.allSettled(uncached.map(async (ref) => {
+          const dot = ref.indexOf(".");
+          if (dot === -1) return;
+          const regCode = ref.substring(0, dot);
+          const clauseNum = ref.substring(dot + 1);
+          const result = await api.getClause({ regulationCode: regCode, clauseNumber: clauseNum });
+          if (result.success && result.data) {
+            const text = result.data.title
+              ? `\xA7${result.data.number} ${result.data.title}\n${result.data.text}`
+              : `\xA7${result.data.number}\n${result.data.text}`;
+            clauseTextsCache?.set(ref, text);
+            clauseTexts[ref] = text;
+          }
+        }));
+      } catch { /* clause texts are optional; leave empty */ }
+    }
+    for (const ref of allCitationRefs) {
+      const cached = clauseTextsCache?.get(ref);
+      if (cached) clauseTexts[ref] = cached;
+    }
   }
 
   // Build checkResults for ALL entries — PENDING for not-yet-complete checks
