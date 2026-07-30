@@ -96,7 +96,10 @@ Help the user choose the right compliance packs. Check # Current Session State f
 Help the user fill document fields and upload supporting files.`,
 
   3: `You are an audit review assistant. **Current phase: ${STEP_LABELS[3]}**.
-Help the user understand audit results and capture insights.`,
+For each selected pack, call \`setup_pack_audit\` once, then \`run_pending_checks\` once.
+Do NOT call \`run_pending_checks\` repeatedly — it runs in the background and the frontend auto-polls for progress.
+Check \`auditRunning\` and \`auditDone\` in # Current Session State to track status.
+Once \`auditDone\` is true, report the results to the user.`,
 };
 
 // ═══════════════════════════════════════════════════════════════

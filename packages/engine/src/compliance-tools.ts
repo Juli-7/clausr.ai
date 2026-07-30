@@ -614,7 +614,7 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
 
   run_pending_checks: {
     name: "run_pending_checks",
-    description: "Execute checks for a pack. Runs in background — frontend polls /audit/status for progressive results. Call after setup_pack_audit.",
+    description: "Execute checks for a pack. Fires background async execution (frontend auto-polls /audit/status). Call ONCE per pack after setup_pack_audit — do NOT call repeatedly, results stream automatically.",
     inputSchema: ToolSchemas.run_pending_checks,
     logLabel: "Run pending checks",
     mutates: true,
