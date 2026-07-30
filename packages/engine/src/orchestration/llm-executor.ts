@@ -37,8 +37,39 @@ export async function executeLlmToolStep(
   revisionContext?: { userFeedback: string }
 ): Promise<StepResult> {
   try {
+    const currentCheck = ctx.skill.checks[step.number - 1];
+
+    // Pre-fetch full text of relevant clauses for this check
+    let clauseTextsSection = "";
+    if (currentCheck?.clause) {
+      const refs = expandClauses(currentCheck.clause);
+      if (refs.length > 0) {
+        try {
+          const api = await getRegulationApi();
+          const texts: string[] = [];
+          for (const ref of refs) {
+            const dot = ref.indexOf(".");
+            if (dot === -1) continue;
+            const regCode = ref.substring(0, dot);
+            const clauseNum = ref.substring(dot + 1);
+            const result = await api.getClause({ regulationCode: regCode, clauseNumber: clauseNum });
+            if (result.success && result.data) {
+              const text = result.data.title
+                ? `\xA7${result.data.number} ${result.data.title}\n${result.data.text}`
+                : `\xA7${result.data.number}\n${result.data.text}`;
+              texts.push(`### ${ref}\n${text}`);
+            }
+          }
+          if (texts.length > 0) {
+            clauseTextsSection = "# Relevant Clause Texts\n" + texts.join("\n\n");
+          }
+        } catch { /* clause texts are optional */ }
+      }
+    }
+
     const regulationSection = formatRegulationSection(ctx);
-    const systemPrompt = buildSystemPrompt(regulationSection, previousError);
+    const combinedSection = [regulationSection, clauseTextsSection].filter(Boolean).join("\n\n");
+    const systemPrompt = buildSystemPrompt(combinedSection, previousError);
 
     logPipeline(`  [LLM+TOOL] step=${step.number} promptLen=${systemPrompt.length}chars`);
 
@@ -58,7 +89,6 @@ export async function executeLlmToolStep(
       note?: string;
     }[] = [];
 
-    const currentCheck = ctx.skill.checks[step.number - 1];
     const stepNeedsTool = currentCheck?.type.kind === "number";
     if (stepNeedsTool) {
       tools.checkCompliance = tool({
@@ -102,47 +132,7 @@ export async function executeLlmToolStep(
       ? `Allowed clauses: ${allowedClauses.join(", ")}. Only call these — do NOT look up other clauses.`
       : `Allowed regulations: ${allowedPrefixes.join(", ")}. Only call clauses under these regulations — do NOT look up other clauses.`;
 
-    // Per-check cache for get_clause to avoid redundant API calls in LLM loops
-    const clauseCache = new Map<string, { ref: string; text: string }>();
-    // Scoped clause lookup: only the clauses relevant to this check
-    tools.get_clause = tool({
-      description: `Get the full text of a regulation clause. ${allowedLabel}`,
-      inputSchema: z.object({
-        ref: z.string().describe(`Clause reference. ${allowedLabel}`),
-      }),
-      execute: async (input) => {
-        const { ref } = input as { ref: string };
-        const match = allowedClauses.length > 0
-          ? allowedClauses.includes(ref)
-          : allowedPrefixes.some((p) => ref.startsWith(p + "."));
-        if (!match) {
-          return { error: `Clause ${ref} is not relevant to this check. ${allowedLabel}` };
-        }
-        const cached = clauseCache.get(ref);
-        if (cached) {
-          logPipeline(`  [TOOL EXEC] get_clause: ${ref} (cached)`);
-          return cached;
-        }
-        logPipeline(`  [TOOL EXEC] get_clause: ${ref}`);
-        const dot = ref.indexOf(".");
-        if (dot === -1) return { error: `Invalid clause ref: ${ref}` };
-        const regCode = ref.substring(0, dot);
-        const clauseNum = ref.substring(dot + 1);
-        const api = await getRegulationApi();
-        const result = await api.getClause({ regulationCode: regCode, clauseNumber: clauseNum });
-        if (!result.success || !result.data) {
-          logPipeline(`  [TOOL EXEC] get_clause: not found`);
-          return { error: `Clause ${ref} not found` };
-        }
-        const text = result.data.title
-          ? `\xA7${result.data.number} ${result.data.title}\n${result.data.text}`
-          : `\xA7${result.data.number}\n${result.data.text}`;
-        const value = { ref, text };
-        clauseCache.set(ref, value);
-        logPipeline(`  [TOOL EXEC] get_clause: ${text.slice(0, 120)}...`);
-        return value;
-      },
-    });
+    // No get_clause tool — relevant clause texts are pre-fetched and included in the prompt above
 
     for (const script of scripts) {
       if (script.name === "compliance-check") continue;
