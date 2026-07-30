@@ -131,7 +131,7 @@ export async function runPendingChecks(
   maxConcurrency?: number,
   context?: string
 ): Promise<RunChecksResult> {
-  const limit = maxConcurrency ?? 20;
+  const limit = maxConcurrency ?? 5;
 
   const all = getCompliancePackStates(sessionId) as Record<string, PackAuditState>;
   const packState = all[packId];
@@ -203,7 +203,7 @@ export async function runPendingChecks(
   }
 
   // Store initial skeleton agent response (all checks PENDING) so frontend can render the layout immediately
-  const skeletonAgentResponse = await buildAgentResponse(packState, sessionId);
+  const skeletonAgentResponse = await buildAgentResponse(packState, sessionId, storedFiles);
   setComplianceAgentResponse(sessionId, packId, JSON.stringify(skeletonAgentResponse));
 
   const completed: RunChecksResult["results"] = [];
@@ -211,58 +211,49 @@ export async function runPendingChecks(
   let totalPromptTokens = 0;
   let totalCompletionTokens = 0;
 
-  // Run checks in parallel but persist each result as it finishes
-  await Promise.all(
-    batch.map(async (checkId) => {
-      const cs = packState.checkStates[checkId]!;
-      cs.state = "running";
-      const step = packState.setup!.steps.find((s) => s.number === cs.stepNumber);
-      if (!step) {
-        cs.state = "failed";
-        cs.error = `Step ${cs.stepNumber} not found`;
-        errors.push({ checkId, error: cs.error });
-        return;
-      }
+  // Run checks with limited concurrency, persisting each result as it finishes
+  await runConcurrent(batch, async (checkId) => {
+    const cs = packState.checkStates[checkId]!;
+    cs.state = "running";
+    const step = packState.setup!.steps.find((s) => s.number === cs.stepNumber);
+    if (!step) {
+      cs.state = "failed";
+      cs.error = `Step ${cs.stepNumber} not found`;
+      errors.push({ checkId, error: cs.error });
+      return;
+    }
 
-      try {
-        const result = await executeLlmToolStep(step, ctx);
-        if (result.usage) {
-          totalPromptTokens += result.usage.promptTokens;
-          totalCompletionTokens += result.usage.completionTokens;
-        }
-        if (result.success) {
-          cs.state = "done";
-          const check = packState.setup!.checks.find((c) => c.field === checkId);
-          const simpleResult = extractResult(result, check);
-          cs.result = simpleResult;
-          completed.push({ checkId, ...simpleResult });
-        } else {
-          cs.state = "failed";
-          cs.error = result.error ?? "Step failed";
-          errors.push({ checkId, error: cs.error });
-        }
-      } catch (err) {
+    try {
+      const result = await executeLlmToolStep(step, ctx);
+      if (result.usage) {
+        totalPromptTokens += result.usage.promptTokens;
+        totalCompletionTokens += result.usage.completionTokens;
+      }
+      if (result.success) {
+        cs.state = "done";
+        const check = packState.setup!.checks.find((c) => c.field === checkId);
+        const simpleResult = extractResult(result, check);
+        cs.result = simpleResult;
+        completed.push({ checkId, ...simpleResult });
+      } else {
         cs.state = "failed";
-        cs.error = err instanceof Error ? err.message : "Unknown error";
+        cs.error = result.error ?? "Step failed";
         errors.push({ checkId, error: cs.error });
       }
+    } catch (err) {
+      cs.state = "failed";
+      cs.error = err instanceof Error ? err.message : "Unknown error";
+      errors.push({ checkId, error: cs.error });
+    }
 
-      // Persist this single check's result so frontend polling picks it up progressively
-      const packItems = buildAuditItems(packState);
-      setCompliancePackAuditResult(sessionId, packId, packItems);
-      setCompliancePackStates(sessionId, all);
-      // Build and store incremental agent response per-check so frontend uses the same layout throughout
-      try {
-        const agentResponse = await buildAgentResponse(packState, sessionId);
-        setComplianceAgentResponse(sessionId, packId, JSON.stringify(agentResponse));
-      } catch {
-        // Non-fatal: agent response will be built at batch end
-      }
-    })
-  );
+    // Persist this single check's result so frontend polling picks it up progressively
+    const packItems = buildAuditItems(packState);
+    setCompliancePackAuditResult(sessionId, packId, packItems);
+    setCompliancePackStates(sessionId, all);
+  }, limit);
 
-  // Ensure agent response is built at batch end (catches failed checks that didn't persist one)
-  const finalAgentResponse = await buildAgentResponse(packState, sessionId);
+  // Build agent response once after all checks in this batch complete
+  const finalAgentResponse = await buildAgentResponse(packState, sessionId, storedFiles);
   setComplianceAgentResponse(sessionId, packId, JSON.stringify(finalAgentResponse));
 
   const allDone = Object.values(packState.checkStates).every(
@@ -367,11 +358,15 @@ export function getPackAuditState(
 
 export async function finalizeAudit(sessionId: string): Promise<FinalizeAuditResult> {
   const all = getCompliancePackStates(sessionId) as Record<string, PackAuditState>;
+  let cachedFiles: ProcessedFile[] | undefined;
+  try {
+    cachedFiles = await getDocStore().getFiles(sessionId);
+  } catch { /* optional */ }
 
   for (const [packId, packState] of Object.entries(all)) {
     const items = buildAuditItems(packState);
     setCompliancePackAuditResult(sessionId, packId, items);
-    const agentResponse = await buildAgentResponse(packState, sessionId);
+    const agentResponse = await buildAgentResponse(packState, sessionId, cachedFiles);
     setComplianceAgentResponse(sessionId, packId, JSON.stringify(agentResponse));
   }
 
@@ -495,6 +490,24 @@ function collectResults(packState: PackAuditState): { results: RunChecksResult["
   return { results, errors };
 }
 
+// Run async functions concurrently with a fixed concurrency cap
+async function runConcurrent<T>(
+  items: T[],
+  fn: (item: T) => Promise<void>,
+  concurrency: number
+): Promise<void> {
+  let index = 0;
+  const worker = async (): Promise<void> => {
+    while (index < items.length) {
+      const i = index++;
+      await fn(items[i]!);
+    }
+  };
+  const count = Math.min(concurrency, items.length);
+  const workers = Array.from({ length: count }, () => worker());
+  await Promise.all(workers);
+}
+
 export async function resolveCitation(
   sessionId: string,
   ref: string,
@@ -540,7 +553,7 @@ export async function resolveCitation(
   };
 }
 
-async function buildAgentResponse(packState: PackAuditState, sessionId: string): Promise<Record<string, unknown>> {
+async function buildAgentResponse(packState: PackAuditState, sessionId: string, cachedFiles?: ProcessedFile[]): Promise<Record<string, unknown>> {
   const allEntries = Object.entries(packState.checkStates);
 
   // Pre-resolve all unique source citation refs from DONE entries only
@@ -551,12 +564,14 @@ async function buildAgentResponse(packState: PackAuditState, sessionId: string):
   )];
   const resolvedMap = new Map<string, Record<string, unknown>>();
   if (allRefs.length > 0) {
-    let cachedFiles: ProcessedFile[] | undefined;
-    try {
-      cachedFiles = await getDocStore().getFiles(sessionId);
-    } catch { /* leave undefined */ }
+    let files = cachedFiles;
+    if (!files) {
+      try {
+        files = await getDocStore().getFiles(sessionId);
+      } catch { /* leave undefined */ }
+    }
     const resolved = await Promise.allSettled(
-      allRefs.map((ref) => resolveCitation(sessionId, ref, cachedFiles))
+      allRefs.map((ref) => resolveCitation(sessionId, ref, files))
     );
     for (let i = 0; i < allRefs.length; i++) {
       const r = resolved[i];
@@ -657,7 +672,11 @@ export async function setupPackAuditAndRun(sessionId: string, packId: string): P
     const pendingItems = buildAuditItems(packState);
     setCompliancePackAuditResult(sessionId, packId, pendingItems);
     try {
-      const agentResponse = await buildAgentResponse(packState, sessionId);
+      let cachedFiles: ProcessedFile[] | undefined;
+      try {
+        cachedFiles = await getDocStore().getFiles(sessionId);
+      } catch { /* optional */ }
+      const agentResponse = await buildAgentResponse(packState, sessionId, cachedFiles);
       setComplianceAgentResponse(sessionId, packId, JSON.stringify(agentResponse));
     } catch {
       // Non-fatal: agent response will be built before first check runs
