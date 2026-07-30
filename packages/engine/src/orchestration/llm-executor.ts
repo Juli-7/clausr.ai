@@ -109,31 +109,6 @@ export async function executeLlmToolStep(
       });
     }
 
-    // Build allowed clauses scope from the current check — enforced at tool level
-    const allowedClauses: string[] = [];
-    const allowedPrefixes: string[] = [];
-    if (currentCheck?.clause) {
-      allowedClauses.push(...expandClauses(currentCheck.clause));
-    } else {
-      const summaries = ctx.palette.getSummaries();
-      for (const s of summaries) {
-        if (ctx.skill.regulationIds.includes(s.code)) {
-          allowedPrefixes.push(s.code);
-          for (const c of s.clauseIndex) {
-            allowedClauses.push(`${s.code}.${c.number}`);
-          }
-        }
-      }
-      for (const rid of ctx.skill.regulationIds) {
-        if (!allowedPrefixes.includes(rid)) allowedPrefixes.push(rid);
-      }
-    }
-    const allowedLabel = allowedClauses.length > 0
-      ? `Allowed clauses: ${allowedClauses.join(", ")}. Only call these — do NOT look up other clauses.`
-      : `Allowed regulations: ${allowedPrefixes.join(", ")}. Only call clauses under these regulations — do NOT look up other clauses.`;
-
-    // No get_clause tool — relevant clause texts are pre-fetched and included in the prompt above
-
     for (const script of scripts) {
       if (script.name === "compliance-check") continue;
       logPipeline(`  [TOOL] registering generic tool "${script.name}"`);
