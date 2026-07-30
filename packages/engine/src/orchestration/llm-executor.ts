@@ -61,14 +61,35 @@ export async function executeLlmToolStep(
       });
     }
 
-    // Always available: fetch full clause text from regulation DB
+    // Build allowed clauses scope from the current check
+    const allowedClauses: string[] = [];
+    if (currentCheck?.clause) {
+      allowedClauses.push(currentCheck.clause);
+    } else if (ctx.skill.regulationIds?.length) {
+      const summaries = ctx.palette.getSummaries();
+      for (const s of summaries) {
+        if (ctx.skill.regulationIds.includes(s.code)) {
+          for (const c of s.clauseIndex) {
+            allowedClauses.push(`${s.code}.${c.number}`);
+          }
+        }
+      }
+    }
+    const allowedLabel = allowedClauses.length > 0
+      ? `Allowed clauses: ${allowedClauses.join(", ")}. Only call these — do NOT look up other clauses.`
+      : "Clause reference, e.g. R48.6.2";
+
+    // Scoped clause lookup: only the clauses relevant to this check
     tools.get_clause = tool({
-      description: "Get the full text of a regulation clause by its ID (e.g. R48.6.2). Use this before citing a clause to get the exact wording.",
+      description: `Get the full text of a regulation clause. ${allowedLabel}`,
       inputSchema: z.object({
-        ref: z.string().describe("Clause reference, e.g. R48.6.2"),
+        ref: z.string().describe(`Clause reference. ${allowedLabel}`),
       }),
       execute: async (input) => {
         const { ref } = input as { ref: string };
+        if (allowedClauses.length > 0 && !allowedClauses.includes(ref)) {
+          return { error: `Clause ${ref} is not relevant to this check. ${allowedLabel}` };
+        }
         logPipeline(`  [TOOL EXEC] get_clause: ${ref}`);
         const dot = ref.indexOf(".");
         if (dot === -1) return { error: `Invalid clause ref: ${ref}` };
