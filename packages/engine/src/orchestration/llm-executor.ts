@@ -12,6 +12,24 @@ import type { StepResult } from "../agent/pipeline/types";
 import type { ToolCallRecord } from "../agent/shared/types";
 import { logPipeline, truncate } from "../agent/pipeline/logger";
 
+// Expand a clause string into individual refs (handles ranges and comma-separated)
+function expandClauses(clause: string): string[] {
+  const parts = clause.split(",").map((s) => s.trim()).filter(Boolean);
+  const expanded: string[] = [];
+  for (const p of parts) {
+    const rangeMatch = p.match(/^(\w+)\.(\d+)\s*[–-]\s*(\d+)$/);
+    if (rangeMatch) {
+      const prefix = rangeMatch[1]!;
+      const start = parseInt(rangeMatch[2]!, 10);
+      const end = parseInt(rangeMatch[3]!, 10);
+      for (let i = start; i <= end; i++) expanded.push(`${prefix}.${i}`);
+    } else {
+      expanded.push(p);
+    }
+  }
+  return expanded;
+}
+
 export async function executeLlmToolStep(
   step: ExecutableStep,
   ctx: PipelineContext,
@@ -65,7 +83,7 @@ export async function executeLlmToolStep(
     const allowedClauses: string[] = [];
     const allowedPrefixes: string[] = [];
     if (currentCheck?.clause) {
-      allowedClauses.push(currentCheck.clause);
+      allowedClauses.push(...expandClauses(currentCheck.clause));
     } else {
       const summaries = ctx.palette.getSummaries();
       for (const s of summaries) {
