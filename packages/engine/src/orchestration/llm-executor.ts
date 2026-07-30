@@ -102,6 +102,8 @@ export async function executeLlmToolStep(
       ? `Allowed clauses: ${allowedClauses.join(", ")}. Only call these — do NOT look up other clauses.`
       : `Allowed regulations: ${allowedPrefixes.join(", ")}. Only call clauses under these regulations — do NOT look up other clauses.`;
 
+    // Per-check cache for get_clause to avoid redundant API calls in LLM loops
+    const clauseCache = new Map<string, { ref: string; text: string }>();
     // Scoped clause lookup: only the clauses relevant to this check
     tools.get_clause = tool({
       description: `Get the full text of a regulation clause. ${allowedLabel}`,
@@ -115,6 +117,11 @@ export async function executeLlmToolStep(
           : allowedPrefixes.some((p) => ref.startsWith(p + "."));
         if (!match) {
           return { error: `Clause ${ref} is not relevant to this check. ${allowedLabel}` };
+        }
+        const cached = clauseCache.get(ref);
+        if (cached) {
+          logPipeline(`  [TOOL EXEC] get_clause: ${ref} (cached)`);
+          return cached;
         }
         logPipeline(`  [TOOL EXEC] get_clause: ${ref}`);
         const dot = ref.indexOf(".");
@@ -130,8 +137,10 @@ export async function executeLlmToolStep(
         const text = result.data.title
           ? `\xA7${result.data.number} ${result.data.title}\n${result.data.text}`
           : `\xA7${result.data.number}\n${result.data.text}`;
+        const value = { ref, text };
+        clauseCache.set(ref, value);
         logPipeline(`  [TOOL EXEC] get_clause: ${text.slice(0, 120)}...`);
-        return { ref, text };
+        return value;
       },
     });
 
