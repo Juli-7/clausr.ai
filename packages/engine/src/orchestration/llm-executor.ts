@@ -61,23 +61,28 @@ export async function executeLlmToolStep(
       });
     }
 
-    // Build allowed clauses scope from the current check
+    // Build allowed clauses scope from the current check — enforced at tool level
     const allowedClauses: string[] = [];
+    const allowedPrefixes: string[] = [];
     if (currentCheck?.clause) {
       allowedClauses.push(currentCheck.clause);
-    } else if (ctx.skill.regulationIds?.length) {
+    } else {
       const summaries = ctx.palette.getSummaries();
       for (const s of summaries) {
         if (ctx.skill.regulationIds.includes(s.code)) {
+          allowedPrefixes.push(s.code);
           for (const c of s.clauseIndex) {
             allowedClauses.push(`${s.code}.${c.number}`);
           }
         }
       }
+      for (const rid of ctx.skill.regulationIds) {
+        if (!allowedPrefixes.includes(rid)) allowedPrefixes.push(rid);
+      }
     }
     const allowedLabel = allowedClauses.length > 0
       ? `Allowed clauses: ${allowedClauses.join(", ")}. Only call these — do NOT look up other clauses.`
-      : "Clause reference, e.g. R48.6.2";
+      : `Allowed regulations: ${allowedPrefixes.join(", ")}. Only call clauses under these regulations — do NOT look up other clauses.`;
 
     // Scoped clause lookup: only the clauses relevant to this check
     tools.get_clause = tool({
@@ -87,7 +92,10 @@ export async function executeLlmToolStep(
       }),
       execute: async (input) => {
         const { ref } = input as { ref: string };
-        if (allowedClauses.length > 0 && !allowedClauses.includes(ref)) {
+        const match = allowedClauses.length > 0
+          ? allowedClauses.includes(ref)
+          : allowedPrefixes.some((p) => ref.startsWith(p + "."));
+        if (!match) {
           return { error: `Clause ${ref} is not relevant to this check. ${allowedLabel}` };
         }
         logPipeline(`  [TOOL EXEC] get_clause: ${ref}`);
