@@ -15,7 +15,7 @@ import {
   setupPackAudit, setupPackAuditAndRun, runPendingChecks, retryCheck,
   getPackAuditState, finalizeAudit,
 } from "./orchestration/audit-tools";
-import { getPack, packs, readPackContent, writePack, appendPackLessons, getDraftPack, saveDraftPack, clearDraftPack } from "./compliance-packs";
+import { getPack, packs, readPackContent, writePack, appendPackLessons, getDraftPack, saveDraftPack, clearDraftPack, bumpVersion } from "./compliance-packs";
 import type { CreatePackInput } from "./compliance-packs";
 import type { PackField, DocumentTemplate, PackCheck } from "./agent/loading/skill/loader";
 import { buildSession } from "./compliance-session";
@@ -584,9 +584,14 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
         return { error: "Pack must have at least a title, description, and one industry." };
       }
       try {
+        const existing = getPack(id);
+        if (existing && !draft.version) {
+          draft.version = bumpVersion(existing.version, "patch");
+        }
+        draft.updatedAt = new Date().toISOString();
         writePack(draft);
         clearDraftPack(sessionId);
-        return { published: true, packId: draft.id, message: "Pack published successfully." };
+        return { published: true, packId: draft.id, version: draft.version, message: "Pack published successfully." };
       } catch (err) {
         return { published: false, error: err instanceof Error ? err.message : "Unknown error" };
       }

@@ -47,6 +47,10 @@ export interface SkillPack {
   inds: string[];
   icon: string;
   version: string;
+  status?: "draft" | "published";
+  updatedAt?: string;
+  author?: string;
+  visibility?: string;
   fields: PackField[];
   documents: DocumentTemplate[];
   checks: PackCheck[];
@@ -80,6 +84,9 @@ interface PackFileData {
     version?: string;
     author?: string;
     regulation_ids?: string[];
+    status?: "draft" | "published";
+    updatedAt?: string;
+    visibility?: string;
   };
   regulation_ids?: string[];
   fields?: Record<string, unknown>[];
@@ -237,6 +244,10 @@ export function loadPack(packName: string, options?: LoadPackOptions): SkillPack
   return {
     id: packName, title, desc: description, regs,
     inds: industries, icon, version,
+    status: docPack.status ?? "published",
+    updatedAt: docPack.updatedAt,
+    author: docPack.author,
+    visibility: docPack.visibility,
     fields, documents, checks,
     redlines: packFile?.redlines ?? [],
     lessons: packFile?.lessons ?? [],

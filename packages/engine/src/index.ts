@@ -24,7 +24,7 @@ export { buildSession } from "./compliance-session";
 export type { ComplianceSession, ValidationCheck, Questionnaire } from "./compliance-session";
 
 // ── Packs ──
-export { searchPacks, getPack, readPackContent, writePack, appendPackLessons } from "./compliance-packs";
+export { searchPacks, getPack, readPackContent, writePack, appendPackLessons, bumpVersion, archivePackVersion, listPackVersions, restorePackVersion } from "./compliance-packs";
 export type { CreatePackInput } from "./compliance-packs";
 export { listPacks, loadPack } from "./agent/loading/skill/loader";
 export type { SkillPack, PackCheck, PackField, DocumentTemplate } from "./agent/loading/skill/loader";

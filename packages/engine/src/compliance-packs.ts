@@ -88,6 +88,92 @@ export interface CreatePackInput {
   redlines: string[];
   lessons?: string[];
   templates?: { docType: string; dataUrl: string }[];
+  author?: string;
+  visibility?: string;
+  status?: "draft" | "published";
+  updatedAt?: string;
+}
+
+// ── Versioning helpers ──
+
+export function bumpVersion(current: string, part: "major" | "minor" | "patch" = "patch"): string {
+  const [major, minor, patch] = current.split(".").map(Number);
+  if (part === "major") return `${(major || 0) + 1}.0.0`;
+  if (part === "minor") return `${major || 0}.${(minor || 0) + 1}.0`;
+  return `${major || 0}.${minor || 0}.${(patch || 0) + 1}`;
+}
+
+function versionsDir(packId: string): string {
+  return path.join(SKILLS_DIR, packId, "versions");
+}
+
+/**
+ * Snapshot the current pack.json (if it exists) into versions/v<version>@<ts>.json.
+ * Called automatically by writePack before overwriting an existing pack.
+ */
+export function archivePackVersion(packId: string): { archived: boolean; version?: string } {
+  const packJsonPath = path.join(SKILLS_DIR, packId, "pack.json");
+  if (!fs.existsSync(packJsonPath)) return { archived: false };
+  try {
+    const raw = JSON.parse(fs.readFileSync(packJsonPath, "utf-8"));
+    const version = (raw?.pack?.version as string) ?? "1.0.0";
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const dir = versionsDir(packId);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `v${version}@${stamp}.json`), JSON.stringify(raw, null, 2), "utf-8");
+    return { archived: true, version };
+  } catch {
+    return { archived: false };
+  }
+}
+
+export function listPackVersions(packId: string): { id: string; version: string; savedAt: string }[] {
+  const dir = versionsDir(packId);
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir)
+    .filter((f) => f.endsWith(".json"))
+    .map((f) => {
+      const id = f.replace(/\.json$/, "");
+      const [v, ts] = id.split("@");
+      return { id, version: (v ?? "").replace(/^v/, ""), savedAt: ts ?? "" };
+    })
+    .sort((a, b) => b.id.localeCompare(a.id));
+}
+
+/**
+ * Restore a previously archived snapshot over the current pack.
+ * Archives the current version first, then rewrites pack.json + SKILL.md.
+ */
+export function restorePackVersion(packId: string, versionId: string): { ok: boolean; error?: string } {
+  const snapshotPath = path.join(versionsDir(packId), `${versionId}.json`);
+  if (!fs.existsSync(snapshotPath)) return { ok: false, error: `Version "${versionId}" not found.` };
+  try {
+    const snap = JSON.parse(fs.readFileSync(snapshotPath, "utf-8"));
+    const data: CreatePackInput = {
+      id: packId,
+      title: snap?.pack?.title,
+      description: snap?.pack?.description,
+      industries: snap?.pack?.industries ?? [],
+      icon: snap?.pack?.icon,
+      version: snap?.pack?.version ?? "1.0.0",
+      regulation_ids: snap?.pack?.regulation_ids ?? [],
+      fields: snap?.fields ?? [],
+      documents: snap?.documents ?? [],
+      checks: snap?.checks ?? [],
+      redlines: snap?.redlines ?? [],
+      lessons: snap?.lessons ?? [],
+      templates: snap?.templates,
+      author: snap?.pack?.author,
+      visibility: snap?.pack?.visibility,
+      status: snap?.pack?.status,
+      updatedAt: new Date().toISOString(),
+    };
+    archivePackVersion(packId);
+    writePack(data);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 function formatChecksAsMd(checks: PackCheck[]): string {
@@ -115,6 +201,8 @@ function formatLessonsAsMd(lessons: string[]): string {
 export function writePack(data: CreatePackInput): void {
   const packDir = path.join(SKILLS_DIR, data.id);
 
+  archivePackVersion(data.id);
+
   const packJson = {
     pack: {
       title: data.title,
@@ -123,12 +211,17 @@ export function writePack(data: CreatePackInput): void {
       icon: data.icon ?? "📋",
       version: data.version ?? "1.0.0",
       regulation_ids: data.regulation_ids ?? [],
+      ...(data.author !== undefined ? { author: data.author } : {}),
+      ...(data.visibility !== undefined ? { visibility: data.visibility } : {}),
+      ...(data.status !== undefined ? { status: data.status } : {}),
+      ...(data.updatedAt !== undefined ? { updatedAt: data.updatedAt } : {}),
     },
     fields: data.fields,
     documents: data.documents,
     checks: data.checks,
     redlines: data.redlines,
     lessons: data.lessons ?? [],
+    ...(data.templates?.length ? { templates: data.templates } : {}),
   };
 
   fs.mkdirSync(packDir, { recursive: true });
