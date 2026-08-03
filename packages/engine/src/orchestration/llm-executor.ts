@@ -4,7 +4,6 @@ import { createModel } from "../agent/llm/factory";
 import { runScript } from "../agent/pipeline/executors/script-runner";
 import { ComplianceCheckSchema } from "../agent/shared/schemas";
 import { executeComplianceCheck } from "../agent/pipeline/builtins";
-import { getRegulationApi } from "../agent/knowledge/regulation-api";
 import { buildSystemPrompt, buildUserMessage } from "./prompts";
 import type { ExecutableStep } from "../agent/pipeline/types";
 import type { PipelineContext, CheckResult, CitationPaletteEntry } from "../agent/pipeline/pipeline-context";
@@ -13,7 +12,7 @@ import type { ToolCallRecord } from "../agent/shared/types";
 import { logPipeline, truncate } from "../agent/pipeline/logger";
 
 // Expand a clause string into individual refs (handles ranges and comma-separated)
-function expandClauses(clause: string): string[] {
+export function expandClauses(clause: string): string[] {
   const parts = clause.split(",").map((s) => s.trim()).filter(Boolean);
   const expanded: string[] = [];
   for (const p of parts) {
@@ -30,6 +29,26 @@ function expandClauses(clause: string): string[] {
   return expanded;
 }
 
+/**
+ * Keep refs that match a declared clause (exact or sub-clause via prefix).
+ * Drops hallucinated refs with a warning.
+ */
+export function validateCitationRefs(
+  llmRefs: string[],
+  declaredClauses: string[],
+): string[] {
+  const kept: string[] = [];
+  for (const ref of llmRefs) {
+    const valid = declaredClauses.some((d) => ref === d || ref.startsWith(d + "."));
+    if (valid) {
+      kept.push(ref);
+    } else {
+      logPipeline(`  [LLM+TOOL] ⚠ dropped hallucinated citationRef "${ref}" (not in declared clauses: ${declaredClauses.join(", ") || "none"})`);
+    }
+  }
+  return kept;
+}
+
 export async function executeLlmToolStep(
   step: ExecutableStep,
   ctx: PipelineContext,
@@ -39,35 +58,8 @@ export async function executeLlmToolStep(
   try {
     const currentCheck = ctx.skill.checks[step.number - 1];
 
-    // Pre-fetch full text of relevant clauses for this check
-    let clauseTextsSection = "";
-    if (currentCheck?.clause) {
-      const refs = expandClauses(currentCheck.clause);
-      if (refs.length > 0) {
-        try {
-          const api = await getRegulationApi();
-          const texts: string[] = [];
-          for (const ref of refs) {
-            const dot = ref.indexOf(".");
-            if (dot === -1) continue;
-            const regCode = ref.substring(0, dot);
-            const clauseNum = ref.substring(dot + 1);
-            const result = await api.getClause({ regulationCode: regCode, clauseNumber: clauseNum });
-            if (result.success && result.data) {
-              const text = result.data.title
-                ? `\xA7${result.data.number} ${result.data.title}\n${result.data.text}`
-                : `\xA7${result.data.number}\n${result.data.text}`;
-              texts.push(`### ${ref}\n${text}`);
-            }
-          }
-          if (texts.length > 0) {
-            clauseTextsSection = "# Relevant Clause Texts\n" + texts.join("\n\n");
-          }
-        } catch { /* clause texts are optional */ }
-      }
-    }
-
     const regulationSection = formatRegulationSection(ctx);
+    const clauseTextsSection = formatClauseTextsSection(ctx.clauseTexts);
     const combinedSection = [regulationSection, clauseTextsSection].filter(Boolean).join("\n\n");
     const systemPrompt = buildSystemPrompt(combinedSection, previousError);
 
@@ -347,6 +339,13 @@ function formatRegulationSection(ctx: PipelineContext): string {
   return parts.join("\n\n");
 }
 
+function formatClauseTextsSection(clauseTexts?: Record<string, string>): string {
+  const entries = clauseTexts ? Object.entries(clauseTexts) : [];
+  if (entries.length === 0) return "";
+  return "# Relevant Clause Texts\n" +
+    entries.map(([ref, text]) => `### ${ref}\n${text}`).join("\n\n");
+}
+
 function buildDependencyContext(ctx: PipelineContext, stepNumber: number): string {
   const currentCheck = ctx.skill.checks[stepNumber - 1];
   if (!currentCheck?.dependsOn) return "";
@@ -391,7 +390,8 @@ async function buildCheckResult(params: BuildCheckResultParams): Promise<CheckRe
   const clause = currentCheck?.clause ?? "";
   const palette = ctx.palette.getCitationPalette();
 
-  let citRef = resolveCitations(finalObject.citationRef, palette, clause);
+  let citRef = validateCitationRefs(finalObject.citationRef, expandClauses(clause));
+  citRef = resolveCitations(citRef, palette, clause);
   citRef = await lazyResolveCitations(citRef, ctx);
   const srcCit = resolveSourceCitations(finalObject.sourceCitation, fileChunks);
 

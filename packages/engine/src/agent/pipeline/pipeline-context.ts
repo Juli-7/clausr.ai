@@ -82,6 +82,9 @@ export interface PipelineContext {
 
   /** Optional chat history context injected by compliance audit runner */
   chatContext?: string;
+
+  /** Pre-fetched clause texts keyed by clause ref (e.g. "GDPR.5"), injected by audit runner */
+  clauseTexts?: Record<string, string>;
 }
 
 // ── Factory ──

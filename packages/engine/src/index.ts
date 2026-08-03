@@ -45,7 +45,7 @@ export { generateDocx } from "./agent/present/export/export-docx";
 // ── Chat ──
 export { complianceChat } from "./orchestration/chat";
 export type { ComplianceChatEvent, ComplianceChatParams } from "./orchestration/chat";
-export { resolveCitation } from "./orchestration/audit-tools";
+export { resolveCitation, getClauseText } from "./orchestration/audit-tools";
 
 // ── Shared Types ──
 export type { AgentResponse } from "./agent/shared/types";

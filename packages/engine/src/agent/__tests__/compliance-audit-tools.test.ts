@@ -40,13 +40,15 @@ vi.mock("../loading/generate-steps", () => ({
   generateStepsFromChecks: mockGenerateStepsFromChecks,
 }));
 
-const { mockExecuteLlmToolStep, mockParseLlmOutput } = vi.hoisted(() => ({
+const { mockExecuteLlmToolStep, mockParseLlmOutput, mockExpandClauses } = vi.hoisted(() => ({
   mockExecuteLlmToolStep: vi.fn(),
   mockParseLlmOutput: vi.fn(),
+  mockExpandClauses: vi.fn((clause: string) => clause.split(",").map((s) => s.trim()).filter(Boolean)),
 }));
 vi.mock("../../orchestration/llm-executor", () => ({
   executeLlmToolStep: mockExecuteLlmToolStep,
   parseLlmOutput: mockParseLlmOutput,
+  expandClauses: mockExpandClauses,
 }));
 
 const { mockGenerateCorrelationId } = vi.hoisted(() => ({

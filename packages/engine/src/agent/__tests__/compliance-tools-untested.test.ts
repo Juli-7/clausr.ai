@@ -183,9 +183,11 @@ describe("compliance-tools (untested)", () => {
   });
 
   describe("setup_pack_audit tool wrapper", () => {
-    it("rejects with error for nonexistent pack", async () => {
+    it("returns error for nonexistent pack", async () => {
       const id = setupSession("spa");
-      await expect(TOOL_DEFS.setup_pack_audit.execute(id, { packId: "__nonexistent__" })).rejects.toThrow("not found");
+      const result = await TOOL_DEFS.setup_pack_audit.execute(id, { packId: "__nonexistent__" });
+      expect(result).toHaveProperty("error");
+      expect((result as { error: string }).error).toContain("__nonexistent__");
     });
   });
 

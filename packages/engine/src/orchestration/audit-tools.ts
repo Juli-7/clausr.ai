@@ -1,7 +1,7 @@
 import { initSession } from "../agent/loading/phases/init-phase";
 import { createPipelineContext } from "../agent/pipeline/pipeline-context";
 import { generateStepsFromChecks } from "../agent/loading/generate-steps";
-import { executeLlmToolStep, parseLlmOutput } from "./llm-executor";
+import { executeLlmToolStep, parseLlmOutput, expandClauses } from "./llm-executor";
 import { generateCorrelationId } from "../agent/pipeline/errors";
 import { getDocStore } from "../agent/user-info/vector-store";
 import { getRegulationApi } from "../agent/knowledge/regulation-api";
@@ -18,6 +18,39 @@ import {
 import type { ParsedCheck, CheckFieldType } from "../agent/loading/skill/check-parser";
 import type { ExecutableStep, StepResult } from "../agent/pipeline/types";
 import type { ProcessedFile } from "../agent/user-info/vector-store/types";
+
+/** Fetch full text for the given clause refs, reusing the shared cache */
+async function fetchClauseTexts(
+  refs: string[],
+  clauseTextsCache: Map<string, string>,
+): Promise<Record<string, string>> {
+  const result: Record<string, string> = {};
+  if (refs.length === 0) return result;
+  const uncached = refs.filter((ref) => !clauseTextsCache.has(ref));
+  if (uncached.length > 0) {
+    try {
+      const api = await getRegulationApi();
+      await Promise.allSettled(uncached.map(async (ref) => {
+        const dot = ref.indexOf(".");
+        if (dot === -1) return;
+        const regCode = ref.substring(0, dot);
+        const clauseNum = ref.substring(dot + 1);
+        const apiResult = await api.getClause({ regulationCode: regCode, clauseNumber: clauseNum });
+        if (apiResult.success && apiResult.data) {
+          const text = apiResult.data.title
+            ? `\xA7${apiResult.data.number} ${apiResult.data.title}\n${apiResult.data.text}`
+            : `\xA7${apiResult.data.number}\n${apiResult.data.text}`;
+          clauseTextsCache.set(ref, text);
+        }
+      }));
+    } catch { /* clause texts are optional; leave empty */ }
+  }
+  for (const ref of refs) {
+    const cached = clauseTextsCache.get(ref);
+    if (cached) result[ref] = cached;
+  }
+  return result;
+}
 
 export interface PackCheckState {
   state: "pending" | "ready" | "running" | "done" | "failed"
@@ -205,7 +238,7 @@ export async function runPendingChecks(
   const clauseTextsCache = new Map<string, string>();
 
   // Store initial skeleton agent response (all checks PENDING) so frontend can render the layout immediately
-  const skeletonAgentResponse = await buildAgentResponse(packState, sessionId, storedFiles, clauseTextsCache);
+  const skeletonAgentResponse = await buildAgentResponse(packState, sessionId, storedFiles);
   setComplianceAgentResponse(sessionId, packId, JSON.stringify(skeletonAgentResponse));
 
   const completed: RunChecksResult["results"] = [];
@@ -226,6 +259,13 @@ export async function runPendingChecks(
     }
 
     try {
+      // Pre-fetch the clause texts this check needs (shared cache with buildAgentResponse)
+      const checkDef = packState.setup!.checks.find((c) => c.field === checkId);
+      const checkClause = checkDef?.clause ?? null;
+      ctx.clauseTexts = checkClause
+        ? await fetchClauseTexts(expandClauses(checkClause), clauseTextsCache)
+        : undefined;
+
       const result = await executeLlmToolStep(step, ctx);
       if (result.usage) {
         totalPromptTokens += result.usage.promptTokens;
@@ -254,7 +294,7 @@ export async function runPendingChecks(
     setCompliancePackStates(sessionId, all);
     // Incremental agent response so frontend PackReport renders per-check results
     try {
-      const agentResponse = await buildAgentResponse(packState, sessionId, storedFiles, clauseTextsCache);
+      const agentResponse = await buildAgentResponse(packState, sessionId, storedFiles);
       setComplianceAgentResponse(sessionId, packId, JSON.stringify(agentResponse));
     } catch {
       // Non-fatal: agent response will be rebuilt at batch end
@@ -262,7 +302,7 @@ export async function runPendingChecks(
   }, limit);
 
   // Final agent response at batch end
-  const finalAgentResponse = await buildAgentResponse(packState, sessionId, storedFiles, clauseTextsCache);
+  const finalAgentResponse = await buildAgentResponse(packState, sessionId, storedFiles);
   setComplianceAgentResponse(sessionId, packId, JSON.stringify(finalAgentResponse));
 
   const allDone = Object.values(packState.checkStates).every(
@@ -517,6 +557,26 @@ async function runConcurrent<T>(
   await Promise.all(workers);
 }
 
+export async function getClauseText(
+  ref: string,
+): Promise<{ ref: string; regulation: string; clause: string; text: string } | null> {
+  const dot = ref.indexOf(".");
+  if (dot === -1) return null;
+  const regulation = ref.substring(0, dot);
+  const clause = ref.substring(dot + 1);
+  try {
+    const api = await getRegulationApi();
+    const result = await api.getClause({ regulationCode: regulation, clauseNumber: clause });
+    if (!result.success || !result.data) return null;
+    const text = result.data.title
+      ? `\xA7${result.data.number} ${result.data.title}\n${result.data.text}`
+      : `\xA7${result.data.number}\n${result.data.text}`;
+    return { ref, regulation, clause, text };
+  } catch {
+    return null;
+  }
+}
+
 export async function resolveCitation(
   sessionId: string,
   ref: string,
@@ -566,7 +626,6 @@ async function buildAgentResponse(
   packState: PackAuditState,
   sessionId: string,
   cachedFiles?: ProcessedFile[],
-  clauseTextsCache?: Map<string, string>,
 ): Promise<Record<string, unknown>> {
   const allEntries = Object.entries(packState.checkStates);
 
@@ -592,40 +651,6 @@ async function buildAgentResponse(
       if (r?.status === "fulfilled" && r.value) {
         resolvedMap.set(allRefs[i]!, r.value);
       }
-    }
-  }
-
-  // Resolve regulation citation refs → clauseTexts map (use cache to avoid duplicate HTTP calls)
-  const allCitationRefs = [...new Set(
-    allEntries
-      .filter(([_, cs]) => cs.state === "done")
-      .flatMap(([_, cs]) => cs.result?.citationRef ?? [])
-  )];
-  const clauseTexts: Record<string, string> = {};
-  if (allCitationRefs.length > 0) {
-    const uncached = allCitationRefs.filter((ref) => !clauseTextsCache?.has(ref));
-    if (uncached.length > 0) {
-      try {
-        const api = await getRegulationApi();
-        await Promise.allSettled(uncached.map(async (ref) => {
-          const dot = ref.indexOf(".");
-          if (dot === -1) return;
-          const regCode = ref.substring(0, dot);
-          const clauseNum = ref.substring(dot + 1);
-          const result = await api.getClause({ regulationCode: regCode, clauseNumber: clauseNum });
-          if (result.success && result.data) {
-            const text = result.data.title
-              ? `\xA7${result.data.number} ${result.data.title}\n${result.data.text}`
-              : `\xA7${result.data.number}\n${result.data.text}`;
-            clauseTextsCache?.set(ref, text);
-            clauseTexts[ref] = text;
-          }
-        }));
-      } catch { /* clause texts are optional; leave empty */ }
-    }
-    for (const ref of allCitationRefs) {
-      const cached = clauseTextsCache?.get(ref);
-      if (cached) clauseTexts[ref] = cached;
     }
   }
 
@@ -681,7 +706,6 @@ async function buildAgentResponse(
     reasoning: "",
     citations: [],
     sourceCitations,
-    clauseTexts: Object.keys(clauseTexts).length > 0 ? clauseTexts : undefined,
     round: 1,
     sessionId,
   };
