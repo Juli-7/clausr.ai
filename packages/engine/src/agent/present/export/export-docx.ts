@@ -81,18 +81,24 @@ async function fillTemplateDocx(
     docXml = docXml.replaceAll(placeholder, escaped);
   }
 
-  // Add watermark (invisible paragraph)
+  // Add explicit AI labeling (显式标识) + invisible watermark paragraph
   const insertBefore = '</w:body>';
-  docXml = docXml.replace(insertBefore, buildWatermarkOoxml(response) + insertBefore);
+  docXml = docXml.replace(insertBefore, buildLabelOoxml(response) + buildWatermarkOoxml(response) + insertBefore);
 
   zip.file("word/document.xml", docXml);
 
-  // Inject / update custom properties with 5 metadata elements
+  // Inject / update custom properties with GB 45438-2025 附录E metadata
   injectCustomProperties(zip, response, JSZip);
 
   const outBlob = await zip.generateAsync({ type: "blob" });
   return outBlob;
 }
+
+  // Explicit AI labeling (显式标识) — GB 45438-2025 §5.1
+  function buildLabelOoxml(response: AgentResponse): string {
+    const label = `本内容由人工智能生成合成。本内容由 clausr.ai 基于 DeepSeek 模型生成，请谨慎辨别内容真实性。`;
+    return `<w:p><w:r><w:rPr><w:sz w:val="18"/><w:color w:val="595959"/></w:rPr><w:t xml:space="preserve">${escapeXml(label)}</w:t></w:r></w:p>`;
+  }
 
 function buildWatermarkOoxml(response: AgentResponse): string {
   const provider = response.sections?.providerIdentity
@@ -103,22 +109,34 @@ function buildWatermarkOoxml(response: AgentResponse): string {
   return `<w:p><w:r><w:rPr><w:sz w:val="2"/><w:color w:val="FFFFFF"/><w:vanish/></w:rPr><w:t xml:space="preserve">${escapeXml(wm)}</w:t></w:r></w:p>`;
 }
 
-async function injectCustomProperties(zip: import("jszip"), response: AgentResponse, JSZip: typeof import("jszip")): Promise<void> {
+// ── GB 45438-2025 §6.1 / 附录E: single "AIGC" custom property with JSON value ──
+const APPENDIX_E_FMTID = "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}";
+
+function buildAppendixEMetadata(response: AgentResponse): DocxCustomProperty[] {
   const provider = response.sections?.providerIdentity
     ? stripMarkdown(response.sections.providerIdentity as string)
     : "clausr.ai";
   const contentId = `${response.sessionId ?? "unknown"}-${Date.now()}`;
-  const props = [
-    { fmtid: "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}", pid: "2", name: "AIGenLabel", value: "AI生成" },
-    { fmtid: "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}", pid: "3", name: "AIGenProvider", value: provider },
-    { fmtid: "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}", pid: "4", name: "AIGenContentId", value: contentId },
-    { fmtid: "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}", pid: "5", name: "AIGenPropagationProvider", value: provider },
-    { fmtid: "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}", pid: "6", name: "AIGenPropagationContentId", value: `${response.sessionId ?? "unknown"}-p-${Date.now()}` },
-  ];
+  const json = JSON.stringify({
+    AIGC: {
+      Label: "1",
+      ContentProducer: provider,
+      ProduceID: contentId,
+      ReservedCode1: "",
+      ContentPropagator: provider,
+      PropagateID: `${response.sessionId ?? "unknown"}-p-${Date.now()}`,
+      ReservedCode2: "",
+    },
+  });
+  return [{ name: "AIGCMetadata", value: json }];
+}
+
+async function injectCustomProperties(zip: import("jszip"), response: AgentResponse, JSZip: typeof import("jszip")): Promise<void> {
+  const json = buildAppendixEMetadata(response)[0]!.value;
 
   const propsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
-${props.map((p) => `  <property fmtid="${p.fmtid}" pid="${p.pid}" name="${p.name}"><vt:lpwstr>${escapeXml(p.value)}</vt:lpwstr></property>`).join("\n")}
+  <property fmtid="${APPENDIX_E_FMTID}" pid="2" name="AIGCMetadata"><vt:lpwstr>${escapeXml(json)}</vt:lpwstr></property>
 </Properties>`;
 
   zip.file("docProps/custom.xml", propsXml);
@@ -130,6 +148,22 @@ ${props.map((p) => `  <property fmtid="${p.fmtid}" pid="${p.pid}" name="${p.name
     if (!ctXml.includes('docProps/custom.xml')) {
       ctXml = ctXml.replace('</Types>', `  <Override PartName="/docProps/custom.xml" ContentType="application/vnd.openxmlformats-officedocument.custom-properties+xml"/>\n</Types>`);
       zip.file("[Content_Types].xml", ctXml);
+    }
+  }
+
+  // Ensure _rels/.rels includes the custom-properties relationship
+  // (without this, OOXML readers cannot locate the metadata part)
+  const relEntry = zip.file("_rels/.rels");
+  if (relEntry) {
+    let relXml = await relEntry.async("text");
+    if (!relXml.includes('custom-properties')) {
+      const existingIds = Array.from(relXml.matchAll(/Id="rId(\d+)"/g)).map((m) => parseInt(m[1]!, 10));
+      const nextId = (existingIds.length > 0 ? Math.max(...existingIds) : 0) + 1;
+      relXml = relXml.replace(
+        '</Relationships>',
+        `  <Relationship Id="rId${nextId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties" Target="docProps/custom.xml"/>\n</Relationships>`
+      );
+      zip.file("_rels/.rels", relXml);
     }
   }
 }
@@ -153,13 +187,13 @@ async function fillTemplateFromBuffer(
     docXml = docXml.replaceAll(placeholder, escaped);
   }
 
-  // Watermark (invisible paragraph)
+  // Explicit label + watermark (invisible paragraph)
   const insertBefore = '</w:body>';
-  docXml = docXml.replace(insertBefore, buildWatermarkOoxml(response) + insertBefore);
+  docXml = docXml.replace(insertBefore, buildLabelOoxml(response) + buildWatermarkOoxml(response) + insertBefore);
 
   zip.file("word/document.xml", docXml);
 
-  // Inject custom properties with 5 metadata elements
+  // Inject custom properties with GB 45438-2025 附录E metadata
   await injectCustomProperties(zip, response, JSZip);
 
   const outBlob = await zip.generateAsync({ type: "blob" });
@@ -237,20 +271,6 @@ function stripMarkdown(md: string): string {
     .trim();
 }
 
-// ── GB 45438-2025 §6.1 / 附录E: 5 metadata elements ──
-function buildAppendixEMetadata(response: AgentResponse): DocxCustomProperty[] {
-  const provider = response.sections?.providerIdentity
-    ? stripMarkdown(response.sections.providerIdentity as string)
-    : "clausr.ai";
-  return [
-    { name: "AIGenLabel", value: "AI生成" },
-    { name: "AIGenProvider", value: provider },
-    { name: "AIGenContentId", value: `${response.sessionId ?? "unknown"}-${Date.now()}` },
-    { name: "AIGenPropagationProvider", value: provider },
-    { name: "AIGenPropagationContentId", value: `${response.sessionId ?? "unknown"}-p-${Date.now()}` },
-  ];
-}
-
 // ── GB 45438-2025 §6.2: invisible watermark paragraph ──
 function buildWatermarkParagraph(response: AgentResponse): Paragraph {
   const provider = response.sections?.providerIdentity
@@ -291,6 +311,21 @@ function buildFallbackDocx(
       heading: HeadingLevel.HEADING_1,
       alignment: AlignmentType.CENTER,
       spacing: { after: 200 },
+    })
+  );
+
+  // ── Explicit AI labeling (GB 45438-2025 §5.1) ──
+  children.push(
+    new Paragraph({
+      spacing: { before: 200, after: 200 },
+      children: [
+        new TextRun({
+          text: "本内容由人工智能生成合成。本内容由 clausr.ai 基于 DeepSeek 模型生成，请谨慎辨别内容真实性。",
+          size: 18,
+          color: "595959",
+          italics: true,
+        }),
+      ],
     })
   );
 
