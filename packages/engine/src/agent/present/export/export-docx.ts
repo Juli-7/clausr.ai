@@ -110,9 +110,14 @@ function buildWatermarkOoxml(response: AgentResponse): string {
 }
 
 // ── GB 45438-2025 §6.1 / 附录E: single "AIGC" custom property with JSON value ──
-// 附录E-b: value is the literal JSON string {"AIGC": {"Label":"value1",...}}
-// Detector byte-scans / json-parses the value: write it RAW (no XML entity escaping
-// of quotes); only & and < must be escaped in XML text nodes.
+// 附录E-a: field NAME contains "AIGC" (the property name is the carrier).
+// Detectors (TC260 practice guides, aigc-metadata SDK) read property "AIGC"
+// and JSON.parse() its value expecting the 7 keys at TOP LEVEL:
+// {"Label":"1","ContentProducer":"...","ProduceID":"...","ReservedCode1":"",
+//  "ContentPropagator":"...","PropagateID":"...","ReservedCode2":""}
+// Do NOT wrap in {"AIGC": {...}} — top-level keys then resolve to nothing.
+// Values are written RAW (no XML entity escaping of quotes): only & and < are
+// escaped in XML text nodes, and JSON values never contain them unescaped.
 const APPENDIX_E_FMTID = "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}";
 
 // 附录E-j: values consist of GB18030 codepoints 0x21, 0x23~0x5B, 0x5D~0x7E (" and \ excluded)
@@ -125,7 +130,15 @@ function buildAppendixEMetadata(response: AgentResponse): DocxCustomProperty[] {
     response.sections?.providerIdentity ? stripMarkdown(response.sections.providerIdentity as string) : "clausr.ai"
   );
   const contentId = `${response.sessionId ?? "unknown"}-${Date.now()}`;
-  const json = `{"AIGC": {"Label":"1","ContentProducer":"${provider}","ProduceID":"${cleanAppendixEValue(contentId)}","ReservedCode1":"","ContentPropagator":"${provider}","PropagateID":"${cleanAppendixEValue(`${response.sessionId ?? "unknown"}-p-${Date.now()}`)}","ReservedCode2":""}}`;
+  const json = JSON.stringify({
+    Label: "1",
+    ContentProducer: provider,
+    ProduceID: cleanAppendixEValue(contentId),
+    ReservedCode1: "",
+    ContentPropagator: provider,
+    PropagateID: cleanAppendixEValue(`${response.sessionId ?? "unknown"}-p-${Date.now()}`),
+    ReservedCode2: "",
+  });
   return [{ name: "AIGC", value: json }];
 }
 
