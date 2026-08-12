@@ -128,7 +128,7 @@ function buildAppendixEMetadata(response: AgentResponse): DocxCustomProperty[] {
       ReservedCode2: "",
     },
   });
-  return [{ name: "AIGCMetadata", value: json }];
+  return [{ name: "AIGC", value: json }];
 }
 
 async function injectCustomProperties(zip: import("jszip"), response: AgentResponse, JSZip: typeof import("jszip")): Promise<void> {
@@ -136,7 +136,7 @@ async function injectCustomProperties(zip: import("jszip"), response: AgentRespo
 
   const propsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
-  <property fmtid="${APPENDIX_E_FMTID}" pid="2" name="AIGCMetadata"><vt:lpwstr>${escapeXml(json)}</vt:lpwstr></property>
+  <property fmtid="${APPENDIX_E_FMTID}" pid="2" name="AIGC"><vt:lpwstr>${escapeXml(json)}</vt:lpwstr></property>
 </Properties>`;
 
   zip.file("docProps/custom.xml", propsXml);
