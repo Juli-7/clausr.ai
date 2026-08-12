@@ -549,6 +549,6 @@ async function buildFallbackDocx(
   const JSZip = (await import("jszip")).default;
   const zip = await JSZip.loadAsync(packed);
   await injectCustomProperties(zip, response, JSZip);
-  const out = await zip.generateAsync({ type: "nodebuffer" });
-  return new Blob([out], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+  const out = await zip.generateAsync({ type: "blob" });
+  return out;
 }
