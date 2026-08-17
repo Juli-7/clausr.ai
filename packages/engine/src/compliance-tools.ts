@@ -317,6 +317,18 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       const existing = await store.getFiles(sessionId);
       const already = existing.find((f) => f.filename === fileName);
       if (already?.extractedText) {
+        // Cached extractions are still subject to the content guard
+        const { checkInput } = await import("./safety/content-guard");
+        const guard = checkInput(already.extractedText);
+        if (!guard.allowed) {
+          return {
+            error: `File rejected — content failed safety review (${guard.riskType ?? "policy"}). This file will not be used for assessment.`,
+            rejected: true,
+            riskType: guard.riskType,
+            ref: guard.ref,
+            fileName,
+          };
+        }
         return { fileName, cached: true, totalLength: already.extractedText.length };
       }
 
@@ -336,6 +348,21 @@ export const TOOL_DEFS: Record<ToolName, ToolDef> = {
       const { extractFileContent } = await import("./agent/user-info/extractors");
       const result = await extractFileContent({ name: fileName, type: mime, dataUrl });
       const text = result.text || "[No text could be extracted from this file]";
+
+      // Content guard — uploaded document text is held to the same standard as
+      // chat input: prompt injection / jailbreak + 31 risk types (GB/T 45654-2025 附录A).
+      const { checkInput } = await import("./safety/content-guard");
+      const guard = checkInput(text);
+      if (!guard.allowed) {
+        return {
+          error: `File rejected — content failed safety review (${guard.riskType ?? "policy"}). This file will not be used for assessment.`,
+          rejected: true,
+          riskType: guard.riskType,
+          ref: guard.ref,
+          fileName,
+        };
+      }
+
       const chunks = (result.chunks ?? []).map((c) => ({
         id: c.id, text: c.text, html: c.html, pageNumber: c.pageNumber,
         bbox: c.bbox, wordBoxes: c.wordBoxes, pageWidth: c.pageWidth, pageHeight: c.pageHeight,

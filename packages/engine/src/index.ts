@@ -51,3 +51,7 @@ export { resolveCitation, getClauseText } from "./orchestration/audit-tools";
 export type { AgentResponse } from "./agent/shared/types";
 export type { IRegulationApi } from "./agent/knowledge/regulation-api";
 export type { SeedRegulationRequest, SeedRegulationResponse } from "./agent/knowledge/regulation-types";
+
+// ── Content Safety ──
+export { checkInput, classifyOutput } from "./safety/content-guard";
+export type { GuardResult, Classification } from "./safety/content-guard";
