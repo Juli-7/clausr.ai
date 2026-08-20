@@ -1,0 +1,573 @@
+{
+  "$schema": "compliance-pack-v1",
+  "pack": {
+    "title": "EU GDPR — General Data Protection Regulation",
+    "description": "EU 通用数据保护条例 (EU) 2016/679 全面合规审核 — 涵盖数据处理登记、合法基础、同意管理、数据主体权利、DPIA、隐私保护设计、数据安全、处理者管理、跨境传输、泄露通报、DPO 任命、自动化决策、监管机构协作等 20+ 合规领域",
+    "industries": [
+      "Technology",
+      "Finance",
+      "Healthcare",
+      "Service",
+      "Telecommunications",
+      "E-commerce",
+      "Education",
+      "Government"
+    ],
+    "icon": "🔐",
+    "version": "2.0.1",
+    "visibility": "marketplace",
+    "regulation_ids": [
+      "GDPR",
+      "EU_2016_679"
+    ],
+    "triggers": [
+      "GDPR",
+      "General Data Protection",
+      "数据保护",
+      "2016/679",
+      "个人隐私",
+      "Privacy",
+      "DSGVO",
+      "RGPD"
+    ],
+    "visibleToOrgIds": [],
+    "checkPreview": "full",
+    "status": "published",
+    "updatedAt": "2026-08-03T08:14:31.990Z"
+  },
+  "documents": [
+    {
+      "type": "gdpr-governance",
+      "title": "Governance & Accountability",
+      "fields": [
+        "dataInventory",
+        "legalBasis",
+        "consentRecords",
+        "dataProtectionByDesign",
+        "dataProcessorAgreements",
+        "dataProtectionPolicy",
+        "recordOfProcessing"
+      ]
+    },
+    {
+      "type": "gdpr-rights",
+      "title": "Data Subject Rights Management",
+      "fields": [
+        "dataSubjectRightsProcedure",
+        "accessRequestLog",
+        "erasureRequestLog",
+        "automatedDecisionMaking",
+        "dataPortabilityMechanism",
+        "objectionHandling"
+      ]
+    },
+    {
+      "type": "gdpr-risk",
+      "title": "Risk Assessment & Security",
+      "fields": [
+        "dpiaRegister",
+        "priorConsultationRecords",
+        "dataSecurityMeasures",
+        "pseudonymizationMeasures",
+        "securityIncidentResponse",
+        "dataBreachProcedure",
+        "breachNotificationLog"
+      ]
+    },
+    {
+      "type": "gdpr-transfers",
+      "title": "International Data Transfers",
+      "fields": [
+        "crossBorderTransferMap",
+        "adequacyDecisions",
+        "sccDocumentation",
+        "bcrDocumentation"
+      ]
+    },
+    {
+      "type": "gdpr-accountability",
+      "title": "Accountability & Supervision",
+      "fields": [
+        "dpoAppointment",
+        "dpoContactRegistration",
+        "trainingRecords",
+        "auditRecords",
+        "supervisoryAuthorityCommunication",
+        "complianceReporting"
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "id": "dataInventory",
+      "field": "dataInventory",
+      "type": {
+        "kind": "string"
+      },
+      "description": "ROPA must list every processing activity with purpose, legal basis, data categories, recipients, retention period, and cross-border transfer status — including special category processing",
+      "clause": "GDPR.30"
+    },
+    {
+      "id": "legalBasis",
+      "field": "legalBasis",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Each processing activity must have a valid Art 6 basis — consent, contract, legal obligation, vital interest, public task, or legitimate interest. Consent alone is insufficient. Special categories require Art 9 basis",
+      "clause": "GDPR.6, GDPR.9"
+    },
+    {
+      "id": "consentRecords",
+      "field": "consentRecords",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Consent must be freely given, specific, informed, unambiguous, and withdrawable at any time — records must show granular opt-in per purpose with timestamps, not bundled acceptance. Conditional consent for service performance is invalid",
+      "clause": "GDPR.7, GDPR.8"
+    },
+    {
+      "id": "dataSubjectRightsProcedure",
+      "field": "dataSubjectRightsProcedure",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Procedures must cover access (Art 15), rectification (Art 16), erasure/right to be forgotten (Art 17), restriction (Art 18), portability (Art 20), and objection (Art 21) — with documented 30-day response SLA and free-of-charge policy",
+      "clause": "GDPR.12, GDPR.15, GDPR.17, GDPR.20"
+    },
+    {
+      "id": "accessRequestLog",
+      "field": "accessRequestLog",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Access request log must track request date, identity verification method, response date, information provided (categories, purposes, recipients, retention, safeguards for transfers, right to lodge complaint), and any refusals with Art 12(5) justification",
+      "clause": "GDPR.15, GDPR.12"
+    },
+    {
+      "id": "erasureRequestLog",
+      "field": "erasureRequestLog",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Erasure request log must document each request, grounds (Art 17(1) a-f), assessment of exceptions (Art 17(3) a-e), third-party notification per Art 19, and response timeline",
+      "clause": "GDPR.17, GDPR.19"
+    },
+    {
+      "id": "dataPortabilityMechanism",
+      "field": "dataPortabilityMechanism",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Data portability mechanism must provide data in structured, commonly used, machine-readable format (CSV/JSON/XML) — directly to the data subject or to another controller where technically feasible — covering only data processed by consent or contract",
+      "clause": "GDPR.20"
+    },
+    {
+      "id": "objectionHandling",
+      "field": "objectionHandling",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Objection handling procedure must cover direct marketing (absolute right, Art 21(2-3)) and processing based on legitimate interests/public interest (Art 21(1)) — with burden on controller to demonstrate compelling legitimate grounds",
+      "clause": "GDPR.21"
+    },
+    {
+      "id": "automatedDecisionMaking",
+      "field": "automatedDecisionMaking",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Automated decision-making including profiling must be documented — data subjects have right not to be subject to solely automated decisions producing legal effects (Art 22). Exceptions: necessary for contract, authorized by law, or explicit consent — each requires suitable safeguards including right to human intervention",
+      "clause": "GDPR.22"
+    },
+    {
+      "id": "dpiaRegister",
+      "field": "dpiaRegister",
+      "type": {
+        "kind": "string"
+      },
+      "description": "DPIAs must be conducted for high-risk processing (systematic profiling, large-scale sensitive data, public monitoring, new technologies) — each DPIA must include: systematic description of processing, necessity assessment, risk assessment, and mitigation measures with DPO sign-off",
+      "clause": "GDPR.35"
+    },
+    {
+      "id": "priorConsultationRecords",
+      "field": "priorConsultationRecords",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Prior consultation with supervisory authority must be documented where DPIA indicates high residual risk — records must show consultation request, authority response, and any remedial actions taken before processing begins",
+      "clause": "GDPR.36"
+    },
+    {
+      "id": "dataSecurityMeasures",
+      "field": "dataSecurityMeasures",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Technical and organizational security measures must be documented including: pseudonymization, encryption, confidentiality, integrity, availability, resilience, testing procedures, and business continuity — appropriate to risk level per Art 32",
+      "clause": "GDPR.32"
+    },
+    {
+      "id": "pseudonymizationMeasures",
+      "field": "pseudonymizationMeasures",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Pseudonymization and data minimization measures must be implemented — data must be adequate, relevant and limited to what is necessary (Art 5(1)(c)). Pseudonymization should reduce linkability to specific data subjects without additional information kept separately",
+      "clause": "GDPR.5, GDPR.25, GDPR.32"
+    },
+    {
+      "id": "dataProtectionByDesign",
+      "field": "dataProtectionByDesign",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Data protection by design and default must be implemented — only personal data necessary for each purpose is processed, default settings must be privacy-friendly, and technical measures must be integrated at design time (Art 25)",
+      "clause": "GDPR.25"
+    },
+    {
+      "id": "dataProcessorAgreements",
+      "field": "dataProcessorAgreements",
+      "type": {
+        "kind": "string"
+      },
+      "description": "All data processor agreements must cover: subject matter, duration, nature, purpose, personal data types, categories of data subjects, obligations (Art 28(3) a-h) — including processor's obligation to assist with DSRs, security, breach notification, DPIAs, and prior authorization for sub-processors",
+      "clause": "GDPR.28, GDPR.29"
+    },
+    {
+      "id": "dataProtectionPolicy",
+      "field": "dataProtectionPolicy",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Organization must maintain a comprehensive data protection policy that documents: accountability framework (Art 5(2)), data protection principles, roles and responsibilities, data subject rights procedures, security measures, breach response plan, training requirements, and regular review cycle",
+      "clause": "GDPR.5, GDPR.24"
+    },
+    {
+      "id": "recordOfProcessing",
+      "field": "recordOfProcessing",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Records of processing activities must be maintained in writing (including electronic) for all controllers and processors with 250+ employees, or where processing is not occasional, or includes special categories/criminal data — must be available to supervisory authority on request",
+      "clause": "GDPR.30"
+    },
+    {
+      "id": "crossBorderTransferMap",
+      "field": "crossBorderTransferMap",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Complete cross-border transfer mapping must document: all recipient countries, transfer mechanisms (adequacy decision (Art 45), SCCs (Art 46(2)(c)), BCRs (Art 47), or derogation (Art 49)), onward transfers, and countries where adequacy decisions apply",
+      "clause": "GDPR.44, GDPR.45, GDPR.46, GDPR.49"
+    },
+    {
+      "id": "sccDocumentation",
+      "field": "sccDocumentation",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Standard Contractual Clauses (SCCs 2021/914) must be executed with all relevant data importers, include module-specific clauses (controller-to-processor, processor-to-processor, etc.), completed annexes, and documented Transfer Impact Assessment (TIA) per Schrems II requirements",
+      "clause": "GDPR.46, GDPR.45"
+    },
+    {
+      "id": "bcrDocumentation",
+      "field": "bcrDocumentation",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Binding Corporate Rules must be approved by the competent supervisory authority, cover all group entities, include legally binding data protection principles, complaint mechanism, audit compliance, and binding effect on all employees per Art 47",
+      "clause": "GDPR.47"
+    },
+    {
+      "id": "dataBreachProcedure",
+      "field": "dataBreachProcedure",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Data breach procedure must require: detection and internal escalation, containment measures, risk assessment (likelihood and severity to rights and freedoms), notification to supervisory authority within 72 hours (Art 33), communication to data subjects without undue delay when high risk (Art 34), and full documentation of all breaches regardless of notification requirement",
+      "clause": "GDPR.33, GDPR.34"
+    },
+    {
+      "id": "breachNotificationLog",
+      "field": "breachNotificationLog",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Breach notification log must record for each incident: nature of breach, categories and approximate number of data subjects/records affected, DPO contact, likely consequences, measures taken or proposed, and whether data subjects were notified with justification",
+      "clause": "GDPR.33, GDPR.34"
+    },
+    {
+      "id": "securityIncidentResponse",
+      "field": "securityIncidentResponse",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Security incident response capability must be documented including: detection systems, incident classification matrix, escalation tree, containment playbooks, forensic collection procedures, communication templates for authority and data subjects, and post-incident review process",
+      "clause": "GDPR.32, GDPR.33, GDPR.34"
+    },
+    {
+      "id": "dpoAppointment",
+      "field": "dpoAppointment",
+      "type": {
+        "kind": "string"
+      },
+      "description": "DPO must be appointed if: public authority, systematic monitoring of data subjects on large scale, or large-scale processing of special categories/criminal data (Art 37). DPO must be involved in all data protection matters, report to highest management, have independence guarantees, and be registered with the supervisory authority",
+      "clause": "GDPR.37, GDPR.38, GDPR.39"
+    },
+    {
+      "id": "dpoContactRegistration",
+      "field": "dpoContactRegistration",
+      "type": {
+        "kind": "string"
+      },
+      "description": "DPO contact details must be published (Art 37(7)), communicated to the supervisory authority, and available to data subjects. DPO must have: expert knowledge of data protection law, no conflict of interest (Art 38(6)), access to all processing operations, and sufficient resources",
+      "clause": "GDPR.37, GDPR.38"
+    },
+    {
+      "id": "trainingRecords",
+      "field": "trainingRecords",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Data protection training records must document: mandatory training for all staff handling personal data, role-specific training for high-risk processing, DPO training, training frequency (at least annually), completion rates, and refresh training after regulatory changes",
+      "clause": "GDPR.39, GDPR.5"
+    },
+    {
+      "id": "auditRecords",
+      "field": "auditRecords",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Internal audit records must document compliance audits covering: processing activities, security measures, data subject rights handling, processor compliance, transfer mechanisms, and breach response — with audit schedule, scope, findings, corrective action plans, and management sign-off",
+      "clause": "GDPR.5, GDPR.24"
+    },
+    {
+      "id": "supervisoryAuthorityCommunication",
+      "field": "supervisoryAuthorityCommunication",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Communication with the lead supervisory authority must be documented including: registration notification (Art 31 DPA notification), breach notifications (Art 33), prior consultations (Art 36), cooperation requests, and annual reporting obligations",
+      "clause": "GDPR.51, GDPR.55, GDPR.56, GDPR.57"
+    },
+    {
+      "id": "complianceReporting",
+      "field": "complianceReporting",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Compliance reporting framework must include: regular compliance reports to senior management, data protection KPIs (breach response times, DSR completion rates, training completion, DPIA backlog), annual data protection review, and board-level accountability documentation per Art 24(1)",
+      "clause": "GDPR.24, GDPR.5"
+    },
+    {
+      "id": "adequacyDecisions",
+      "field": "adequacyDecisions",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Adequacy decisions must be documented for each third country recipient — organization must maintain current list of countries with European Commission adequacy decisions and ensure transfers rely on the applicable adequacy determination, with periodic review of adequacy status changes",
+      "clause": "GDPR.45"
+    }
+  ],
+  "redlines": [
+    "不得将用户同意（Consent）作为唯一合法性基础——需识别并记录每项处理的法定依据",
+    "不得忽略 DPIAs（数据保护影响评估）——高风险处理强制要求",
+    "不得将数据主体权利请求视为可忽略——应答时限 30 天且免费",
+    "不得忽略跨境传输工具——SCCs、BCR 或充分性认定必须到位",
+    "不得在数据泄露后 72 小时才启动内部调查——通知监管机构时限 72 小时",
+    "不得将自动化决策（Profiling）用于无人工复核的法律/重大影响场景",
+    "不得将个人数据保留超过必要期限——必须设定并执行保留策略",
+    "不得使用未经合同约束的数据处理者——必须签署 Art 28 处理者协议",
+    "不得忽视数据保护设计（Privacy by Design）——新系统必须嵌入隐私保护",
+    "不得在未经充分性认定或无适当保障措施的情况下向第三国传输数据"
+  ],
+  "lessons": [
+    "GDPR 合规是持续性过程，非一次性项目——需建立持续监控和年度审查机制",
+    "DPO 应尽早介入新处理活动设计阶段，而非仅作为事后合规检查角色",
+    "数据主体权利请求的 30 天时限是法定的——需建立自动化的请求追踪系统",
+    "处理者协议（Art 28）必须覆盖子处理者的变更通知和审批流程",
+    "跨境传输的 Transfer Impact Assessment (TIA) 是 Schrems II 后的强制要求",
+    "数据泄露的 72 小时通报时限从『知悉』起算——「知悉」定义为组织合理确信泄露发生时"
+  ],
+  "fields": [
+    {
+      "id": "dataInventory",
+      "label": "Data Processing Inventory (ROPA)",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "legalBasis",
+      "label": "Legal Basis for Each Processing Activity",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "consentRecords",
+      "label": "Consent Management Records",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "dataSubjectRightsProcedure",
+      "label": "Data Subject Rights Handling Procedure",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "accessRequestLog",
+      "label": "Subject Access Request (SAR) Log",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "erasureRequestLog",
+      "label": "Erasure / Right-to-be-Forgotten Request Log",
+      "required": false,
+      "type": "textarea"
+    },
+    {
+      "id": "dataPortabilityMechanism",
+      "label": "Data Portability Mechanism (Art 20)",
+      "required": false,
+      "type": "textarea"
+    },
+    {
+      "id": "objectionHandling",
+      "label": "Objection Handling Procedure (Art 21)",
+      "required": false,
+      "type": "textarea"
+    },
+    {
+      "id": "automatedDecisionMaking",
+      "label": "Automated Decision-Making & Profiling Register (Art 22)",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "dpiaRegister",
+      "label": "DPIA Register (Art 35)",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "priorConsultationRecords",
+      "label": "Prior Consultation Records (Art 36)",
+      "required": false,
+      "type": "textarea"
+    },
+    {
+      "id": "dataSecurityMeasures",
+      "label": "Technical & Organizational Security Measures (Art 32)",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "pseudonymizationMeasures",
+      "label": "Pseudonymization & Data Minimization Measures",
+      "required": false,
+      "type": "textarea"
+    },
+    {
+      "id": "dataProtectionByDesign",
+      "label": "Data Protection by Design & Default (Art 25)",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "dataProcessorAgreements",
+      "label": "Data Processor Agreements Register (Art 28)",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "dataProtectionPolicy",
+      "label": "Data Protection Policy",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "recordOfProcessing",
+      "label": "Record of Processing Activities (Art 30)",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "crossBorderTransferMap",
+      "label": "Cross-Border Data Transfer Mapping (Art 44-49)",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "adequacyDecisions",
+      "label": "Adequacy Decisions Inventory (Art 45)",
+      "required": false,
+      "type": "textarea"
+    },
+    {
+      "id": "sccDocumentation",
+      "label": "Standard Contractual Clauses (SCCs) Documentation",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "bcrDocumentation",
+      "label": "Binding Corporate Rules (BCRs) Documentation",
+      "required": false,
+      "type": "textarea"
+    },
+    {
+      "id": "dataBreachProcedure",
+      "label": "Data Breach Notification Procedure (Art 33-34)",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "breachNotificationLog",
+      "label": "Data Breach Notification Log",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "securityIncidentResponse",
+      "label": "Security Incident Response Capability",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "dpoAppointment",
+      "label": "DPO Appointment & Qualifications (Art 37-39)",
+      "required": true
+    },
+    {
+      "id": "dpoContactRegistration",
+      "label": "DPO Contact Registration & Independence",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "trainingRecords",
+      "label": "Data Protection Training Records",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "auditRecords",
+      "label": "Internal Audit Records",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "supervisoryAuthorityCommunication",
+      "label": "Supervisory Authority Communication Records",
+      "required": false,
+      "type": "textarea"
+    },
+    {
+      "id": "complianceReporting",
+      "label": "Compliance Reporting & KPI Dashboard",
+      "required": true,
+      "type": "textarea"
+    }
+  ]
+}

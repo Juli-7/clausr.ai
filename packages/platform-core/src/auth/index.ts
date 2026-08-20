@@ -1,0 +1,42 @@
+export { getAuthDb, closeAuthDb } from "./db";
+export type { User, AuthenticatedUser, OrgMember, OrgConfig, UserWithMemberships, OrgMemberInfo } from "./service";
+export {
+  createUser,
+  createUserRegistration,
+  createEmailVerificationToken,
+  verifyEmailWithToken,
+  getUserByEmail,
+  getUserByPhone,
+  getUserByUsername,
+  createUserByPhone,
+  createUserByUsername,
+  verifyCredentials,
+  verifyCredentialsByUsername,
+  getUserById,
+  listUsers,
+  setUserActive,
+  updateUserRole,
+  deleteUser,
+  createOrganization,
+  deleteOrganization,
+  addMemberToOrganization,
+  removeMemberFromOrganization,
+  listOrganizations,
+  seedSuperadmin,
+  updatePassword,
+  resetUserPassword,
+  getOrgConfig,
+  updateOrgConfig,
+  getEventPrice,
+  listUsersWithMemberships,
+  listOrganizationsForAdmin,
+  getOrgById,
+  getOrgBySlug,
+  getOrgMembers,
+  countOrgMembersByRole,
+  isUserInSameOrg,
+  getMemberRole,
+} from "./service";
+export { createSessionToken, verifySessionToken, getSessionCookieOptions, extractTokenFromRequest } from "./session";
+export type { SessionPayload } from "./session";
+export { authenticateRequest, requireAuth, requireRole, requireOrgAdmin, requireTenantRole, AuthError, handleAuthError } from "./middleware";

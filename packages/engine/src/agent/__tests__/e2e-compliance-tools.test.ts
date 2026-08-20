@@ -184,7 +184,7 @@ describe("Compliance tools end-to-end with real DB", () => {
     expect(content.source).toBe("pack.json");
 
     // Cleanup — remove the test pack from disk
-    const packsDir = path.join(process.cwd(), "packs");
+    const packsDir = process.env.PACKS_DIR ?? path.join(process.cwd(), "packs");
     try { fs.rmSync(path.join(packsDir, testPackId), { recursive: true, force: true }); } catch { /* ok */ }
   });
 

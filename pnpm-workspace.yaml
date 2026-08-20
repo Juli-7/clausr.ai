@@ -1,13 +1,21 @@
 packages:
+  - "apps/*"
   - "packages/*"
 
 allowBuilds:
   better-sqlite3: true
+  canvas: true
+  esbuild: true
+  protobufjs: true
   sharp: true
   tesseract.js: true
   unrs-resolver: true
 onlyBuiltDependencies:
   - better-sqlite3
+  - canvas
+  - esbuild
+  - protobufjs
   - sharp
   - tesseract.js
   - unrs-resolver
+ignoreScripts: false

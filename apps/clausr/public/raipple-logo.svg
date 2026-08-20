@@ -1,0 +1,6 @@
+<svg width="150" height="36" viewBox="0 0 150 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="1" y="3" width="28" height="28" rx="7" fill="#2944AB"/>
+  <path d="M8 17l5 5 9-9" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="38" y="23" font-family="'Inter', system-ui, -apple-system, sans-serif" font-size="18" font-weight="700" fill="#1a1a2e" letter-spacing="-0.02em">clausr</text>
+  <text x="96" y="23" font-family="'Inter', system-ui, -apple-system, sans-serif" font-size="18" font-weight="300" fill="#2944AB" letter-spacing="-0.02em">.ai</text>
+</svg>

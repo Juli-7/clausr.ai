@@ -1,0 +1,94 @@
+{
+  "$schema": "compliance-pack-v1",
+  "pack": {
+    "title": "EU PPWR — Packaging & Packaging Waste",
+    "industries": [
+      "Packaging",
+      "Consumer Products",
+      "Manufacturing",
+      "Logistics"
+    ],
+    "icon": "📦",
+    "version": "1.0.0",
+    "description": "EU 包装与包装废弃物法规 (EU) 2025/40 合规审核 — 核查包装减量、可回收性设计、再生含量、标签及生产者责任",
+    "regulation_ids": [
+      "PPWR",
+      "PPWR_Annex"
+    ],
+    "triggers": [
+      "PPWR",
+      "包装",
+      "Packaging Waste",
+      "2025/40",
+      "环保"
+    ],
+    "visibility": "marketplace",
+    "author": "",
+    "visibleToOrgIds": []
+  },
+  "documents": [
+    {
+      "type": "ppwr-documentation",
+      "title": "PPWR Compliance Documentation",
+      "fields": [
+        "manufacturerName",
+        "packagingTypes",
+        "weightReduction",
+        "recyclabilityDesign",
+        "recycledContent",
+        "harmonizedStandards",
+        "labeling"
+      ]
+    }
+  ],
+  "redlines": [
+    "不得将\"可生物降解\"当作可回收性证据（可生物降解 ≠ 可回收）",
+    "不得忽略复合包装（如纸塑复合）的特殊回收难度",
+    "不得仅提供供应商声明而无检测数据（对重金属和物质限制）"
+  ],
+  "lessons": [],
+  "fields": [
+    {
+      "id": "manufacturerName",
+      "label": "Company Name and Address",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "packagingTypes",
+      "label": "Packaging Types and Materials",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "weightReduction",
+      "label": "Weight/Volume Reduction Demonstrated",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "recyclabilityDesign",
+      "label": "Recyclability by Design",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "recycledContent",
+      "label": "Recycled Content Declaration",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "harmonizedStandards",
+      "label": "Harmonized Standards Applied",
+      "type": "textarea",
+      "required": false
+    },
+    {
+      "id": "labeling",
+      "label": "Packaging Marking and Labels",
+      "type": "textarea",
+      "required": true
+    }
+  ]
+}

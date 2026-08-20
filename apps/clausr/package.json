@@ -1,0 +1,51 @@
+{
+  "name": "@clausr/app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:e2e:server": "next dev & (while ! curl -sf http://localhost:3000 >/dev/null 2>&1; do sleep 1; done) && vitest run --config vitest.e2e.config.ts; kill %1 2>/dev/null"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.4.1",
+    "@clausr/engine": "workspace:*",
+    "@clausr/platform-core": "workspace:*",
+    "@napi-rs/canvas": "^1.0.2",
+    "better-sqlite3": "^12.10.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "dompurify": "^3.4.10",
+    "lucide-react": "1.16.0",
+    "mammoth": "^1.12.0",
+    "next": "16.2.6",
+    "pdfjs-dist": "^4.10.38",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-markdown": "^10.1.0",
+    "rehype-raw": "^7.0.0",
+    "remark-gfm": "^4.0.1",
+    "resend": "^6.12.4",
+    "sharp": "^0.35.3",
+    "tailwind-merge": "^3.5.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/dompurify": "^3.2.0",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.6",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

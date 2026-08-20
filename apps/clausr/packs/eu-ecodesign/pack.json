@@ -1,0 +1,152 @@
+{
+  "$schema": "compliance-pack-v1",
+  "pack": {
+    "title": "EU Ecodesign — Sustainable Products",
+    "industries": [
+      "Manufacturing",
+      "Consumer Products",
+      "Electronics",
+      "Energy"
+    ],
+    "icon": "🌱",
+    "version": "1.0.1",
+    "description": "EU 生态设计指令 2009/125/EC / ESPR 合规审核 — 核查能效、可维修性、产品碳足迹、数字产品护照及生命周期评估",
+    "regulation_ids": [
+      "Ecodesign",
+      "ESPR"
+    ],
+    "triggers": [
+      "Ecodesign",
+      "生态设计",
+      "2009/125/EC",
+      "ESPR",
+      "能效",
+      "环保"
+    ],
+    "visibility": "marketplace",
+    "author": "",
+    "checkPreview": "full",
+    "status": "draft",
+    "updatedAt": "2026-08-03T08:14:19.474Z"
+  },
+  "documents": [
+    {
+      "type": "ecodesign-technical-file",
+      "title": "Ecodesign Technical Documentation",
+      "fields": [
+        "manufacturerName",
+        "productId",
+        "applicableRegulation",
+        "energyEfficiency",
+        "reparabilityScore",
+        "productCarbonFootprint",
+        "lifecycleAssessment",
+        "digitalProductPassport"
+      ]
+    }
+  ],
+  "redlines": [
+    "不得仅引用通用框架指令而不引用具体产品实施法规",
+    "不得忽略 ESPR 扩展范围——新法规可能覆盖非能源产品（如纺织品、家具）",
+    "不得忽略 DPP（数字产品护照）新要求——渐进式强制执行",
+    "不得将 CE 标志当作 Ecodesign 合规的唯一证据"
+  ],
+  "lessons": [],
+  "fields": [
+    {
+      "id": "manufacturerName",
+      "label": "Manufacturer Name and Address",
+      "required": true
+    },
+    {
+      "id": "productId",
+      "label": "Product Model and Parameters",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "applicableRegulation",
+      "label": "Applicable Ecodesign Implementing Regulation",
+      "required": true
+    },
+    {
+      "id": "energyEfficiency",
+      "label": "Energy Efficiency Data",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "reparabilityScore",
+      "label": "Reparability Score / Design for Repair",
+      "required": false,
+      "type": "textarea"
+    },
+    {
+      "id": "productCarbonFootprint",
+      "label": "Product Carbon Footprint",
+      "required": false,
+      "type": "textarea"
+    },
+    {
+      "id": "lifecycleAssessment",
+      "label": "Life Cycle Assessment Summary",
+      "required": false,
+      "type": "textarea"
+    },
+    {
+      "id": "digitalProductPassport",
+      "label": "Digital Product Passport Reference",
+      "required": false
+    }
+  ],
+  "checks": [
+    {
+      "id": "manufacturerName",
+      "field": "manufacturerName",
+      "type": "narrative",
+      "description": "Evaluate manufacturerName"
+    },
+    {
+      "id": "productId",
+      "field": "productId",
+      "type": "narrative",
+      "description": "Evaluate productId"
+    },
+    {
+      "id": "applicableRegulation",
+      "field": "applicableRegulation",
+      "type": "narrative",
+      "description": "Evaluate applicableRegulation"
+    },
+    {
+      "id": "energyEfficiency",
+      "field": "energyEfficiency",
+      "type": "narrative",
+      "description": "Evaluate energyEfficiency"
+    },
+    {
+      "id": "reparabilityScore",
+      "field": "reparabilityScore",
+      "type": "narrative",
+      "description": "Evaluate reparabilityScore"
+    },
+    {
+      "id": "productCarbonFootprint",
+      "field": "productCarbonFootprint",
+      "type": "narrative",
+      "description": "Evaluate productCarbonFootprint"
+    },
+    {
+      "id": "lifecycleAssessment",
+      "field": "lifecycleAssessment",
+      "type": "narrative",
+      "description": "Evaluate lifecycleAssessment"
+    },
+    {
+      "id": "digitalProductPassport",
+      "field": "digitalProductPassport",
+      "type": "narrative",
+      "description": "Evaluate digitalProductPassport"
+    }
+  ]
+}

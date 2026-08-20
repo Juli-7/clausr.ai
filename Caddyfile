@@ -1,0 +1,20 @@
+{
+    auto_https on
+}
+
+app.raipple.com {
+    reverse_proxy localhost:3000
+
+    header {
+        Strict-Transport-Security max-age=31536000
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; frame-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
+        -Server
+    }
+
+    log {
+        output file /var/log/caddy/app.raipple.com.log
+    }
+}

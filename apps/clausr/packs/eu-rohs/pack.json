@@ -1,0 +1,131 @@
+{
+  "$schema": "compliance-pack-v1",
+  "pack": {
+    "title": "EU RoHS — Hazardous Substances",
+    "industries": [
+      "Electrical",
+      "Electronics",
+      "Consumer Products",
+      "Manufacturing"
+    ],
+    "icon": "🧪",
+    "version": "1.0.0",
+    "description": "EU 有害物质限制指令 2011/65/EU 合规审核 — 核查六项限用物质检测报告、豁免条款、技术文件及 CE 标志",
+    "regulation_ids": [
+      "RoHS",
+      "RoHS_Annex_II",
+      "RoHS_Annex_III"
+    ],
+    "triggers": [
+      "RoHS",
+      "有害物质",
+      "2011/65/EU",
+      "铅",
+      "汞",
+      "镉",
+      "CE认证"
+    ],
+    "visibility": "marketplace",
+    "author": ""
+  },
+  "documents": [
+    {
+      "type": "rohs-declaration",
+      "title": "EU Declaration of Conformity (RoHS)",
+      "fields": [
+        "manufacturerName",
+        "productId",
+        "directives",
+        "standards",
+        "substanceLimits",
+        "exemptions",
+        "signatory"
+      ]
+    },
+    {
+      "type": "rohs-technical-file",
+      "title": "RoHS Technical Documentation",
+      "fields": [
+        "productDescription",
+        "homogeneousMaterials",
+        "testReports",
+        "exemptionJustification"
+      ]
+    }
+  ],
+  "redlines": [
+    "不得将整机 XRF 测试等同为均质材料级合规证据",
+    "不得接受已过豁免期仍继续使用的声明",
+    "不得忽略电缆/线束中 PVC 的铅稳定剂问题",
+    "不得忽略焊锡中铅含量（应<1000ppm）"
+  ],
+  "lessons": [],
+  "fields": [
+    {
+      "id": "manufacturerName",
+      "label": "Manufacturer Name and Address",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "productId",
+      "label": "Product Identification",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "directives",
+      "label": "Applicable Directives",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "standards",
+      "label": "Test Standards Applied",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "substanceLimits",
+      "label": "Substance Limit Declaration",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "exemptions",
+      "label": "Exemptions Claimed (Annex III/IV)",
+      "type": "textarea",
+      "required": false
+    },
+    {
+      "id": "signatory",
+      "label": "Authorized Signatory",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "productDescription",
+      "label": "Product Description",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "homogeneousMaterials",
+      "label": "Homogeneous Material List",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "testReports",
+      "label": "Test Reports (XRF / ICP-OES / GC-MS)",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "exemptionJustification",
+      "label": "Exemption Justification Documents",
+      "type": "textarea",
+      "required": false
+    }
+  ]
+}

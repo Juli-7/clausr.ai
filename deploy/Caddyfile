@@ -1,0 +1,15 @@
+app.raipple.com {
+	reverse_proxy localhost:3000
+
+	header {
+		Strict-Transport-Security max-age=31536000
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/app.raipple.com.log
+	}
+}

@@ -1,0 +1,126 @@
+{
+  "$schema": "compliance-pack-v1",
+  "pack": {
+    "title": "EU EMC Directive",
+    "industries": [
+      "Electrical",
+      "Electronics",
+      "Manufacturing"
+    ],
+    "icon": "⚡",
+    "version": "1.0.0",
+    "description": "EU 电磁兼容指令 2014/30/EU 合规审核 — 核查 EMC 声明、技术文件、协调标准、防护措施及 CE 标志要求",
+    "regulation_ids": [
+      "EMC",
+      "EMC_Annex_II"
+    ],
+    "triggers": [
+      "EMC",
+      "电磁兼容",
+      "2014/30/EU",
+      "Electromagnetic Compatibility",
+      "CE认证"
+    ],
+    "visibility": "marketplace",
+    "author": ""
+  },
+  "documents": [
+    {
+      "type": "emc-declaration",
+      "title": "EC Declaration of Conformity (EMC)",
+      "fields": [
+        "manufacturerName",
+        "productId",
+        "directives",
+        "standards",
+        "testReportRef",
+        "signatory",
+        "datePlace"
+      ]
+    },
+    {
+      "type": "emc-technical-file",
+      "title": "EMC Technical Documentation",
+      "fields": [
+        "productDescription",
+        "emcDesignMeasures",
+        "testResults",
+        "assessmentMethod"
+      ]
+    }
+  ],
+  "redlines": [
+    "不得将 CB 测试报告等同为 EMC 合规测试报告",
+    "不得将 FCC 测试报告直接作为 EU EMC 合规证据（FCC 辐射限值与 EU 不同）",
+    "不得忽略标准撤回/替代（如 EN 55022 已被 EN 55032 替代）"
+  ],
+  "lessons": [],
+  "fields": [
+    {
+      "id": "manufacturerName",
+      "label": "Manufacturer Name and Address",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "productId",
+      "label": "Product Identification (Name, Model, Serial)",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "directives",
+      "label": "Applicable Directives including 2014/30/EU",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "standards",
+      "label": "Harmonized EMC Standards Applied",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "testReportRef",
+      "label": "EMC Test Report Reference",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "signatory",
+      "label": "Authorized Signatory",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "datePlace",
+      "label": "Date and Place of Issue",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "productDescription",
+      "label": "Product Description",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "emcDesignMeasures",
+      "label": "EMC Design Measures",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "testResults",
+      "label": "Test Results Summary",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "assessmentMethod",
+      "label": "Assessment Method (Self-declaration or NB)",
+      "type": "text",
+      "required": true
+    }
+  ]
+}

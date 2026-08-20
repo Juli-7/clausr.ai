@@ -1,0 +1,2080 @@
+{
+  "$schema": "compliance-pack-v1",
+  "pack": {
+    "title": "GB/T 44464 — 汽车数据通用要求",
+    "description": "GB/T 44464 汽车数据通用要求合规审核 — 逐条核查汽车数据安全管理体系、数据分类分级、全生命周期防护、个人信息保护、重要数据保护、匿名化处理、符合性评估和试验验证的每项要求",
+    "industries": [
+      "Automotive",
+      "Manufacturing",
+      "Technology"
+    ],
+    "icon": "🚗",
+    "version": "1.0.2",
+    "visibility": "marketplace",
+    "expert": {
+      "name": "Juli",
+      "contact": "18112345678 · WeChat: juli_888",
+      "intro": "Automotive data compliance expert, 10+ years experience in GB/T 44464 audit"
+    },
+    "regulation_ids": [
+      "GB_T_44464",
+      "GB44464",
+      "AutomotiveDataGeneralRequirements"
+    ],
+    "triggers": [
+      "GB/T 44464",
+      "GB44464",
+      "汽车数据",
+      "汽车数据安全管理",
+      "车载数据",
+      "车辆数据合规",
+      "座舱数据",
+      "车外匿名化",
+      "自动驾驶数据",
+      "SAC/TC 114"
+    ],
+    "checkPreview": "full",
+    "visibleToOrgIds": [],
+    "status": "published",
+    "updatedAt": "2026-08-03T08:42:20.716Z"
+  },
+  "documents": [
+    {
+      "type": "gb44464-mgmt-system-establish",
+      "title": "1. 汽车数据安全管理体系建设 — System Establishment (§4.1.1-4.1.3)",
+      "fields": [
+        "establishMgmtSystem",
+        "establishObjectivesPolicy",
+        "defineSystemBoundaryScope",
+        "establishSecurityOrg",
+        "defineOrgRolesResponsibilities"
+      ]
+    },
+    {
+      "type": "gb44464-classification-assets",
+      "title": "2. 数据分类分级与资产台账 — Classification & Asset Ledger (§4.1.4, Annex A)",
+      "fields": [
+        "establishClassificationGradingSystem",
+        "defineGradingMethodology",
+        "applyDataAggregationEscalation",
+        "formDataAssetLedger"
+      ]
+    },
+    {
+      "type": "gb44464-lifecycle-protection",
+      "title": "3. 数据全生命周期分级防护 — Lifecycle Graded Protection (§4.1.5)",
+      "fields": [
+        "lifecycleCollectionControls",
+        "lifecycleStorageControls",
+        "lifecycleUseControls",
+        "lifecycleProcessingControls",
+        "lifecycleTransmissionControls",
+        "lifecycleProvisionControls",
+        "lifecycleDisclosureControls",
+        "lifecycleDeletionControls"
+      ]
+    },
+    {
+      "type": "gb44464-process-management",
+      "title": "4. 研发与生产数据流程管理 — R&D & Production Process (§4.1.6)",
+      "fields": [
+        "rDDataSecurityProcedures",
+        "productionDataSecurityProcedures"
+      ]
+    },
+    {
+      "type": "gb44464-localization-crossborder",
+      "title": "5. 数据本地化与跨境传输 — Localization & Cross-border (§4.1.7, §5.8, §6.7)",
+      "fields": [
+        "piStoredDomestically",
+        "importantDataStoredDomestically",
+        "crossBorderSecurityAssessmentCompleted",
+        "vehicleNoDirectOverseasImportantData"
+      ]
+    },
+    {
+      "type": "gb44464-risk-monitoring",
+      "title": "6. 风险监测与事件管理 — Risk Monitoring & Incident (§4.1.8)",
+      "fields": [
+        "riskDetectionMonitoringProcedures",
+        "riskImmediateRemediation",
+        "incidentHandlingMeasures",
+        "incidentUserNotification",
+        "incidentAuthorityReporting",
+        "periodicImportantDataRiskAssessment",
+        "riskAssessmentReportSubmission"
+      ]
+    },
+    {
+      "type": "gb44464-complaint-thirdparty",
+      "title": "7. 投诉举报与第三方管理 — Complaint & Third-party (§4.1.9-4.1.10)",
+      "fields": [
+        "establishComplaintMechanism",
+        "complaintChannelsAccessible",
+        "complaintTimelyHandling",
+        "thirdPartyMgmtSystem",
+        "thirdPartySecurityAgreements",
+        "thirdPartyCapabilityVerification"
+      ]
+    },
+    {
+      "type": "gb44464-pi-general",
+      "title": "8. 个人信息处理通用要求 — PI General Requirements (§5.1)",
+      "fields": [
+        "piClearReasonablePurpose",
+        "piDefaultNonCollection",
+        "piNoOutVehicleWithoutConsent",
+        "piConsentExceptionsDisclosed",
+        "cabinDataOutVehicleProhibition",
+        "piStoragePeriodConsistentWithConsent",
+        "piWithdrawalNoRetroactiveEffect",
+        "piDeletionConditionsDefined",
+        "piDeletionOnRequestProcess"
+      ]
+    },
+    {
+      "type": "gb44464-consent-mechanism",
+      "title": "9. 告知同意机制 — Consent Mechanism (§5.2)",
+      "fields": [
+        "consentProminentNotification",
+        "consentContentDataTypes",
+        "consentContentPurposeNecessity",
+        "consentContentCollectionContext",
+        "consentContentStorageLocationPeriod",
+        "consentContentRightsAccessCopyDelete",
+        "consentContentContactInfo",
+        "consentOptionAgreeRefuse",
+        "consentSensitivePeriodConfigurable",
+        "reConsentOnExpiry",
+        "reConsentOnChange",
+        "consentWithdrawalPathProvided"
+      ]
+    },
+    {
+      "type": "gb44464-pi-collection",
+      "title": "10. 个人信息收集与精度 — PI Collection & Precision (§5.3)",
+      "fields": [
+        "collectionPrecisionMatchedToFunction",
+        "multiFunctionDevicePrecisionJustification"
+      ]
+    },
+    {
+      "type": "gb44464-pi-storage",
+      "title": "11. 个人信息存储安全 — PI Storage Security (§5.4)",
+      "fields": [
+        "sensitivePIEncryptedInVehicle",
+        "sensitivePIAccessControlledInVehicle",
+        "vinAntiTamperProtection"
+      ]
+    },
+    {
+      "type": "gb44464-pi-use",
+      "title": "12. 个人信息使用与访问控制 — PI Use & Access Control (§5.5)",
+      "fields": [
+        "piUseAccessControlMeasures",
+        "biometricNotSoleAuthentication"
+      ]
+    },
+    {
+      "type": "gb44464-important-data",
+      "title": "15. 重要数据保护 — Important Data Protection (§6.1-6.7, Annex A.3)",
+      "fields": [
+        "importantDataPurposeLimitation",
+        "importantDataDefaultNonCollection",
+        "importantDataNoOutVehicle",
+        "importantDataCollectionPrecisionMatched",
+        "importantDataMultiFunctionJustification",
+        "importantDataEncryptedStorage",
+        "importantDataAccessControlledUse",
+        "importantDataEncryptedTransmission",
+        "importantDataNonRetrievableDeletion",
+        "importantDataNoDirectOverseas"
+      ]
+    },
+    {
+      "type": "test-plan",
+      "title": "🧪 试验计划 — Test Plan (Annex B/C/D Adapted Procedures)",
+      "fields": [
+        "testPlanScope",
+        "testPlanEquipment",
+        "testPlanNotes"
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "field": "establishMgmtSystem",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Shall establish and implement an automotive data security management system with technical protection measures to ensure continuous effective protection and lawful use of vehicle data",
+      "clause": "GB/T 44464 §4.1.1",
+      "rounding": null
+    },
+    {
+      "field": "establishObjectivesPolicy",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Shall formulate data security objectives and policies, analyze internal and external environment of the management system, and determine system boundary and applicable scope",
+      "clause": "GB/T 44464 §4.1.2",
+      "rounding": null
+    },
+    {
+      "field": "defineSystemBoundaryScope",
+      "type": {
+        "kind": "string"
+      },
+      "description": "System boundary and applicable scope of the data security management system must be documented, considering internal/external environment factors",
+      "clause": "GB/T 44464 §4.1.2",
+      "rounding": null
+    },
+    {
+      "field": "establishSecurityOrg",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Shall establish an automotive data security management organization body",
+      "clause": "GB/T 44464 §4.1.3",
+      "rounding": null
+    },
+    {
+      "field": "defineOrgRolesResponsibilities",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Shall define responsibilities for relevant personnel within the data security management organization",
+      "clause": "GB/T 44464 §4.1.3",
+      "rounding": null
+    },
+    {
+      "field": "establishClassificationGradingSystem",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Shall establish a data classification and grading system following compliance, scientific, practical, extensible, significant, feasible,时效性, and stability principles",
+      "clause": "GB/T 44464 §4.1.4, Annex A.1",
+      "rounding": null
+    },
+    {
+      "field": "defineGradingMethodology",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Grading methodology must evaluate impact objects (national security, industry security, organization security, individual rights) and impact levels (severe, general, minor, none) per Annex A.3 Table A.1 to determine core/important/general data tiers",
+      "clause": "GB/T 44464 Annex A.3",
+      "rounding": null
+    },
+    {
+      "field": "applyDataAggregationEscalation",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Data grading must account for escalation rules: same data may upgrade when volume increases; different data types combined may cause grade escalation",
+      "clause": "GB/T 44464 Annex A.3.3",
+      "rounding": null
+    },
+    {
+      "field": "formDataAssetLedger",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Shall form a data asset management ledger documenting all vehicle data assets with classification grades",
+      "clause": "GB/T 44464 §4.1.4",
+      "rounding": null
+    },
+    {
+      "field": "lifecycleCollectionControls",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Graded protection requirements and operating procedures must be defined for the collection phase of the data lifecycle",
+      "clause": "GB/T 44464 §4.1.5",
+      "rounding": null
+    },
+    {
+      "field": "lifecycleStorageControls",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Graded protection requirements and operating procedures must be defined for the storage phase of the data lifecycle",
+      "clause": "GB/T 44464 §4.1.5",
+      "rounding": null
+    },
+    {
+      "field": "lifecycleUseControls",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Graded protection requirements and operating procedures must be defined for the use phase of the data lifecycle",
+      "clause": "GB/T 44464 §4.1.5",
+      "rounding": null
+    },
+    {
+      "field": "lifecycleProcessingControls",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Graded protection requirements and operating procedures must be defined for the processing phase of the data lifecycle",
+      "clause": "GB/T 44464 §4.1.5",
+      "rounding": null
+    },
+    {
+      "field": "lifecycleTransmissionControls",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Graded protection requirements and operating procedures must be defined for the transmission phase of the data lifecycle",
+      "clause": "GB/T 44464 §4.1.5",
+      "rounding": null
+    },
+    {
+      "field": "lifecycleProvisionControls",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Graded protection requirements and operating procedures must be defined for the provision/supply phase of the data lifecycle",
+      "clause": "GB/T 44464 §4.1.5",
+      "rounding": null
+    },
+    {
+      "field": "lifecycleDisclosureControls",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Graded protection requirements and operating procedures must be defined for the disclosure phase of the data lifecycle",
+      "clause": "GB/T 44464 §4.1.5",
+      "rounding": null
+    },
+    {
+      "field": "lifecycleDeletionControls",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Graded protection requirements and operating procedures must be defined for the deletion phase of the data lifecycle",
+      "clause": "GB/T 44464 §4.1.5",
+      "rounding": null
+    },
+    {
+      "field": "rDDataSecurityProcedures",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Shall develop data security process management procedures covering the R&D design stage of vehicle full lifecycle",
+      "clause": "GB/T 44464 §4.1.6",
+      "rounding": null
+    },
+    {
+      "field": "productionDataSecurityProcedures",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Shall develop data security process management procedures covering the production manufacturing stage of vehicle full lifecycle",
+      "clause": "GB/T 44464 §4.1.6",
+      "rounding": null
+    },
+    {
+      "field": "piStoredDomestically",
+      "type": {
+        "kind": "string"
+      },
+      "description": "PI collected and generated within China shall be stored domestically",
+      "clause": "GB/T 44464 §4.1.7",
+      "rounding": null
+    },
+    {
+      "field": "importantDataStoredDomestically",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Important data collected and generated within China shall be stored domestically",
+      "clause": "GB/T 44464 §4.1.7",
+      "rounding": null
+    },
+    {
+      "field": "crossBorderSecurityAssessmentCompleted",
+      "type": {
+        "kind": "string"
+      },
+      "description": "If providing data overseas, shall pass data cross-border security assessment",
+      "clause": "GB/T 44464 §4.1.7",
+      "rounding": null
+    },
+    {
+      "field": "riskDetectionMonitoringProcedures",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Shall establish risk monitoring procedures to detect automotive data security risks",
+      "clause": "GB/T 44464 §4.1.8",
+      "rounding": null
+    },
+    {
+      "field": "riskImmediateRemediation",
+      "type": {
+        "kind": "string"
+      },
+      "description": "When data security risk is detected, shall immediately take remedial measures",
+      "clause": "GB/T 44464 §4.1.8",
+      "rounding": null
+    },
+    {
+      "field": "incidentHandlingMeasures",
+      "type": {
+        "kind": "string"
+      },
+      "description": "When data security incident occurs, shall immediately take handling measures",
+      "clause": "GB/T 44464 §4.1.8",
+      "rounding": null
+    },
+    {
+      "field": "incidentUserNotification",
+      "type": {
+        "kind": "string"
+      },
+      "description": "When data security incident occurs, shall promptly notify affected users",
+      "clause": "GB/T 44464 §4.1.8",
+      "rounding": null
+    },
+    {
+      "field": "incidentAuthorityReporting",
+      "type": {
+        "kind": "string"
+      },
+      "description": "When data security incident occurs, shall report to relevant competent authorities as prescribed",
+      "clause": "GB/T 44464 §4.1.8",
+      "rounding": null
+    },
+    {
+      "field": "periodicImportantDataRiskAssessment",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Shall periodically conduct risk assessment for important data processing activities",
+      "clause": "GB/T 44464 §4.1.8",
+      "rounding": null
+    },
+    {
+      "field": "riskAssessmentReportSubmission",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Shall submit risk assessment reports to relevant competent authorities as prescribed",
+      "clause": "GB/T 44464 §4.1.8",
+      "rounding": null
+    },
+    {
+      "field": "establishComplaintMechanism",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Shall establish a complaint and reporting handling mechanism",
+      "clause": "GB/T 44464 §4.1.9",
+      "rounding": null
+    },
+    {
+      "field": "complaintChannelsAccessible",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Shall establish accessible data security complaint and reporting channels",
+      "clause": "GB/T 44464 §4.1.9",
+      "rounding": null
+    },
+    {
+      "field": "complaintTimelyHandling",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Shall handle user complaints and reports in a timely manner",
+      "clause": "GB/T 44464 §4.1.9",
+      "rounding": null
+    },
+    {
+      "field": "thirdPartyMgmtSystem",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Shall establish data security management system for data processing-related parties",
+      "clause": "GB/T 44464 §4.1.10",
+      "rounding": null
+    },
+    {
+      "field": "thirdPartySecurityAgreements",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Shall sign data security agreements with data processing-related parties",
+      "clause": "GB/T 44464 §4.1.10",
+      "rounding": null
+    },
+    {
+      "field": "thirdPartyCapabilityVerification",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Shall verify the data security protection capability of data processing-related parties",
+      "clause": "GB/T 44464 §4.1.10",
+      "rounding": null
+    },
+    {
+      "field": "piClearReasonablePurpose",
+      "type": {
+        "kind": "string"
+      },
+      "description": "PI processing shall have a clear and reasonable purpose, directly related to the processing purpose, with minimal impact on individual rights",
+      "clause": "GB/T 44464 §5.1.1",
+      "rounding": null
+    },
+    {
+      "field": "piDefaultNonCollection",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Unless autonomously set by the driver, the vehicle shall default to a state of not collecting PI",
+      "clause": "GB/T 44464 §5.1.1",
+      "rounding": null
+    },
+    {
+      "field": "piNoOutVehicleWithoutConsent",
+      "type": {
+        "kind": "string"
+      },
+      "description": "PI shall not be provided outside the vehicle unless PI subject consent is obtained",
+      "clause": "GB/T 44464 §5.1.1",
+      "rounding": null
+    },
+    {
+      "field": "piConsentExceptionsDisclosed",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Exceptions to consent under §5.1.2 (emergency, public disclosure, driving safety, legal) shall be explained to users via at least one means (user manual, display panel, voice, app)",
+      "clause": "GB/T 44464 §5.1.2",
+      "rounding": null
+    },
+    {
+      "field": "cabinDataOutVehicleProhibition",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Vehicle shall not provide cabin data outside the vehicle except with PI subject consent or under §5.1.2 exceptions",
+      "clause": "GB/T 44464 §5.1.3",
+      "rounding": null
+    },
+    {
+      "field": "piStoragePeriodConsistentWithConsent",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Storage period for PI processed based on consent shall be consistent with the consented storage period or its rules",
+      "clause": "GB/T 44464 §5.1.4",
+      "rounding": null
+    },
+    {
+      "field": "piWithdrawalNoRetroactiveEffect",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Withdrawal of consent shall not affect the validity of PI processing activities conducted before withdrawal",
+      "clause": "GB/T 44464 §5.1.5",
+      "rounding": null
+    },
+    {
+      "field": "piDeletionConditionsDefined",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Shall define conditions triggering proactive deletion or anonymization of PI (purpose achieved/impossible, service cessation, consent withdrawn, violation, legal requirements) and handling of legal retention periods",
+      "clause": "GB/T 44464 §5.1.6",
+      "rounding": null
+    },
+    {
+      "field": "piDeletionOnRequestProcess",
+      "type": {
+        "kind": "string"
+      },
+      "description": "When data subject requests deletion and processor fails to act, individual has right to request deletion; if technically infeasible, shall cease processing except storage and necessary protection",
+      "clause": "GB/T 44464 §5.1.6",
+      "rounding": null
+    },
+    {
+      "field": "consentProminentNotification",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Consent shall be obtained through at least one prominent means of notification, clearly explaining specific context and necessity of PI processing, and providing convenient PI management functions",
+      "clause": "GB/T 44464 §5.2.1",
+      "rounding": null
+    },
+    {
+      "field": "consentContentDataTypes",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Notification shall include: types of PI being processed and the necessity of processing each type (purpose, use, method)",
+      "clause": "GB/T 44464 §5.2.1",
+      "rounding": null
+    },
+    {
+      "field": "consentContentPurposeNecessity",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Notification shall include: the specific context of collecting each type of PI and means/channels to stop collection",
+      "clause": "GB/T 44464 §5.2.1",
+      "rounding": null
+    },
+    {
+      "field": "consentContentCollectionContext",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Notification shall include: the specific scenarios of collecting various PI and the methods/ways to stop collection",
+      "clause": "GB/T 44464 §5.2.1",
+      "rounding": null
+    },
+    {
+      "field": "consentContentStorageLocationPeriod",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Notification shall include: PI storage location, storage period, or rules for determining storage location and period",
+      "clause": "GB/T 44464 §5.2.1",
+      "rounding": null
+    },
+    {
+      "field": "consentContentRightsAccessCopyDelete",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Notification shall include: ways to access, copy PI, and delete in-vehicle or request deletion of PI already provided out-vehicle",
+      "clause": "GB/T 44464 §5.2.1",
+      "rounding": null
+    },
+    {
+      "field": "consentContentContactInfo",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Notification shall include: name and contact information of the user rights affairs contact person",
+      "clause": "GB/T 44464 §5.2.1",
+      "rounding": null
+    },
+    {
+      "field": "consentOptionAgreeRefuse",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Consent options shall provide means to agree and to refuse",
+      "clause": "GB/T 44464 §5.2.2",
+      "rounding": null
+    },
+    {
+      "field": "consentSensitivePeriodConfigurable",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Consent options shall provide means to autonomously set the consent period for sensitive PI processing, and the period shall not be set to 'always allow' or 'permanent'",
+      "clause": "GB/T 44464 §5.2.2",
+      "rounding": null
+    },
+    {
+      "field": "reConsentOnExpiry",
+      "type": {
+        "kind": "string"
+      },
+      "description": "When the consent period expires and PI processing beyond deletion is still necessary, consent shall be obtained again",
+      "clause": "GB/T 44464 §5.2.3.1",
+      "rounding": null
+    },
+    {
+      "field": "reConsentOnChange",
+      "type": {
+        "kind": "string"
+      },
+      "description": "When purpose, method, or type of PI processing changes, consent shall be obtained again",
+      "clause": "GB/T 44464 §5.2.3.2",
+      "rounding": null
+    },
+    {
+      "field": "consentWithdrawalPathProvided",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Shall provide means for withdrawal of consent",
+      "clause": "GB/T 44464 §5.2.4",
+      "rounding": null
+    },
+    {
+      "field": "collectionPrecisionMatchedToFunction",
+      "type": {
+        "kind": "string"
+      },
+      "description": "When collecting PI, shall determine camera, radar, etc. coverage range and resolution based on precision requirements of the function service provided",
+      "clause": "GB/T 44464 §5.3.1",
+      "rounding": null
+    },
+    {
+      "field": "multiFunctionDevicePrecisionJustification",
+      "type": {
+        "kind": "string"
+      },
+      "description": "When same collection device supports multiple functions with differing precision requirements, at least one function shall comply with §5.3.1; non-compliant functions shall have reasonable explanation",
+      "clause": "GB/T 44464 §5.3.2",
+      "rounding": null
+    },
+    {
+      "field": "sensitivePIEncryptedInVehicle",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Vehicle shall use encryption technology to protect sensitive PI stored in-vehicle, preventing unauthorized access and acquisition",
+      "clause": "GB/T 44464 §5.4.1",
+      "rounding": null
+    },
+    {
+      "field": "sensitivePIAccessControlledInVehicle",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Vehicle shall use secure access technology to protect sensitive PI stored in-vehicle, preventing unauthorized access and acquisition",
+      "clause": "GB/T 44464 §5.4.1",
+      "rounding": null
+    },
+    {
+      "field": "vinAntiTamperProtection",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Vehicle shall adopt security defense mechanisms (secure access, read-only technology, etc.) to protect VIN and other vehicle identity data stored in-vehicle from unauthorized deletion and modification",
+      "clause": "GB/T 44464 §5.4.2",
+      "rounding": null
+    },
+    {
+      "field": "piUseAccessControlMeasures",
+      "type": {
+        "kind": "string"
+      },
+      "description": "When using PI, shall adopt access control measures to prevent unauthorized access to stored PI",
+      "clause": "GB/T 44464 §5.5.1",
+      "rounding": null
+    },
+    {
+      "field": "biometricNotSoleAuthentication",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Biometric recognition shall not be used as the sole means of personal identity authentication",
+      "clause": "GB/T 44464 §5.5.2",
+      "rounding": null
+    },
+    {
+      "field": "sensitivePIOutVehicleEncrypted",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Vehicle shall implement confidentiality protection measures (encryption) for sensitive PI transmitted outside the vehicle",
+      "clause": "GB/T 44464 §5.6.1.1",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证车外传输敏感个人信息是否实施加密保护\", \"method\": \"使用车辆制造商提供的端口和访问权限，触发车辆向外传输敏感个人信息的功能，抓取传输的数据包，检查是否加密\", \"passCriteria\": \"车外传输的敏感个人信息已加密\", \"clause\": \"GB/T 44464 §5.6.1.1, Annex D.6.2\", \"equipment\": \"网络抓包工具（如Wireshark）、车辆诊断接口\", \"steps\": [\"1. 准备网络抓包环境，连接车辆通信接口\", \"2. 触发涉及敏感个人信息传输的功能（如远程监控、数据上传）\", \"3. 捕获传输数据包\", \"4. 检查数据包载荷是否加密（无法直接读取明文）\", \"5. 记录测试结果\"]}"
+    },
+    {
+      "field": "exceptionDataAnonymizedOutVehicle",
+      "type": {
+        "kind": "string"
+      },
+      "description": "PI collected outside vehicle for driving safety without consent and provided out-vehicle shall be anonymized (delete identifiable images, or partially outline face/license plate) per §5.6.2 requirements",
+      "clause": "GB/T 44464 §5.6.1.2",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证因行车安全需要收集的车外个人信息在向车外提供时是否进行匿名化处理\", \"method\": \"按 Annex D.6.3 启动 5.6.1.2 例外情形功能，检查对外传输的个人信息是否经过匿名化处理\", \"passCriteria\": \"车外传输的个人信息已匿名化（人脸/车牌已模糊或轮廓化处理）\", \"clause\": \"GB/T 44464 §5.6.1.2, Annex D.6.3\"}"
+    },
+    {
+      "field": "anonymizationProcessDataDeleted",
+      "type": {
+        "kind": "string"
+      },
+      "description": "After anonymization processing completes, process data shall be promptly deleted and shall not be provided outside the vehicle",
+      "clause": "GB/T 44464 §5.6.1.2",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证匿名化处理完成后过程数据是否及时删除\", \"method\": \"执行匿名化处理后，检查过程数据是否仍存在于车辆存储中\", \"passCriteria\": \"匿名化完成后过程数据已删除，未残留\"}"
+    },
+    {
+      "field": "faceAnonymizationCriteriaApplied",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Face anonymization criteria: face bounding box minimum side ≥32px; visible area ratio >50% with eyes, nose, or嘴清晰可见. Advertisements and reflections除外",
+      "clause": "GB/T 44464 §5.6.2.1.1",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证人脸匿名化对象判定标准是否正确实施\", \"method\": \"确认系统对≥32px、可见范围>50%且眼鼻嘴清晰的人脸目标进行匿名化\", \"passCriteria\": \"系统正确识别并匿名化满足条件的全部人脸目标\", \"clause\": \"GB/T 44464 §5.6.2.1.1\"}"
+    },
+    {
+      "field": "licensePlateAnonymizationCriteriaApplied",
+      "type": {
+        "kind": "string"
+      },
+      "description": "License plate anonymization criteria: plate bounding box minimum side ≥16px; plate unobstructed with all digits and text legible",
+      "clause": "GB/T 44464 §5.6.2.1.2",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证车牌匿名化对象判定标准是否正确实施\", \"method\": \"确认系统对≥16px、无遮挡且全部内容可识别的车牌进行匿名化\", \"passCriteria\": \"系统正确识别并匿名化满足条件的全部车牌目标\", \"clause\": \"GB/T 44464 §5.6.2.1.2\"}"
+    },
+    {
+      "field": "faceDetectionRate90Percent",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Face target anonymization detection rate shall be ≥90% per Annex B calculation method",
+      "clause": "GB/T 44464 §5.6.2.2.1, Annex B.5.3",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证人脸目标匿名化检出率≥90%\", \"method\": \"按 Annex B 试验方法执行完整的匿名化性能试验\", \"passCriteria\": \"Rdf = Naf / (Naf + Nmf) ≥ 90%（遮盖率≥50%为正检）\", \"clause\": \"GB/T 44464 §5.6.2.2.1, Annex B.5.3.1-B.5.3.3\", \"equipment\": \"试验车辆（具备人脸匿名化功能）、试验记录设备（≥1920×1080, ≥30fps）、标注工具\", \"steps\": [\"1. 按 Annex B.1.1 提供匿名化功能清单及传感器信息\", \"2. 确保车辆具备 Annex B.1.2 要求的匿名化处理及车外传输能力\", \"3. 安装试验记录设备（Annex B.2）\", \"4. 按 B.2.4 准备标注能力验证图片集\", \"5. 启动匿名化处理功能（B.3）\", \"6. 按 B.4 收集数据：≥500张图片或≥1000s视频，≥200人脸目标\", \"7. 按 B.5.1 处理数据（抽帧、标注）\", \"8. 按 B.5.3.1-B.5.3.3 计算人脸检出率\", \"9. 记录结果：Rdf = Naf / (Naf + Nmf)\"]}"
+    },
+    {
+      "field": "licensePlateDetectionRate90Percent",
+      "type": {
+        "kind": "string"
+      },
+      "description": "License plate target anonymization detection rate shall be ≥90% per Annex B calculation method",
+      "clause": "GB/T 44464 §5.6.2.2.1, Annex B.5.3",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证车牌目标匿名化检出率≥90%\", \"method\": \"与 faceDetectionRate90Percent 同步进行，按 Annex B.5.3.4-B.5.3.6 计算车牌检出率\", \"passCriteria\": \"Rdv = Nav / (Nav + Nmv) ≥ 90%（遮盖率≥50%为正检）\", \"clause\": \"GB/T 44464 §5.6.2.2.1, Annex B.5.3.4-B.5.3.6\"}"
+    },
+    {
+      "field": "faceFalseDetectionRate10Percent",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Face target anonymization false detection rate should be ≤10% per Annex C calculation method",
+      "clause": "GB/T 44464 §5.6.2.2.2, Annex C",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证人脸目标匿名化误检率≤10%\", \"method\": \"按 Annex C.1-C.3 计算误检率，排除广告牌、倒影中的人脸\", \"passCriteria\": \"RFf = NFf / Ndf ≤ 10%\", \"clause\": \"GB/T 44464 §5.6.2.2.2, Annex C.1-C.3\"}"
+    },
+    {
+      "field": "licensePlateFalseDetectionRate10Percent",
+      "type": {
+        "kind": "string"
+      },
+      "description": "License plate target anonymization false detection rate should be ≤10% per Annex C calculation method",
+      "clause": "GB/T 44464 §5.6.2.2.2, Annex C",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证车牌目标匿名化误检率≤10%\", \"method\": \"按 Annex C.4-C.6 计算误检率，排除电动车牌、临时牌、倒影\", \"passCriteria\": \"RFv = NFv / Ndv ≤ 10%\", \"clause\": \"GB/T 44464 §5.6.2.2.2, Annex C.4-C.6\"}"
+    },
+    {
+      "field": "anonymizedTargetsUnrecognizable",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Face and license plate targets meeting §5.6.2.1 criteria and anonymized shall be unrecognizable — cannot be identified by machine or human review",
+      "clause": "GB/T 44464 §5.6.2.3, Annex B.6",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证匿名化后的人脸和车牌无法被识别\", \"method\": \"按 Annex B.6 执行机器识别和人工识别双重评估\", \"passCriteria\": \"两种ML模型均无法识别人脸/车牌；人工评审无法辨识五官轮廓或车牌内容\", \"clause\": \"GB/T 44464 §5.6.2.3, Annex B.6\", \"steps\": [\"1. 选择两种人脸识别算法模型（如开源模型+公安模型）\", \"2. 对计入正检数的匿名化人脸目标进行识别\", \"3. 选择两种OCR算法模型（如CRNN）\", \"4. 对计入正检数的匿名化车牌目标进行识别\", \"5. 随机挑选100张匿名化图片进行人工评审\", \"6. 记录两种评估结果\"]}"
+    },
+    {
+      "field": "sensitivePIDeletionWithin10Days",
+      "type": {
+        "kind": "string"
+      },
+      "description": "When individual requests deletion of sensitive PI, processor shall complete deletion within 10 working days unless otherwise specified by law",
+      "clause": "GB/T 44464 §5.7.1",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证敏感个人信息删除请求是否在10个工作日内完成\", \"method\": \"按 Annex D.7.1 请求删除车内存储的敏感个人信息，记录完成时间\", \"passCriteria\": \"从请求到删除完成不超过10个工作日\", \"clause\": \"GB/T 44464 §5.7.1, Annex D.7.1\"}"
+    },
+    {
+      "field": "deletedPINonRetrievable",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Deleted PI shall be non-retrievable and non-accessible",
+      "clause": "GB/T 44464 §5.7.2",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证删除后的个人信息不可检索且不可访问\", \"method\": \"按 Annex D.7.2 在车端检索已删除的数据内容\", \"passCriteria\": \"被删除的PI和重要数据在车端无法检索和访问\", \"clause\": \"GB/T 44464 §5.7.2, §6.6, Annex D.7.2\"}"
+    },
+    {
+      "field": "vehicleNoDirectOverseasPI",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Vehicle shall not directly transmit PI overseas (user-initiated browser, communication app, or third-party installs除外)",
+      "clause": "GB/T 44464 §5.8",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证车辆不直接向境外传输个人信息\", \"method\": \"按 Annex D.8 执行跨境传输抓包试验\", \"passCriteria\": \"未检测到目的IP为境外的个人信息传输（用户自主行为除外）\", \"clause\": \"GB/T 44464 §5.8, Annex D.8\"}"
+    },
+    {
+      "field": "importantDataPurposeLimitation",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Important data processing shall have clear and reasonable purpose, directly related to processing purpose",
+      "clause": "GB/T 44464 §6.1",
+      "rounding": null
+    },
+    {
+      "field": "importantDataDefaultNonCollection",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Unless autonomously set by the driver, vehicle shall default to not collecting important data",
+      "clause": "GB/T 44464 §6.1",
+      "rounding": null
+    },
+    {
+      "field": "importantDataNoOutVehicle",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Important data shall not be provided outside the vehicle",
+      "clause": "GB/T 44464 §6.1",
+      "rounding": null
+    },
+    {
+      "field": "importantDataCollectionPrecisionMatched",
+      "type": {
+        "kind": "string"
+      },
+      "description": "When collecting important data, shall determine camera, radar coverage and resolution based on function service precision requirements",
+      "clause": "GB/T 44464 §6.2.1",
+      "rounding": null
+    },
+    {
+      "field": "importantDataMultiFunctionJustification",
+      "type": {
+        "kind": "string"
+      },
+      "description": "When same device supports multiple functions with differing precision needs, at least one shall comply with §6.2.1; non-compliant functions shall have reasonable explanation",
+      "clause": "GB/T 44464 §6.2.2",
+      "rounding": null
+    },
+    {
+      "field": "importantDataEncryptedStorage",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Vehicle shall use secure access technology, encryption, or other security technology to protect important data stored in-vehicle from unauthorized access and acquisition",
+      "clause": "GB/T 44464 §6.3",
+      "rounding": null
+    },
+    {
+      "field": "importantDataAccessControlledUse",
+      "type": {
+        "kind": "string"
+      },
+      "description": "When using important data, shall adopt access control measures to prevent unauthorized access to stored important data",
+      "clause": "GB/T 44464 §6.4",
+      "rounding": null
+    },
+    {
+      "field": "importantDataEncryptedTransmission",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Vehicle shall implement confidentiality protection measures for important data transmitted outside the vehicle",
+      "clause": "GB/T 44464 §6.5",
+      "rounding": null
+    },
+    {
+      "field": "importantDataNonRetrievableDeletion",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Deleted important data shall be non-retrievable and non-accessible",
+      "clause": "GB/T 44464 §6.6",
+      "rounding": null
+    },
+    {
+      "field": "importantDataNoDirectOverseas",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Vehicle shall not directly transmit important data overseas (user-initiated browser, communication app, or third-party installs除外)",
+      "clause": "GB/T 44464 §6.7",
+      "rounding": null
+    },
+    {
+      "field": "anonymizationFunctionSensorList",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Shall provide a list of functions requiring PI anonymization and明确 associated sensor information (type, model, resolution, coverage)",
+      "clause": "GB/T 44464 Annex B.1.1",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"提供匿名化处理功能清单及传感器信息\", \"method\": \"整理所有涉及个人信息匿名化处理的功能及关联传感器（类型、型号、分辨率、覆盖范围）\", \"passCriteria\": \"清单完整，覆盖全部需匿名化的功能和传感器\", \"clause\": \"GB/T 44464 Annex B.1.1\"}"
+    },
+    {
+      "field": "vehicleAnonymizationCapability",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Test vehicle must have capability to anonymize face targets and license plate targets in images/video and transmit out-vehicle, with明确的 activation conditions for anonymization and out-vehicle transmission functions",
+      "clause": "GB/T 44464 Annex B.1.2",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"确认试验车辆具备匿名化处理及车外传输能力\", \"method\": \"按 Annex B.1.2 验证车辆能否对车外人脸和车牌进行匿名化处理并传输\", \"passCriteria\": \"车辆具备匿名化处理能力和明确的激活条件\", \"clause\": \"GB/T 44464 Annex B.1.2\"}"
+    },
+    {
+      "field": "anonymizationAreaRangeFile",
+      "type": {
+        "kind": "string"
+      },
+      "description": "If vehicle has capability to provide anonymization area range files, these may include rectangular, elliptical, or rotated矩形 annotation areas, anonymization object type (face/license plate), and recording time",
+      "clause": "GB/T 44464 Annex B.1.3",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"提供匿名化区域范围文件（如具备能力）\", \"method\": \"检查系统是否支持输出匿名化标注区域、对象类型和记录时间\", \"passCriteria\": \"如具备此能力，文件内容完整\", \"clause\": \"GB/T 44464 Annex B.1.3\"}"
+    },
+    {
+      "field": "testRecordingEquipmentInstalled",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Test recording equipment shall be installed to record: test timeline and duration, and surrounding environment video",
+      "clause": "GB/T 44464 Annex B.2.1",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"安装试验记录设备并记录必要内容\", \"method\": \"按 Annex B.2.1 安装额外记录设备，记录时间轴、时长和环境视频\", \"passCriteria\": \"记录设备已安装，记录内容完整\", \"clause\": \"GB/T 44464 Annex B.2.1\"}"
+    },
+    {
+      "field": "recordingEquipmentResolutionFrameRate",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Recording equipment resolution shall be ≥1920×1080 pixels; video sampling frame rate shall be ≥30fps; installation/operation shall not affect vehicle original configuration or function",
+      "clause": "GB/T 44464 Annex B.2.2-B.2.3",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证记录设备分辨率≥1920×1080且帧率≥30fps\", \"method\": \"检查记录设备规格参数确认满足要求\", \"passCriteria\": \"分辨率≥1920×1080，帧率≥30fps，安装不影响车辆正常功能\", \"clause\": \"GB/T 44464 Annex B.2.2-B.2.3\"}"
+    },
+    {
+      "field": "annotationCapabilityImageSet",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Annotation capability verification requires: 500 anonymized + 500 non-anonymized images with ≥200 face + ≥200 license plate targets each, with pixel values, visible area, coverage rate documentation per Annex B.2.4.1",
+      "clause": "GB/T 44464 Annex B.2.4.1",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"准备标注能力验证图片集\", \"method\": \"按 B.2.4.1 准备500张已匿名化+500张未匿名化图片，满足人脸/车牌目标数量要求\", \"passCriteria\": \"图片集满足数量要求（≥200人脸+≥200车牌各），附带完整的说明文档\", \"clause\": \"GB/T 44464 Annex B.2.4.1\"}"
+    },
+    {
+      "field": "annotationPrecisionRequirements",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Annotation precision must meet: face bounding box ratio ≥0.9-1.1 for 98%+ of targets; license plate precision within ±1px or ratio 0.9-1.1; visible area ratio 0.9-1.1; detection ratio 0.99-1.01; coverage rate deviation ≤5% per B.2.4.2",
+      "clause": "GB/T 44464 Annex B.2.4.2",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证标注精度满足要求\", \"method\": \"按 B.2.4.2 验证标注精度（边界框比、可见范围、遮盖率等指标）\", \"passCriteria\": \"所有精度指标满足 B.2.4.2 要求\", \"clause\": \"GB/T 44464 Annex B.2.4.2\"}"
+    },
+    {
+      "field": "testProcedureExecuted",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Test procedure: activate anonymization function for face and license plate targets + out-vehicle transmission; start recording equipment during test",
+      "clause": "GB/T 44464 Annex B.3",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"执行匿名化处理性能试验流程\", \"method\": \"按 Annex B.3 启动匿名化功能并开启记录设备\", \"passCriteria\": \"试验流程已完整执行\", \"clause\": \"GB/T 44464 Annex B.3\"}"
+    },
+    {
+      "field": "testCoveragePerSensor",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Each sensor listed in B.1.1 must contribute ≥10 images or ≥10s video, with at least 1 face target or 1 license plate target requiring anonymization per sensor",
+      "clause": "GB/T 44464 Annex B.4.2",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"确保每个传感器有足够的测试覆盖\", \"method\": \"按 B.4.2 确认B.1.1清单中每个传感器都贡献了≥10张图片或≥10s视频\", \"passCriteria\": \"每传感器≥10张图片或≥10s视频，且含≥1个目标\", \"clause\": \"GB/T 44464 Annex B.4.2\"}"
+    },
+    {
+      "field": "testImageVideoQuantityMet",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Test must collect: ≥500 images (≥1s interval) or ≥1000s total video (each ≥10s); ≥200 face targets requiring anonymization; ≥200 license plate targets requiring anonymization; same target in different images counted separately",
+      "clause": "GB/T 44464 Annex B.4.3",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"满足试验图片和视频数量要求\", \"method\": \"按 B.4.3 统计收集的图片/视频数量和人脸/车牌目标数量\", \"passCriteria\": \"≥500张图片(间隔≥1s)或≥1000s视频; ≥200人脸; ≥200车牌\", \"clause\": \"GB/T 44464 Annex B.4.3\"}"
+    },
+    {
+      "field": "faceDetectionRateCalculated",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Face detection rate = Naf/(Naf+Nmf) where Naf = positive detections (anonymized + ≥50% coverage), Nmf = missed detections (not anonymized and/or <50% coverage); result ≥90%",
+      "clause": "GB/T 44464 Annex B.5.3.1-B.5.3.3",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"计算人脸目标检出率\", \"method\": \"按 Annex B.5.3.1-B.5.3.3 计算正检数和漏检数，给出检出率\", \"passCriteria\": \"Rdf = Naf / (Naf + Nmf) ≥ 90%\", \"clause\": \"GB/T 44464 Annex B.5.3.1-B.5.3.3\"}"
+    },
+    {
+      "field": "licensePlateDetectionRateCalculated",
+      "type": {
+        "kind": "string"
+      },
+      "description": "License plate detection rate = Nav/(Nav+Nmv) where Nav = positive detections (anonymized + ≥50% coverage), Nmv = missed detections (not anonymized and/or <50% coverage); result ≥90%",
+      "clause": "GB/T 44464 Annex B.5.3.4-B.5.3.6",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"计算车牌目标检出率\", \"method\": \"按 Annex B.5.3.4-B.5.3.6 计算正检数和漏检数，给出检出率\", \"passCriteria\": \"Rdv = Nav / (Nav + Nmv) ≥ 90%\", \"clause\": \"GB/T 44464 Annex B.5.3.4-B.5.3.6\"}"
+    },
+    {
+      "field": "faceFalseDetectionRateCalculated",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Face false detection rate = NFf/Ndf where NFf = detections marked as face but having no intersection with any real face target (excluding advertisements, reflections); result ≤10%",
+      "clause": "GB/T 44464 Annex C.1-C.3",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"计算人脸目标误检率\", \"method\": \"按 Annex C.1-C.3 计算误检数、检出数和误检率\", \"passCriteria\": \"RFf = NFf / Ndf ≤ 10%\", \"clause\": \"GB/T 44464 Annex C.1-C.3\"}"
+    },
+    {
+      "field": "licensePlateFalseDetectionRateCalculated",
+      "type": {
+        "kind": "string"
+      },
+      "description": "License plate false detection rate = NFv/Ndv where NFv = detections marked as plate but having no intersection with any real plate (excluding e-bikes, motorcycles, temporary plates, reflections); result ≤10%",
+      "clause": "GB/T 44464 Annex C.4-C.6",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"计算车牌目标误检率\", \"method\": \"按 Annex C.4-C.6 计算误检数、检出数和误检率\", \"passCriteria\": \"RFv = NFv / Ndv ≤ 10%\", \"clause\": \"GB/T 44464 Annex C.4-C.6\"}"
+    },
+    {
+      "field": "machineRecognitionAssessment",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Select two ML recognition models (e.g. open-source model + governmental model) to识别 face targets and license plate OCR targets; anonymized faces must not be recognized; anonymized plate content must not be fully legible",
+      "clause": "GB/T 44464 Annex B.6.1",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"机器识别效果评估\", \"method\": \"按 Annex B.6.1 选择两种算法模型验证匿名化目标不可识别\", \"passCriteria\": \"两种模型均无法识别人脸；OCR无法完全识别车牌内容\", \"clause\": \"GB/T 44464 Annex B.6.1\"}"
+    },
+    {
+      "field": "humanRecognitionAssessment",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Randomly select 100 anonymized images for human review; face targets must not have eyes, nose, and mouth轮廓全部确定; license plate content must not be fully legible",
+      "clause": "GB/T 44464 Annex B.6.2",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"人工识别效果评估\", \"method\": \"按 Annex B.6.2 随机挑选100张图片由评审员评估\", \"passCriteria\": \"无法确定双眼、鼻子和嘴的全部轮廓；无法识别车牌全部内容\", \"clause\": \"GB/T 44464 Annex B.6.2\"}"
+    },
+    {
+      "field": "conformityAssessmentPer41",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Shall pass conformity assessment verifying all §4.1 management system requirements are met",
+      "clause": "GB/T 44464 §7.1",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"通过§4.1管理体系的符合性评估\", \"method\": \"逐项核查§4.1.1-4.1.10各项要求的实施证据\", \"passCriteria\": \"所有§4.1要求均已实施且有效\", \"clause\": \"GB/T 44464 §7.1\"}"
+    },
+    {
+      "field": "deviceParameterTableD1",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Before testing, shall provide data collection device parameter list per Table D.1: device type, model, resolution, coverage range, installation location, involved functions, function explanation and necessity analysis",
+      "clause": "GB/T 44464 Annex D.1.c, Table D.1",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"提供数据收集设备参数清单\", \"method\": \"按 Table D.1 格式整理设备类型、型号、分辨率、覆盖范围、安装位置、功能映射\", \"passCriteria\": \"清单完整，覆盖全部数据收集设备\", \"clause\": \"GB/T 44464 Annex D.1.c, Table D.1\"}"
+    },
+    {
+      "field": "storageAddressInventory",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Before testing, shall provide storage address inventory for PI and important data storage locations",
+      "clause": "GB/T 44464 Annex D.1.d",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"提供PI和重要数据存储地址清单\", \"method\": \"列出车辆存储个人信息和重要数据的所有地址位置\", \"passCriteria\": \"清单完整，覆盖全部存储位置\", \"clause\": \"GB/T 44464 Annex D.1.d\"}"
+    },
+    {
+      "field": "consentNotificationTestD2",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Test: activate PI processing functions (excluding §5.1.2 exceptions), verify notification method, content, and consent options comply with §5.2.1 and §5.2.2",
+      "clause": "GB/T 44464 Annex D.2.1",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证告知方式和内容的合规性\", \"method\": \"按 Annex D.2.1 启动各项功能，检查告知方式、内容和同意选项\", \"passCriteria\": \"告知方式和内容符合 §5.2.1-5.2.2\", \"clause\": \"GB/T 44464 Annex D.2.1\"}"
+    },
+    {
+      "field": "reConsentExpiryTestD2",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Test: after consent period expires, activate PI processing functions and verify re-consent is obtained per §5.2.3.1",
+      "clause": "GB/T 44464 Annex D.2.2",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证同意期届满后重新取得同意\", \"method\": \"按 Annex D.2.2 同意期届满后启动功能，检查是否重新征得同意\", \"passCriteria\": \"同意期届满后重新取得同意\", \"clause\": \"GB/T 44464 Annex D.2.2\"}"
+    },
+    {
+      "field": "reConsentChangeTestD2",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Test: change processing purpose, method, or PI type for some functions, activate them, verify re-consent is obtained per §5.2.3.2",
+      "clause": "GB/T 44464 Annex D.2.3",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证目的/方式/种类变更后重新取得同意\", \"method\": \"按 Annex D.2.3 变更处理目的/方式/种类后启动功能\", \"passCriteria\": \"变更后重新取得同意\", \"clause\": \"GB/T 44464 Annex D.2.3\"}"
+    },
+    {
+      "field": "consentWithdrawalTestD2",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Test: withdraw consent for each function's PI processing (excluding §5.1.2 exceptions), record withdrawal途径, verify compliance with §5.2.4",
+      "clause": "GB/T 44464 Annex D.2.4",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证撤回同意途径可用\", \"method\": \"按 Annex D.2.4 对各功能撤回同意并记录途径\", \"passCriteria\": \"提供撤回途径且可操作\", \"clause\": \"GB/T 44464 Annex D.2.4\"}"
+    },
+    {
+      "field": "collectionPrecisionTestD3",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Test: compare data collection device parameters (radar, camera, etc.) against function list precision requirements, verify compliance with §5.3 and §6.2",
+      "clause": "GB/T 44464 Annex D.3",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证数据采集精度与功能要求匹配\", \"method\": \"按 Annex D.3 对比设备参数与功能需求\", \"passCriteria\": \"符合 §5.3 和 §6.2 要求\", \"clause\": \"GB/T 44464 Annex D.3\"}"
+    },
+    {
+      "field": "storageEncryptionAccessTestD4",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Test: verify sensitive PI and important data storage uses (a) access control — unauthorized user cannot access; (b) encryption — stored data is ciphertext; (c) no unlisted data stored per §5.4.1 and §6.3",
+      "clause": "GB/T 44464 Annex D.4.1",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证存储加密和访问控制\", \"method\": \"按 Annex D.4.1 测试：未授权访问、密文存储、不在清单中的数据检索\", \"passCriteria\": \"未授权用户无法访问；敏感数据密文存储；不在清单中数据不可检索\", \"clause\": \"GB/T 44464 Annex D.4.1\"}"
+    },
+    {
+      "field": "vinAntiTamperTestD4",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Test: attempt unauthorized deletion and modification of VIN and vehicle identity data stored in-vehicle, verify protection mechanisms prevent tampering per §5.4.2",
+      "clause": "GB/T 44464 Annex D.4.2",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证VIN防篡改保护\", \"method\": \"按 Annex D.4.2 尝试非授权删除/修改VIN\", \"passCriteria\": \"VIN等车辆身份数据不可被非授权删除或修改\", \"clause\": \"GB/T 44464 Annex D.4.2\"}"
+    },
+    {
+      "field": "biometricAlternativeTestD5",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Test: stop collecting biometric data for identity authentication functions, verify authentication still functions with alternative method per §5.5.2",
+      "clause": "GB/T 44464 Annex D.5",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证生物特征识别不作为唯一认证手段\", \"method\": \"按 Annex D.5 停止收集生物识别信息，检查认证功能是否仍可用\", \"passCriteria\": \"停止生物识别后认证功能仍正常运行\", \"clause\": \"GB/T 44464 Annex D.5\"}"
+    },
+    {
+      "field": "cabinDataConsentTestD6",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Test: activate functions requiring out-vehicle cabin data (excluding §5.1.2), verify consent request is issued per §5.1.3",
+      "clause": "GB/T 44464 Annex D.6.1",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证座舱数据车外提供需征求同意\", \"method\": \"按 Annex D.6.1 启动需车外传输座舱数据的功能\", \"passCriteria\": \"车辆发出同意请求\", \"clause\": \"GB/T 44464 Annex D.6.1\"}"
+    },
+    {
+      "field": "transmissionEncryptionTestD6",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Test: trigger out-vehicle transmission of sensitive PI and important data, capture packets using manufacturer-provided ports, verify encryption per §5.6.1.1 and §6.5",
+      "clause": "GB/T 44464 Annex D.6.2",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证车外传输加密\", \"method\": \"按 Annex D.6.2 触发传输并抓包分析\", \"passCriteria\": \"敏感PI和重要数据传输已加密\", \"clause\": \"GB/T 44464 Annex D.6.2\"}"
+    },
+    {
+      "field": "anonymizationExceptionDataTestD6",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Test: activate functions under §5.6.1.2 exception (driving safety), verify PI transmitted out-vehicle is anonymized per §5.6.1.2",
+      "clause": "GB/T 44464 Annex D.6.3",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证例外情形数据已匿名化\", \"method\": \"按 Annex D.6.3 启动5.6.1.2例外功能并检查传输数据\", \"passCriteria\": \"对外传输的个人信息已进行匿名化处理\", \"clause\": \"GB/T 44464 Annex D.6.3\"}"
+    },
+    {
+      "field": "sensitivePIDeletionTimelineTestD7",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Test: request deletion of sensitive PI stored in-vehicle, verify completion within 10 working days per §5.7.1",
+      "clause": "GB/T 44464 Annex D.7.1",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证敏感个人信息10工作日删除\", \"method\": \"按 Annex D.7.1 请求删除并计时\", \"passCriteria\": \"删除完成时间≤10个工作日\", \"clause\": \"GB/T 44464 Annex D.7.1\"}"
+    },
+    {
+      "field": "deletionNonRetrievabilityTestD7",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Test: request deletion of PI and important data in-vehicle, search deleted content, verify non-retrievable and non-accessible per §5.7.2 and §6.6",
+      "clause": "GB/T 44464 Annex D.7.2",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证删除不可检索\", \"method\": \"按 Annex D.7.2 在车端检索已删除内容\", \"passCriteria\": \"删除的PI和重要数据不可检索和访问\", \"clause\": \"GB/T 44464 Annex D.7.2\"}"
+    },
+    {
+      "field": "crossBorderPacketCaptureTestD8",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Test: enable all cellular and WLAN channels, capture all outbound traffic for ≥3600s across states (power-off, power-on, functions active), parse destination IPs — verify no overseas IP addresses receive PI or important data per §5.8 and §6.7",
+      "clause": "GB/T 44464 Annex D.8",
+      "rounding": null,
+      "testProcedure": "{\"purpose\": \"验证无直接跨境传输\", \"method\": \"按 Annex D.8 执行3600s抓包（未上电/仅上电/功能启用三种状态）\", \"passCriteria\": \"未检测到目的IP为境外的PI或重要数据传输\", \"clause\": \"GB/T 44464 Annex D.8\", \"equipment\": \"网络抓包工具\", \"steps\": [\"1. 开启全部移动蜂窝通信和WLAN通道\", \"2. 在未上电状态捕获数据（时长≥3600s）\", \"3. 在仅上电状态捕获数据\", \"4. 在各项预装功能正常启用状态捕获数据\", \"5. 解析所有通信报文，检查目的IP地址\", \"6. 记录是否存在境外IP地址的数据传输\"]}"
+    }
+  ],
+  "redlines": [
+    "车辆不得默认开启个人信息或重要数据收集——需默认设置为不收集状态",
+    "不得将车外人脸和车牌匿名化检出率低于 90%——附录 B 有明确试验方法",
+    "不得忽略座舱数据不出车外的原则——除非取得个人同意或法定例外情形",
+    "不得直接向境外传输个人信息和重要数据——需通过数据出境安全评估",
+    "不得将敏感个人信息存储期限设为始终允许或永久——需提供自主设置期限的途径",
+    "不得以单一生物特征作为唯一身份认证手段——需提供替代认证方式",
+    "不得将匿名化误检率视为可忽略指标——附录 C 规定了计算方法和目标值(宜≤10%)",
+    "不得忽略车外匿名化的遮盖率要求——遮盖率≥50%方可计入正检数",
+    "不得将匿名化处理后的过程数据保留——完成匿名化后应及时删除",
+    "不得忽略数据处理相关方的安全管理——需签订数据安全协议并核验防护能力",
+    "匿名化效果必须通过机器识别和人工识别双重验证——单一方式验证不充分",
+    "敏感个人信息删除请求必须在 10 个工作日内完成——需建立可证明的删除流程",
+    "告知同意内容必须包含处理种类、必要性、情境、存储地点期限、权利途径和联系方式——六项缺一不可",
+    "数据分级不得忽略聚合效应——数据量增加或不同类型数据组合可能导致级别上升",
+    "匿名化对象判定标准必须严格执行——人脸≥32px且可见>50%,车牌≥16px且无遮挡",
+    "车外传输敏感个人信息必须加密——保密性保护措施不可省略",
+    "同一采集设备支持多功能时至少一个功能需满足精度要求——其余需合理说明",
+    "数据全生命周期八个阶段(采集、存储、使用、加工、传输、提供、公开、删除)均需有分级防护要求",
+    "数据处理试验抓包时长不得少于 3600 秒——需覆盖未上电、仅上电、功能启用三种状态",
+    "匿名化标注能力需经图片集验证——标注精度不达标则试验结果无效"
+  ],
+  "lessons": [],
+  "fields": [
+    {
+      "id": "establishMgmtSystem",
+      "label": "§4.1.1 建立并实施汽车数据安全管理体系",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "establishObjectivesPolicy",
+      "label": "§4.1.2 制定数据安全目标和方针",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "defineSystemBoundaryScope",
+      "label": "§4.1.2 确定管理体系边界和适用范围",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "establishSecurityOrg",
+      "label": "§4.1.3 建立汽车数据安全管理机构",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "defineOrgRolesResponsibilities",
+      "label": "§4.1.3 确定相关人员职责",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "establishClassificationGradingSystem",
+      "label": "§4.1.4 + Annex A.1 建立数据分类分级制度",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "defineGradingMethodology",
+      "label": "Annex A.3 数据分级方法（影响对象×影响程度→核心/重要/一般）",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "applyDataAggregationEscalation",
+      "label": "Annex A.3.3 数据聚合升级规则（数量增加/类型组合）",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "formDataAssetLedger",
+      "label": "§4.1.4 形成数据资产管理台账",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "lifecycleCollectionControls",
+      "label": "§4.1.5 采集阶段分级防护要求和操作规程",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "lifecycleStorageControls",
+      "label": "§4.1.5 存储阶段分级防护要求和操作规程",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "lifecycleUseControls",
+      "label": "§4.1.5 使用阶段分级防护要求和操作规程",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "lifecycleProcessingControls",
+      "label": "§4.1.5 加工阶段分级防护要求和操作规程",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "lifecycleTransmissionControls",
+      "label": "§4.1.5 传输阶段分级防护要求和操作规程",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "lifecycleProvisionControls",
+      "label": "§4.1.5 提供阶段分级防护要求和操作规程",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "lifecycleDisclosureControls",
+      "label": "§4.1.5 公开阶段分级防护要求和操作规程",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "lifecycleDeletionControls",
+      "label": "§4.1.5 删除阶段分级防护要求和操作规程",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "rDDataSecurityProcedures",
+      "label": "§4.1.6 研发设计环节数据安全流程管理制度",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "productionDataSecurityProcedures",
+      "label": "§4.1.6 生产制造环节数据安全流程管理制度",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "piStoredDomestically",
+      "label": "§4.1.7 个人信息境内存储",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "importantDataStoredDomestically",
+      "label": "§4.1.7 重要数据境内存储",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "crossBorderSecurityAssessmentCompleted",
+      "label": "§4.1.7 数据出境安全评估（如适用）",
+      "required": false,
+      "type": "textarea"
+    },
+    {
+      "id": "riskDetectionMonitoringProcedures",
+      "label": "§4.1.8 建立数据安全风险监测制度",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "riskImmediateRemediation",
+      "label": "§4.1.8 发现风险立即采取补救措施",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "incidentHandlingMeasures",
+      "label": "§4.1.8 发生事件立即采取处置措施",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "incidentUserNotification",
+      "label": "§4.1.8 事件发生时及时告知用户",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "incidentAuthorityReporting",
+      "label": "§4.1.8 事件发生时向有关主管部门报告",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "periodicImportantDataRiskAssessment",
+      "label": "§4.1.8 对重要数据处理活动定期开展风险评估",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "riskAssessmentReportSubmission",
+      "label": "§4.1.8 向主管部门报送风险评估报告",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "establishComplaintMechanism",
+      "label": "§4.1.9 建立投诉举报处理机制",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "complaintChannelsAccessible",
+      "label": "§4.1.9 建立数据安全投诉举报渠道",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "complaintTimelyHandling",
+      "label": "§4.1.9 及时处理用户投诉举报",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "thirdPartyMgmtSystem",
+      "label": "§4.1.10 建立数据处理相关方数据安全管理制度",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "thirdPartySecurityAgreements",
+      "label": "§4.1.10 与相关方签订数据安全协议",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "thirdPartyCapabilityVerification",
+      "label": "§4.1.10 核验相关方数据安全保护能力",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "piClearReasonablePurpose",
+      "label": "§5.1.1 个人信息处理具有明确合理目的",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "piDefaultNonCollection",
+      "label": "§5.1.1 车辆默认不收集个人信息（除非驾驶人自主设定）",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "piNoOutVehicleWithoutConsent",
+      "label": "§5.1.1 未经同意不向车外提供个人信息",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "piConsentExceptionsDisclosed",
+      "label": "§5.1.2 说明取得个人同意的例外情形及理由",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "cabinDataOutVehicleProhibition",
+      "label": "§5.1.3 座舱数据不向车外提供（同意或例外除外）",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "piStoragePeriodConsistentWithConsent",
+      "label": "§5.1.4 存储期限与同意期限或其规则一致",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "piWithdrawalNoRetroactiveEffect",
+      "label": "§5.1.5 撤回同意不影响撤回前处理活动的效力",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "piDeletionConditionsDefined",
+      "label": "§5.1.6 明确主动删除或匿名化的情形（目的实现/停止/撤回/违法等）",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "piDeletionOnRequestProcess",
+      "label": "§5.1.6 个人请求删除的处理流程及技术不可行时的处理",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "consentProminentNotification",
+      "label": "§5.2.1 显著方式告知并说明具体情境和必要性",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "consentContentDataTypes",
+      "label": "§5.2.1 告知内容：处理个人信息的种类及必要性",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "consentContentPurposeNecessity",
+      "label": "§5.2.1 告知内容：收集各类信息的具体情境及停止收集方式",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "consentContentCollectionContext",
+      "label": "§5.2.1 告知内容：各类个人信息的收集具体情境及停止收集方式和途径",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "consentContentStorageLocationPeriod",
+      "label": "§5.2.1 告知内容：个人信息存储地点、存储期限或确定规则",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "consentContentRightsAccessCopyDelete",
+      "label": "§5.2.1 告知内容：查阅复制及删除车内/请求删除车外信息的方式途径",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "consentContentContactInfo",
+      "label": "§5.2.1 告知内容：用户权益事务联系人姓名和联系方式",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "consentOptionAgreeRefuse",
+      "label": "§5.2.2 提供同意和拒绝的方式",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "consentSensitivePeriodConfigurable",
+      "label": "§5.2.2 提供自主设定敏感个人信息同意期限的途径且不为始终允许/永久",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "reConsentOnExpiry",
+      "label": "§5.2.3.1 同意期限届满后重新取得同意",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "reConsentOnChange",
+      "label": "§5.2.3.2 处理目的、方式或种类变更时重新取得同意",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "consentWithdrawalPathProvided",
+      "label": "§5.2.4 提供撤回个人同意的途径",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "collectionPrecisionMatchedToFunction",
+      "label": "§5.3.1 根据功能服务精度要求确定摄像头/雷达等的覆盖范围和分辨率",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "multiFunctionDevicePrecisionJustification",
+      "label": "§5.3.2 同一设备多功能的精度要求处理及不合理说明",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "sensitivePIEncryptedInVehicle",
+      "label": "§5.4.1 加密技术保护车内存储的敏感个人信息",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "sensitivePIAccessControlledInVehicle",
+      "label": "§5.4.1 安全访问技术保护车内存储的敏感个人信息",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "vinAntiTamperProtection",
+      "label": "§5.4.2 VIN 等车辆身份识别数据安全防御机制（防删除/修改）",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "piUseAccessControlMeasures",
+      "label": "§5.5.1 个人信息使用采取访问控制措施",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "biometricNotSoleAuthentication",
+      "label": "§5.5.2 生物特征识别不作为身份认证的唯一手段",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "sensitivePIOutVehicleEncrypted",
+      "label": "§5.6.1.1 对车外发送的敏感个人信息实施保密性保护",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "exceptionDataAnonymizedOutVehicle",
+      "label": "§5.6.1.2 例外情形收集的车外个人信息向车外提供时进行匿名化处理",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "anonymizationProcessDataDeleted",
+      "label": "§5.6.1.2 匿名化处理完成后过程数据及时删除不向车外提供",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "faceAnonymizationCriteriaApplied",
+      "label": "§5.6.2.1.1 人脸匿名化对象判定标准（≥32px, >50%可见, 眉眼鼻嘴清晰）",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "licensePlateAnonymizationCriteriaApplied",
+      "label": "§5.6.2.1.2 车牌匿名化对象判定标准（≥16px, 无遮挡, 全部数字文字可识别）",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "faceDetectionRate90Percent",
+      "label": "§5.6.2.2.1 + Annex B.5.3 人脸目标匿名化检出率≥90%",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "licensePlateDetectionRate90Percent",
+      "label": "§5.6.2.2.1 + Annex B.5.3 汽车号牌目标匿名化检出率≥90%",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "faceFalseDetectionRate10Percent",
+      "label": "§5.6.2.2.2 + Annex C 人脸目标匿名化误检率宜≤10%",
+      "required": false,
+      "type": "textarea"
+    },
+    {
+      "id": "licensePlateFalseDetectionRate10Percent",
+      "label": "§5.6.2.2.2 + Annex C 汽车号牌目标匿名化误检率宜≤10%",
+      "required": false,
+      "type": "textarea"
+    },
+    {
+      "id": "anonymizedTargetsUnrecognizable",
+      "label": "§5.6.2.3 + Annex B.6 匿名化后的人脸和车牌无法被识别",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "sensitivePIDeletionWithin10Days",
+      "label": "§5.7.1 敏感个人信息删除请求 10 个工作日内完成",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "deletedPINonRetrievable",
+      "label": "§5.7.2 被删除的个人信息不可检索且不可访问",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "vehicleNoDirectOverseasPI",
+      "label": "§5.8 车辆不直接向境外传输个人信息（用户自主行为除外）",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "importantDataPurposeLimitation",
+      "label": "§6.1 重要数据处理具有明确合理目的",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "importantDataDefaultNonCollection",
+      "label": "§6.1 车辆默认不收集重要数据（除非驾驶人自主设定）",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "importantDataNoOutVehicle",
+      "label": "§6.1 不向车外提供重要数据",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "importantDataCollectionPrecisionMatched",
+      "label": "§6.2.1 重要数据采集精度与功能服务要求匹配",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "importantDataMultiFunctionJustification",
+      "label": "§6.2.2 同一设备多功能精度处理及合理说明",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "importantDataEncryptedStorage",
+      "label": "§6.3 重要数据车内安全访问/加密存储",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "importantDataAccessControlledUse",
+      "label": "§6.4 重要数据使用采取访问控制措施",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "importantDataEncryptedTransmission",
+      "label": "§6.5 重要数据车外传输实施保密性保护",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "importantDataNonRetrievableDeletion",
+      "label": "§6.6 被删除的重要数据不可检索且不可访问",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "importantDataNoDirectOverseas",
+      "label": "§6.7 车辆不直接向境外传输重要数据（用户自主行为除外）",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "anonymizationFunctionSensorList",
+      "label": "Annex B.1.1 匿名化处理功能清单及传感器信息",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "vehicleAnonymizationCapability",
+      "label": "Annex B.1.2 试验车辆匿名化处理及车外传输能力说明",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "anonymizationAreaRangeFile",
+      "label": "Annex B.1.3 匿名化区域范围文件（如具备提供能力）",
+      "required": false,
+      "type": "textarea"
+    },
+    {
+      "id": "testRecordingEquipmentInstalled",
+      "label": "Annex B.2.1 试验记录设备安装及记录内容",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "recordingEquipmentResolutionFrameRate",
+      "label": "Annex B.2.2-B.2.3 记录设备分辨率≥1920×1080, 帧率≥30fps, 不影响车辆功能",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "annotationCapabilityImageSet",
+      "label": "Annex B.2.4.1 标注能力图片集（500张已匿名化+500张未匿名化）",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "annotationPrecisionRequirements",
+      "label": "Annex B.2.4.2 标注精度要求（边界框比、可见范围、遮盖率等）",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "testProcedureExecuted",
+      "label": "Annex B.3 匿名化处理性能试验过程（启动功能+开启记录）",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "testCoveragePerSensor",
+      "label": "Annex B.4.2 每传感器≥10张图片或≥10s视频且含至少1个目标",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "testImageVideoQuantityMet",
+      "label": "Annex B.4.3 试验图片视频数量要求（≥500张/≥1000s, ≥200人脸, ≥200车牌）",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "faceDetectionRateCalculated",
+      "label": "Annex B.5.3.1-B.5.3.3 人脸检出率计算（≥90%, 遮盖率≥50%为正检）",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "licensePlateDetectionRateCalculated",
+      "label": "Annex B.5.3.4-B.5.3.6 车牌检出率计算（≥90%, 遮盖率≥50%为正检）",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "faceFalseDetectionRateCalculated",
+      "label": "Annex C.1-C.3 人脸误检率计算（≤10%, 广告/倒影不计）",
+      "required": false,
+      "type": "textarea"
+    },
+    {
+      "id": "licensePlateFalseDetectionRateCalculated",
+      "label": "Annex C.4-C.6 车牌误检率计算（≤10%, 电动车/摩托车/临时牌不计）",
+      "required": false,
+      "type": "textarea"
+    },
+    {
+      "id": "machineRecognitionAssessment",
+      "label": "Annex B.6.1 机器识别效果评估（两种模型检验不可识别）",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "humanRecognitionAssessment",
+      "label": "Annex B.6.2 人工识别效果评估（100张随机图片, 不可辨识）",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "conformityAssessmentPer41",
+      "label": "§7.1 满足 §4.1 要求的符合性评估",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "deviceParameterTableD1",
+      "label": "Annex D.1.c + Table D.1 数据收集设备参数清单",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "storageAddressInventory",
+      "label": "Annex D.1.d 个人信息和重要数据存储地址清单",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "consentNotificationTestD2",
+      "label": "Annex D.2.1 告知方式和内容的个人同意试验",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "reConsentExpiryTestD2",
+      "label": "Annex D.2.2 同意期届满后重新取得同意的试验",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "reConsentChangeTestD2",
+      "label": "Annex D.2.3 变更目的/方式/种类后重新取得同意的试验",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "consentWithdrawalTestD2",
+      "label": "Annex D.2.4 撤回个人同意途径的试验",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "collectionPrecisionTestD3",
+      "label": "Annex D.3 个人信息和重要数据收集精度试验",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "storageEncryptionAccessTestD4",
+      "label": "Annex D.4.1 存储加密/访问控制试验",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "vinAntiTamperTestD4",
+      "label": "Annex D.4.2 VIN 防篡改试验",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "biometricAlternativeTestD5",
+      "label": "Annex D.5 生物特征识别替代认证试验",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "cabinDataConsentTestD6",
+      "label": "Annex D.6.1 座舱数据车外提供同意请求试验",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "transmissionEncryptionTestD6",
+      "label": "Annex D.6.2 车外传输加密试验",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "anonymizationExceptionDataTestD6",
+      "label": "Annex D.6.3 例外情形数据匿名化处理试验",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "sensitivePIDeletionTimelineTestD7",
+      "label": "Annex D.7.1 敏感个人信息 10 工作日删除时限试验",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "deletionNonRetrievabilityTestD7",
+      "label": "Annex D.7.2 删除不可检索不可访问试验",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "crossBorderPacketCaptureTestD8",
+      "label": "Annex D.8 跨境传输抓包试验（≥3600s, 三种状态）",
+      "required": true,
+      "type": "textarea"
+    },
+    {
+      "id": "testPlanScope",
+      "label": "Testing Scope / 测试范围",
+      "required": false,
+      "type": "textarea"
+    },
+    {
+      "id": "testPlanEquipment",
+      "label": "Equipment Summary / 设备汇总",
+      "required": false,
+      "type": "textarea"
+    },
+    {
+      "id": "testPlanNotes",
+      "label": "General Notes / 备注",
+      "required": false,
+      "type": "textarea"
+    }
+  ]
+}

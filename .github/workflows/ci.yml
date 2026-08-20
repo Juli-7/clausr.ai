@@ -29,8 +29,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Typecheck
+        run: pnpm typecheck
+        env:
+          LLM_API_KEY: test-key
+          LLM_PROVIDER: openai
+
       - name: Run linter
         run: pnpm lint
+        env:
+          LLM_API_KEY: test-key
+          LLM_PROVIDER: openai
 
       - name: Run tests
         run: pnpm test

@@ -1,0 +1,13 @@
+node_modules/
+.next/
+.git/
+.gitignore
+.env
+.env.example
+.env.local
+data/
+*.log
+.DS_Store
+dist/
+packages/*/dist/
+*.md

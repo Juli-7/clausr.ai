@@ -1,0 +1,26 @@
+[Unit]
+Description=Clausr AI SaaS Application
+Documentation=https://github.com/Juli-7/raipple-saas
+After=network.target
+
+[Service]
+Type=simple
+User=clausr
+Group=clausr
+WorkingDirectory=/opt/raipple/raipple-saas/apps/clausr
+ExecStart=/usr/local/bin/node node_modules/next/dist/bin/next start
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+EnvironmentFile=/etc/clausr.env
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/raipple/packs
+ReadWritePaths=/opt/raipple/raipple-saas/apps/clausr/data
+ReadWritePaths=/opt/raipple/data
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,8 @@
+const SETTINGS_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+`;
+
+export { SETTINGS_SCHEMA_SQL };

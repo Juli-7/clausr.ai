@@ -1,0 +1,69 @@
+{
+  "name": "@clausr/platform-core",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./auth": {
+      "types": "./dist/auth/index.d.ts",
+      "import": "./dist/auth/index.js",
+      "default": "./dist/auth/index.js"
+    },
+    "./rbac": {
+      "types": "./dist/rbac/index.d.ts",
+      "import": "./dist/rbac/index.js",
+      "default": "./dist/rbac/index.js"
+    },
+    "./usage": {
+      "types": "./dist/usage/index.d.ts",
+      "import": "./dist/usage/index.js",
+      "default": "./dist/usage/index.js"
+    },
+    "./audit": {
+      "types": "./dist/audit/index.d.ts",
+      "import": "./dist/audit/index.js",
+      "default": "./dist/audit/index.js"
+    },
+    "./session": {
+      "types": "./dist/session/index.d.ts",
+      "import": "./dist/session/index.js",
+      "default": "./dist/session/index.js"
+    },
+    "./settings": {
+      "types": "./dist/settings/index.d.ts",
+      "import": "./dist/settings/index.js",
+      "default": "./dist/settings/index.js"
+    }
+  },
+  "scripts": {
+    "lint": "tsc --noEmit",
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "seed-admin": "tsx src/auth/seed.ts"
+  },
+  "dependencies": {
+    "@types/bcryptjs": "^3.0.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@volcengine/openapi": "^1.36.2",
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.10.0",
+    "jose": "^6.2.3",
+    "resend": "^6.12.4",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsup": "^8",
+    "typescript": "^5",
+    "vitest": "^4.1.7"
+  }
+}

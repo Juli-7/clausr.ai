@@ -1,0 +1,94 @@
+{
+  "$schema": "compliance-pack-v1",
+  "pack": {
+    "title": "EU Machinery Directive — Instruction Manual",
+    "industries": [
+      "Manufacturing",
+      "Industrial"
+    ],
+    "icon": "📖",
+    "version": "1.1.0",
+    "description": "EU 机械说明书合规审核 — 依据 MD 2006/42/EC Annex I §1.7.4，逐项核查说明书语言、内容完整性、安全信息、安装/使用/维护说明",
+    "regulation_ids": [
+      "MD",
+      "MD_Annex_I"
+    ],
+    "triggers": [
+      "说明书",
+      "Manual",
+      "Instruction Manual",
+      "User Manual",
+      "操作手册",
+      "MD",
+      "2006/42/EC",
+      "机械指令"
+    ],
+    "visibility": "marketplace",
+    "author": ""
+  },
+  "documents": [
+    {
+      "type": "user-manual",
+      "title": "User Manual / Instruction Manual",
+      "fields": [
+        "documentLanguage",
+        "originalInstructions",
+        "manufacturerName",
+        "machineName",
+        "intendedUse",
+        "residualRisks",
+        "declarationReference"
+      ]
+    }
+  ],
+  "redlines": [
+    "不得在 OCR 识别质量不足时直接判定 F — 应判 IND 并添加【OCR提醒】",
+    "不得将公司宣传性描述（例如\"高效稳定\"）直接作为预定使用的判定依据",
+    "不得将封面信息混同于说明书正文内容进行判定"
+  ],
+  "lessons": [],
+  "fields": [
+    {
+      "id": "documentLanguage",
+      "label": "Document Language(s)",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "originalInstructions",
+      "label": "Original Instructions Statement",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "manufacturerName",
+      "label": "Manufacturer Name and Address",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "machineName",
+      "label": "Machine Name and Model",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "intendedUse",
+      "label": "Intended Use Description",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "residualRisks",
+      "label": "Residual Risks Listed",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "declarationReference",
+      "label": "EC Declaration of Conformity Reference",
+      "type": "text",
+      "required": false
+    }
+  ]
+}

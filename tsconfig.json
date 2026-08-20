@@ -1,18 +1,17 @@
 {
   "compilerOptions": {
-    "target": "ES2018",
-    "lib": ["esnext"],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "module": "esnext",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
     "moduleResolution": "bundler",
+    "jsx": "preserve",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "incremental": true
-  },
-  "include": ["**/*.ts", "**/*.mts"],
-  "exclude": ["node_modules", "packages/*"]
+  }
 }

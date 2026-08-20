@@ -1,0 +1,153 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-bg-primary: #ede7d8;
+  --color-bg-card: #ffffff;
+  --color-bg-dark: #f5f0e6;
+  --color-border-default: #ddd6c8;
+  --color-border-input: #c9c0b0;
+  --color-accent-blue: #2944AB;
+  --color-accent-blue-bg: rgba(41, 68, 171, 0.08);
+  --color-accent-blue-border: rgba(41, 68, 171, 0.18);
+  --color-text-muted: #706a5f;
+  --color-text-body: #2d2a26;
+  --color-text-header: #1a1816;
+  --color-success: #479ca8;
+  --color-success-bg: rgba(71, 156, 168, 0.12);
+  --color-danger: #c4717a;
+  --color-danger-bg: rgba(196, 113, 122, 0.08);
+  --color-danger-border: rgba(196, 113, 122, 0.18);
+  --color-amber: #b8943e;
+  --color-amber-bg: rgba(184, 148, 62, 0.1);
+  --color-amber-border: rgba(184, 148, 62, 0.2);
+
+  /* Type scale */
+  --text-2xs: 0.625rem;
+
+  /* Shadcn semantic aliases */
+  --color-background: #ede7d8;
+  --color-foreground: #2d2a26;
+  --color-card: #ffffff;
+  --color-card-foreground: #2d2a26;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #2d2a26;
+  --color-primary: #2944AB;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #f5f0e6;
+  --color-secondary-foreground: #2d2a26;
+  --color-muted: #f5f0e6;
+  --color-muted-foreground: #706a5f;
+  --color-accent: rgba(41, 68, 171, 0.08);
+  --color-accent-foreground: #2944AB;
+  --color-destructive: #c4717a;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #ddd6c8;
+  --color-input: #c9c0b0;
+  --color-ring: #2944AB;
+}
+
+/* ── Dark theme ── */
+html.dark {
+  --color-bg-primary: #1c1a17;
+  --color-bg-card: #262320;
+  --color-bg-dark: #1f1d19;
+  --color-border-default: #3a3530;
+  --color-border-input: #4a4440;
+  --color-accent-blue: #7b93e0;
+  --color-accent-blue-bg: rgba(123, 147, 224, 0.12);
+  --color-accent-blue-border: rgba(123, 147, 224, 0.25);
+  --color-text-muted: #9a9488;
+  --color-text-body: #e0dbd0;
+  --color-text-header: #f0ece0;
+  --color-success: #5ab5c2;
+  --color-success-bg: rgba(90, 181, 194, 0.15);
+  --color-danger: #d68a93;
+  --color-danger-bg: rgba(214, 138, 147, 0.12);
+  --color-danger-border: rgba(214, 138, 147, 0.25);
+  --color-amber: #d4aa4a;
+  --color-amber-bg: rgba(212, 170, 74, 0.15);
+  --color-amber-border: rgba(212, 170, 74, 0.3);
+}
+
+html.dark {
+  --color-background: #1c1a17;
+  --color-foreground: #e0dbd0;
+  --color-card: #262320;
+  --color-card-foreground: #e0dbd0;
+  --color-popover: #262320;
+  --color-popover-foreground: #e0dbd0;
+  --color-primary: #7b93e0;
+  --color-primary-foreground: #1c1a17;
+  --color-secondary: #1f1d19;
+  --color-secondary-foreground: #e0dbd0;
+  --color-muted: #1f1d19;
+  --color-muted-foreground: #9a9488;
+  --color-accent: rgba(123, 147, 224, 0.12);
+  --color-accent-foreground: #7b93e0;
+  --color-destructive: #d68a93;
+  --color-destructive-foreground: #1c1a17;
+  --color-border: #3a3530;
+  --color-input: #4a4440;
+  --color-ring: #7b93e0;
+}
+
+body {
+  background: var(--color-bg-primary);
+  color: var(--color-text-body);
+  font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.chat-bubble-markdown > *:first-child { margin-top: 0; }
+.chat-bubble-markdown > *:last-child { margin-bottom: 0; }
+.chat-bubble-markdown pre {
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-width: 100%;
+}
+.chat-bubble-markdown code {
+  word-break: break-word;
+}
+.chat-bubble-markdown table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.chat-bubble-markdown img {
+  max-width: 100%;
+  height: auto;
+}
+
+.streaming-cursor {
+  display: inline-block;
+  width: 6px;
+  height: 13px;
+  margin-left: 34px;
+  margin-top: -2px;
+  background: var(--color-text-body);
+  animation: blink 0.8s step-end infinite;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-default);
+  border-radius: 3px;
+}
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { scrollbar-width: none; -ms-overflow-style: none; }

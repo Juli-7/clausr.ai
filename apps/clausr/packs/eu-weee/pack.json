@@ -1,0 +1,121 @@
+{
+  "$schema": "compliance-pack-v1",
+  "pack": {
+    "title": "EU WEEE — Waste Electrical & Electronic Equipment",
+    "industries": [
+      "Electrical",
+      "Electronics",
+      "Consumer Products",
+      "Manufacturing"
+    ],
+    "icon": "♻️",
+    "version": "1.0.0",
+    "description": "EU 废弃电气电子设备指令 2012/19/EU 合规审核 — 核查注册义务、回收设计、标记与用户告知要求",
+    "regulation_ids": [
+      "WEEE",
+      "WEEE_Annex"
+    ],
+    "triggers": [
+      "WEEE",
+      "电子废弃物",
+      "2012/19/EU",
+      "回收",
+      "环保"
+    ],
+    "visibility": "marketplace",
+    "author": ""
+  },
+  "documents": [
+    {
+      "type": "weee-registration",
+      "title": "WEEE Registration and Compliance",
+      "fields": [
+        "manufacturerName",
+        "brand",
+        "productCategory",
+        "memberStates",
+        "registrationNumbers",
+        "complianceScheme"
+      ]
+    },
+    {
+      "type": "weee-labeling",
+      "title": "WEEE Marking and User Information",
+      "fields": [
+        "crossedWheelieBin",
+        "sortingInfo",
+        "producerIdentity",
+        "datePlacement"
+      ]
+    }
+  ],
+  "redlines": [
+    "不得将德国 EAR 注册等同为全 EU 注册（每个成员国需单独注册）",
+    "不得忽略 B2C 的分类收集目标（65% 收集率目标）",
+    "不得忽略 2018 年后的开放类别分类变化",
+    "不得在产品上仅印\"回收\"文字而无打叉垃圾桶符号"
+  ],
+  "lessons": [],
+  "fields": [
+    {
+      "id": "manufacturerName",
+      "label": "Producer Name and Address",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "brand",
+      "label": "Brand Name(s)",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "productCategory",
+      "label": "Product Category (1-10 or open)",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "memberStates",
+      "label": "EU Member States of Sale",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "registrationNumbers",
+      "label": "National Registration Numbers",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "complianceScheme",
+      "label": "Compliance Scheme(s)",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "crossedWheelieBin",
+      "label": "WEEE Symbol (crossed-out wheelie bin)",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "sortingInfo",
+      "label": "Sorting/Disposal Instructions",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "producerIdentity",
+      "label": "Producer Identification on Product",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "datePlacement",
+      "label": "Date of First Placement on Market",
+      "type": "text",
+      "required": true
+    }
+  ]
+}

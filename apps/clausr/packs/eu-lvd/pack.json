@@ -1,0 +1,127 @@
+{
+  "$schema": "compliance-pack-v1",
+  "pack": {
+    "title": "EU LVD — Low Voltage Directive",
+    "industries": [
+      "Electrical",
+      "Electronics",
+      "Manufacturing",
+      "Consumer Products"
+    ],
+    "icon": "🔌",
+    "version": "1.0.0",
+    "description": "EU 低电压指令 2014/35/EU 合规审核 — 核查电气安全技术文件、协调标准 EN 62368 / EN 60335 / EN 61010 及 CE 标志",
+    "regulation_ids": [
+      "LVD",
+      "LVD_Annex_I"
+    ],
+    "triggers": [
+      "LVD",
+      "低电压",
+      "2014/35/EU",
+      "Low Voltage",
+      "CE认证"
+    ],
+    "visibility": "marketplace",
+    "author": ""
+  },
+  "documents": [
+    {
+      "type": "lvd-declaration",
+      "title": "EC Declaration of Conformity (LVD)",
+      "fields": [
+        "manufacturerName",
+        "productId",
+        "directives",
+        "standards",
+        "signatory",
+        "datePlace",
+        "voltageRating"
+      ]
+    },
+    {
+      "type": "lvd-technical-file",
+      "title": "LVD Technical Documentation",
+      "fields": [
+        "productDescription",
+        "safetyDesign",
+        "riskAssessment",
+        "circuitDiagrams"
+      ]
+    }
+  ],
+  "redlines": [
+    "不得将 LVD 不适用于纯低压 DC 产品（如 USB 充电器 5V DC 不属于 LVD 范围）",
+    "不得接受引用 IEC 标准（非 EN 版本）作为协调标准的证据",
+    "不得忽略 I 类/II 类设备分类对应的不同保护要求"
+  ],
+  "lessons": [],
+  "fields": [
+    {
+      "id": "manufacturerName",
+      "label": "Manufacturer Name and Address",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "productId",
+      "label": "Product Identification",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "directives",
+      "label": "Applicable Directives including 2014/35/EU",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "standards",
+      "label": "Harmonized Safety Standards",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "signatory",
+      "label": "Authorized Signatory",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "datePlace",
+      "label": "Date and Place of Issue",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "voltageRating",
+      "label": "Voltage Rating (50-1000V AC / 75-1500V DC)",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "productDescription",
+      "label": "Product Description and Intended Use",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "safetyDesign",
+      "label": "Safety Design Measures",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "riskAssessment",
+      "label": "Electrical Risk Assessment",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "circuitDiagrams",
+      "label": "Circuit Diagrams",
+      "type": "text",
+      "required": false
+    }
+  ]
+}

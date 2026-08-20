@@ -1,0 +1,133 @@
+{
+  "$schema": "compliance-pack-v1",
+  "pack": {
+    "title": "EU MDR — Medical Device Regulation",
+    "industries": [
+      "Medical Devices",
+      "Healthcare",
+      "Biotech"
+    ],
+    "icon": "🏥",
+    "version": "1.0.0",
+    "description": "EU 医疗器械法规 2017/745 合规审核 — 核查技术文件、临床评估、UDI、PMS 及公告机构路径",
+    "regulation_ids": [
+      "MDR",
+      "MDR_Annex_II",
+      "MDR_Annex_III"
+    ],
+    "triggers": [
+      "MDR",
+      "医疗器材",
+      "2017/745",
+      "Medical Device",
+      "CE认证"
+    ],
+    "visibility": "marketplace",
+    "author": ""
+  },
+  "documents": [
+    {
+      "type": "mdr-technical-file",
+      "title": "MDR Technical Documentation",
+      "fields": [
+        "manufacturerName",
+        "productId",
+        "classification",
+        "conformityRoute",
+        "notifiedBody",
+        "standards",
+        "clinicalEval",
+        "safetyPerformance"
+      ]
+    },
+    {
+      "type": "mdr-declaration",
+      "title": "EU Declaration of Conformity (MDR)",
+      "fields": [
+        "manufacturerName",
+        "productId",
+        "classification",
+        "notifiedBody",
+        "srn",
+        "directives",
+        "standards",
+        "signatory"
+      ]
+    }
+  ],
+  "redlines": [
+    "不得将 MDD（93/42/EEC）或 AIMDD（90/385/EEC）证书等同为 MDR 合规证据",
+    "不得忽略 UDI 要求——MDR 强制要求 UDI-DI/UDI-PI",
+    "不得接受 I 类医疗器械自我声明时无 SRN 和 EU 代表",
+    "不得忽略 NB 的 MDR 指定范围同公告范围的匹配"
+  ],
+  "lessons": [],
+  "fields": [
+    {
+      "id": "manufacturerName",
+      "label": "Manufacturer Name and Address",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "productId",
+      "label": "Device Description and Identification",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "classification",
+      "label": "Device Classification (I/IIa/IIb/III)",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "conformityRoute",
+      "label": "Conformity Assessment Route (Annex IX/X/XI)",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "notifiedBody",
+      "label": "Notified Body ID and Certificate Ref",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "standards",
+      "label": "Harmonized Standards Applied",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "clinicalEval",
+      "label": "Clinical Evaluation Report Reference",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "safetyPerformance",
+      "label": "Essential Safety & Performance Requirements",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "srn",
+      "label": "SRN (Single Registration Number)",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "directives",
+      "label": "Applicable Requirements including MDR 2017/745",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "signatory",
+      "label": "Signatory and Place/Date",
+      "type": "text",
+      "required": true
+    }
+  ]
+}

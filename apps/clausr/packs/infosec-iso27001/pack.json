@@ -1,0 +1,212 @@
+{
+  "$schema": "compliance-pack-v1",
+  "pack": {
+    "title": "ISO 27001:2022 — Information Security Management",
+    "description": "ISO 27001:2022 信息安全管理体系合规审核 — 核查 ISMS 范围、信息安全方针、风险评估与处置、控制措施（Annex A）、持续改进",
+    "industries": [
+      "Technology",
+      "Finance",
+      "Healthcare",
+      "Government",
+      "Telecommunications",
+      "Service"
+    ],
+    "icon": "🔒",
+    "version": "1.0.0",
+    "regulation_ids": [
+      "ISO_27001",
+      "ISO_27001_2022",
+      "ISMS"
+    ],
+    "triggers": [
+      "ISO 27001",
+      "ISO27001",
+      "信息安全",
+      "Information Security",
+      "ISMS",
+      "27001:2022"
+    ],
+    "visibility": "marketplace",
+    "author": ""
+  },
+  "documents": [
+    {
+      "type": "isms-documentation",
+      "title": "ISMS Documentation Set",
+      "fields": [
+        "ismsScope",
+        "securityPolicy",
+        "riskAssessment",
+        "riskTreatmentPlan",
+        "soaStatement",
+        "assetInventory",
+        "businessContinuity",
+        "incidentResponse"
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "field": "ismsScope",
+      "type": {
+        "kind": "string"
+      },
+      "description": "ISMS scope must define the organization, locations, assets, and boundaries covered, with documented justification for any exclusions — scope must align with asset inventory",
+      "clause": "ISO 27001:2022 §4.3",
+      "sample": null,
+      "attention": null,
+      "constraint": null,
+      "dependsOn": null,
+      "rounding": null
+    },
+    {
+      "field": "securityPolicy",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Information security policy must be approved by top management, communicated to all personnel, reviewed at planned intervals, and include commitment to continual improvement",
+      "clause": "ISO 27001:2022 §5.2",
+      "sample": null,
+      "attention": null,
+      "constraint": null,
+      "dependsOn": null,
+      "rounding": null
+    },
+    {
+      "field": "riskAssessment",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Risk assessment must define and apply a systematic methodology, identify risks to information assets, assign risk owners, and evaluate likelihood and impact consistently",
+      "clause": "ISO 27001:2022 §6.1.2",
+      "sample": null,
+      "attention": null,
+      "constraint": null,
+      "dependsOn": null,
+      "rounding": null
+    },
+    {
+      "field": "riskTreatmentPlan",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Risk treatment plan must specify controls, responsible owners, resources, timing, and priority — Annex A controls must be selected based on risk, not used as a checklist",
+      "clause": "ISO 27001:2022 §6.1.3",
+      "sample": null,
+      "attention": null,
+      "constraint": null,
+      "dependsOn": null,
+      "rounding": null
+    },
+    {
+      "field": "soaStatement",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Statement of Applicability must list all Annex A controls, indicate which are applicable or not with justification, include the implementation status, and be reviewed after each audit cycle",
+      "clause": "ISO 27001:2022 §6.1.3 d",
+      "sample": null,
+      "attention": null,
+      "constraint": null,
+      "dependsOn": null,
+      "rounding": null
+    },
+    {
+      "field": "assetInventory",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Information asset inventory must include all information assets (data, software, hardware, personnel, services) with classification level, owner, location, and retention requirements",
+      "clause": "ISO 27001:2022 §5.9 / A.5.9",
+      "sample": null,
+      "attention": null,
+      "constraint": null,
+      "dependsOn": null,
+      "rounding": null
+    },
+    {
+      "field": "businessContinuity",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Business continuity plan must address ICT readiness for disruptions, include recovery objectives (RTO/RPO), be tested periodically, and integrate with incident response processes",
+      "clause": "ISO 27001:2022 A.5.29",
+      "sample": null,
+      "attention": null,
+      "constraint": null,
+      "dependsOn": null,
+      "rounding": null
+    },
+    {
+      "field": "incidentResponse",
+      "type": {
+        "kind": "string"
+      },
+      "description": "Security incident response must cover detection, reporting, assessment, response, evidence collection, and lessons learned — not limited to cyber attacks, also physical information leaks and service disruptions",
+      "clause": "ISO 27001:2022 §6.1.3 / A.5.24–5.26",
+      "sample": null,
+      "attention": null,
+      "constraint": null,
+      "dependsOn": null,
+      "rounding": null
+    }
+  ],
+  "redlines": [
+    "不得将 Annex A 视为检查清单（Checklist）——需基于风险评估选择控制措施",
+    "不得忽略 2022 版新增控制项：威胁情报、云服务安全、ICT 业务连续性、物理安全监控",
+    "不得将适用性声明（SoA）视为一次性文档——每次内审/外审后应更新",
+    "不得忽略人员安全（背景核查、保密协议、安全培训）的控制要求",
+    "不得将信息安全事件报告仅限于网络攻击而忽略物理信息泄露"
+  ],
+  "lessons": [],
+  "fields": [
+    {
+      "id": "ismsScope",
+      "label": "ISMS Scope and Boundaries",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "securityPolicy",
+      "label": "Information Security Policy",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "riskAssessment",
+      "label": "Information Security Risk Assessment",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "riskTreatmentPlan",
+      "label": "Risk Treatment Plan",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "soaStatement",
+      "label": "Statement of Applicability (SoA)",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "assetInventory",
+      "label": "Information Asset Inventory",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "businessContinuity",
+      "label": "Business Continuity Plan",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "incidentResponse",
+      "label": "Security Incident Response Procedure",
+      "type": "textarea",
+      "required": true
+    }
+  ]
+}
